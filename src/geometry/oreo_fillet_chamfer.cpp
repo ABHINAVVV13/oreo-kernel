@@ -24,7 +24,7 @@ GeomResult fillet(KernelContext& ctx,
     if (!validation::requireNonEmpty(ctx, edges, "edges")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, radius, "radius")) return scope.makeFailure<NamedShape>();
 
-    double kernelRadius = ctx.units.toKernelLength(radius);
+    double kernelRadius = ctx.units().toKernelLength(radius);
 
     BRepFilletAPI_MakeFillet maker(solid.shape());
     for (auto& e : edges) {
@@ -45,7 +45,7 @@ GeomResult fillet(KernelContext& ctx,
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -73,7 +73,7 @@ GeomResult chamfer(KernelContext& ctx,
     if (!validation::requireNonEmpty(ctx, edges, "edges")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, distance, "distance")) return scope.makeFailure<NamedShape>();
 
-    double kernelDist = ctx.units.toKernelLength(distance);
+    double kernelDist = ctx.units().toKernelLength(distance);
 
     BRepFilletAPI_MakeChamfer maker(solid.shape());
     for (auto& e : edges) {
@@ -94,7 +94,7 @@ GeomResult chamfer(KernelContext& ctx,
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;

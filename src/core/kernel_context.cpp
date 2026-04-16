@@ -17,11 +17,11 @@ namespace oreo {
 
 // Thread-safe one-time OCCT initialization
 static std::once_flag s_occtOnceFlag;
-static bool s_occtInitialized = false;
+static std::atomic<bool> s_occtInitialized{false};
 
 KernelContext::KernelContext(const KernelConfig& config)
-    : tolerance(config.tolerance)
-    , units(config.units)
+    : tolerance_(config.tolerance)
+    , units_(config.units)
 {
     // Set up document-derived tag allocation
     uint32_t docId = config.documentId;
@@ -35,6 +35,8 @@ KernelContext::KernelContext(const KernelConfig& config)
         tags.seed(config.tagSeed);
     }
 
+    // Process-local counter for debug IDs. Not persisted — only used for
+    // human-readable context identification within a single process lifetime.
     static std::atomic<int> contextCounter{0};
     std::ostringstream ss;
     ss << "ctx-" << ++contextCounter;
@@ -60,14 +62,8 @@ bool KernelContext::isOCCTInitialized() {
     return s_occtInitialized;
 }
 
-void KernelContext::beginOperation() {
-    // NOTE: This clears ALL diagnostics in this context.
-    // For composed operations, use DiagnosticScope instead.
-    diag.clear();
-}
-
 double computeBooleanFuzzy(const KernelContext& ctx, double bboxSquareExtent) {
-    return ctx.tolerance.booleanFuzzyFactor
+    return ctx.tolerance().booleanFuzzyFactor
            * std::sqrt(bboxSquareExtent)
            * Precision::Confusion();
 }

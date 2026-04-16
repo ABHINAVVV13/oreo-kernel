@@ -12,21 +12,25 @@
 
 namespace {
 
-oreo::NamedShape makeBoxLocal(double x, double y, double z) {
+oreo::NamedShape makeBoxLocal(oreo::KernelContext& ctx, double x, double y, double z) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, oreo::NamedShape::nextTag());
+    return oreo::NamedShape(box, ctx.tags.nextTag());
 }
 
 } // anonymous namespace
 
 TEST(Serialize, BoxRoundTrip) {
     auto ctx = oreo::KernelContext::create();
-    auto box = makeBoxLocal(10, 20, 30);
+    auto box = makeBoxLocal(*ctx, 10, 20, 30);
 
-    auto buf = oreo::serialize(*ctx, box);
+    auto bufR = oreo::serialize(*ctx, box);
+    ASSERT_TRUE(bufR.ok());
+    auto buf = bufR.value();
     ASSERT_FALSE(buf.empty());
 
-    auto restored = oreo::deserialize(*ctx, buf.data(), buf.size());
+    auto restoredR = oreo::deserialize(*ctx, buf.data(), buf.size());
+    ASSERT_TRUE(restoredR.ok());
+    auto restored = restoredR.value();
     ASSERT_FALSE(restored.isNull());
 
     // Shape topology should match
@@ -35,8 +39,8 @@ TEST(Serialize, BoxRoundTrip) {
     EXPECT_EQ(restored.countSubShapes(TopAbs_VERTEX), box.countSubShapes(TopAbs_VERTEX));
 
     // Volume should match
-    auto origProps = oreo::massProperties(*ctx, box);
-    auto restoredProps = oreo::massProperties(*ctx, restored);
+    auto origProps = oreo::massProperties(*ctx, box).value();
+    auto restoredProps = oreo::massProperties(*ctx, restored).value();
     EXPECT_NEAR(restoredProps.volume, origProps.volume, 0.01);
 
     // Tag should be preserved
@@ -46,39 +50,41 @@ TEST(Serialize, BoxRoundTrip) {
 TEST(Serialize, NullShapeFails) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
-    auto buf = oreo::serialize(*ctx, null);
-    EXPECT_TRUE(buf.empty());
+    auto bufR = oreo::serialize(*ctx, null);
+    EXPECT_FALSE(bufR.ok());
     EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
 TEST(Serialize, TruncatedDataFails) {
     auto ctx = oreo::KernelContext::create();
-    auto box = makeBoxLocal(5, 5, 5);
-    auto buf = oreo::serialize(*ctx, box);
+    auto box = makeBoxLocal(*ctx, 5, 5, 5);
+    auto buf = oreo::serialize(*ctx, box).value();
     ASSERT_FALSE(buf.empty());
 
     // Truncate the buffer
     auto result = oreo::deserialize(*ctx, buf.data(), 4);
-    // Should either return null or produce a meaningful error
-    if (result.isNull()) {
+    // Should either fail or produce a meaningful error
+    if (!result.ok()) {
         EXPECT_TRUE(ctx->diag.hasErrors());
     }
 }
 
 TEST(Serialize, ElementMapPreserved) {
     auto ctx = oreo::KernelContext::create();
-    auto box = makeBoxLocal(10, 10, 10);
 
     // Manually add element map entries
     auto map = std::make_shared<oreo::ElementMap>();
     map->setElementName(oreo::IndexedName("Face", 1), oreo::MappedName("TopFace;:H1;:M"));
     map->setElementName(oreo::IndexedName("Face", 2), oreo::MappedName("BotFace;:H1;:M"));
-    box.setElementMap(map);
 
-    auto buf = oreo::serialize(*ctx, box);
+    // Construct NamedShape with element map in constructor (setElementMap is deleted)
+    TopoDS_Shape boxShape = BRepPrimAPI_MakeBox(10, 10, 10).Shape();
+    oreo::NamedShape box(boxShape, map, ctx->tags.nextTag());
+
+    auto buf = oreo::serialize(*ctx, box).value();
     ASSERT_FALSE(buf.empty());
 
-    auto restored = oreo::deserialize(*ctx, buf.data(), buf.size());
+    auto restored = oreo::deserialize(*ctx, buf.data(), buf.size()).value();
     ASSERT_FALSE(restored.isNull());
     ASSERT_NE(restored.elementMap(), nullptr);
 

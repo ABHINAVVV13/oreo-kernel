@@ -10,6 +10,8 @@
 #include "oreo_sketch.h"
 #include "GCS.h"
 #include "core/oreo_error.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 
 #include <BRepBuilderAPI_MakeEdge.hxx>
@@ -42,7 +44,7 @@ private:
 
 } // anonymous namespace
 
-SolveResult solveSketch(
+OperationResult<SolveResult> solveSketch(
     KernelContext& ctx,
     std::vector<SketchPoint>& points,
     std::vector<SketchLine>& lines,
@@ -50,7 +52,7 @@ SolveResult solveSketch(
     std::vector<SketchArc>& arcs,
     const std::vector<SketchConstraint>& constraints)
 {
-    ctx.beginOperation();
+    DiagnosticScope scope(ctx);
     SolveResult result;
     result.status = SolveStatus::OK;
     result.degreesOfFreedom = 0;
@@ -479,20 +481,20 @@ SolveResult solveSketch(
     // Apply solved values
     system.applySolution();
 
-    return result;
+    return scope.makeResult(std::move(result));
 }
 
-NamedShape sketchToWire(
+OperationResult<NamedShape> sketchToWire(
     KernelContext& ctx,
     const std::vector<SketchLine>& lines,
     const std::vector<SketchCircle>& circles,
     const std::vector<SketchArc>& arcs)
 {
-    ctx.beginOperation();
+    DiagnosticScope scope(ctx);
 
     if (lines.empty() && circles.empty() && arcs.empty()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "No sketch entities to convert to wire");
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 
     BRepBuilderAPI_MakeWire wireBuilder;
@@ -554,7 +556,7 @@ NamedShape sketchToWire(
     if (!hasEdges) {
         ctx.diag.error(ErrorCode::OCCT_FAILURE,
                      "No valid edges could be created from sketch entities");
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 
     if (wireBuilder.Error() != BRepBuilderAPI_WireDone) {
@@ -567,11 +569,11 @@ NamedShape sketchToWire(
         ctx.diag.error(ErrorCode::OCCT_FAILURE,
                      "Failed to build wire from sketch entities",
                      {}, "Edges may not connect. Check that sketch entities form a closed or connected path.");
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 
     auto tag = ctx.tags.nextTag();
-    return NamedShape(wire, tag);
+    return scope.makeResult(NamedShape(wire, tag));
 }
 
 } // namespace oreo

@@ -11,6 +11,8 @@
 #define OREO_STEP_H
 
 #include "core/kernel_context.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 
 #include <Quantity_Color.hxx>
@@ -44,22 +46,22 @@ struct StepImportResult {
 // Import a STEP file from a memory buffer.
 // Uses XCAF reader for color/name/layer extraction.
 // Runs ShapeFix pipeline on the imported shape.
-StepImportResult importStep(KernelContext& ctx, const uint8_t* data, size_t len);
+OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* data, size_t len);
 
 // Import a STEP file from a file path.
-StepImportResult importStepFile(KernelContext& ctx, const std::string& path);
+OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::string& path);
 
 // Legacy overloads — return NamedShape only (discard metadata).
-NamedShape importStepShape(KernelContext& ctx, const uint8_t* data, size_t len);
-NamedShape importStepShapeFile(KernelContext& ctx, const std::string& path);
+OperationResult<NamedShape> importStepShape(KernelContext& ctx, const uint8_t* data, size_t len);
+OperationResult<NamedShape> importStepShapeFile(KernelContext& ctx, const std::string& path);
 
 // Export one or more shapes to STEP format with optional metadata.
 // Returns the STEP file as a byte buffer.
-std::vector<uint8_t> exportStep(KernelContext& ctx, const std::vector<NamedShape>& shapes,
+OperationResult<std::vector<uint8_t>> exportStep(KernelContext& ctx, const std::vector<NamedShape>& shapes,
                                 const std::vector<StepShapeMetadata>& metadata = {});
 
 // Export to a file path with optional metadata.
-bool exportStepFile(KernelContext& ctx, const std::vector<NamedShape>& shapes,
+OperationResult<bool> exportStepFile(KernelContext& ctx, const std::vector<NamedShape>& shapes,
                     const std::string& path,
                     const std::vector<StepShapeMetadata>& metadata = {});
 

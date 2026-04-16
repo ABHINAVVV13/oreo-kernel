@@ -83,7 +83,9 @@ TEST(Mesh, FaceGroupsMatchFaceCount) {
     auto box = oreo::makeBox(*ctx, 10, 10, 10).value();
 
     // Fillet one edge
-    auto edges = oreo::getEdges(*ctx, box);
+    auto edgesR = oreo::getEdges(*ctx, box);
+    ASSERT_TRUE(edgesR.ok());
+    auto edges = edgesR.value();
     ASSERT_GE(edges.size(), 1u);
     auto filleted = oreo::fillet(*ctx, box, {edges[0]}, 2.0).value();
     ASSERT_FALSE(filleted.isNull());

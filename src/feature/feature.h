@@ -14,6 +14,8 @@
 #define OREO_FEATURE_H
 
 #include "core/kernel_context.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 
 #include <gp_Ax1.hxx>
@@ -117,9 +119,9 @@ struct ResolvedRef {
 using RefResolver = std::function<ResolvedRef(const ElementRef& ref)>;
 
 // Execute a single feature given the current shape and a reference resolver.
-// Returns the new NamedShape (or null on failure, with error in feature.status).
+// Returns OperationResult<NamedShape> (or failure, with error in feature.status).
 // Context-aware version (preferred)
-NamedShape executeFeature(KernelContext& ctx,
+OperationResult<NamedShape> executeFeature(KernelContext& ctx,
                           Feature& feature,
                           const NamedShape& currentShape,
                           const RefResolver& resolver);

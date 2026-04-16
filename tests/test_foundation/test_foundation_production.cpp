@@ -493,12 +493,12 @@ TEST(ContextIsolation, UnitsIndependent) {
     auto ctx2 = oreo::KernelContext::create(cfg2);
 
     // ctx1 is in inches, ctx2 is in mm -- they should not affect each other
-    EXPECT_EQ(ctx1->units.documentLength, oreo::LengthUnit::Inch);
-    EXPECT_EQ(ctx2->units.documentLength, oreo::LengthUnit::Millimeter);
+    EXPECT_EQ(ctx1->units().documentLength, oreo::LengthUnit::Inch);
+    EXPECT_EQ(ctx2->units().documentLength, oreo::LengthUnit::Millimeter);
 
     // Conversions are independent
-    double inch_to_mm = ctx1->units.toKernelLength(1.0);
-    double mm_to_mm   = ctx2->units.toKernelLength(1.0);
+    double inch_to_mm = ctx1->units().toKernelLength(1.0);
+    double mm_to_mm   = ctx2->units().toKernelLength(1.0);
     EXPECT_NEAR(inch_to_mm, 25.4, 1e-10);
     EXPECT_NEAR(mm_to_mm, 1.0, 1e-10);
 }

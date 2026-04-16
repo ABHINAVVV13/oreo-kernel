@@ -388,7 +388,7 @@ TEST(UnitsEnforcement, InchContextProducesLargerBox) {
     auto mmBoxResult = oreo::makeBox(*mmCtx, 10, 10, 10);
     ASSERT_TRUE(mmBoxResult.ok());
     auto mmBox = mmBoxResult.value();
-    auto mmProps = oreo::massProperties(*mmCtx, mmBox);
+    auto mmProps = oreo::massProperties(*mmCtx, mmBox).value();
 
     // Inch context: makeBox(10, 10, 10) → 10 inch box = 254mm box
     oreo::KernelConfig inConfig;
@@ -397,7 +397,7 @@ TEST(UnitsEnforcement, InchContextProducesLargerBox) {
     auto inBoxResult = oreo::makeBox(*inCtx, 10, 10, 10);
     ASSERT_TRUE(inBoxResult.ok());
     auto inBox = inBoxResult.value();
-    auto inProps = oreo::massProperties(*inCtx, inBox);
+    auto inProps = oreo::massProperties(*inCtx, inBox).value();
 
     // Inch box should be 25.4^3 = ~16387x larger in volume
     double ratio = inProps.volume / mmProps.volume;

@@ -17,7 +17,7 @@
 
 namespace {
 
-oreo::NamedShape makeRectFace(double w, double h) {
+oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     gp_Pnt p1(0, 0, 0), p2(w, 0, 0), p3(w, h, 0), p4(0, h, 0);
     BRepBuilderAPI_MakeWire wm;
     wm.Add(BRepBuilderAPI_MakeEdge(p1, p2).Edge());
@@ -25,7 +25,7 @@ oreo::NamedShape makeRectFace(double w, double h) {
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace fm(wm.Wire());
-    return oreo::NamedShape(fm.Face(), oreo::NamedShape::nextTag());
+    return oreo::NamedShape(fm.Face(), ctx.tags.nextTag());
 }
 
 } // anonymous namespace
@@ -41,7 +41,8 @@ TEST(FeatureTree, EmptyTreeReplay) {
 
 TEST(FeatureTree, SingleExtrudeReplay) {
     // Build a face manually, then use the tree to extrude it
-    auto face = makeRectFace(10, 20);
+    auto ctx = oreo::KernelContext::create();
+    auto face = makeRectFace(*ctx, 10, 20);
 
     oreo::FeatureTree tree;
 
@@ -70,7 +71,9 @@ TEST(FeatureTree, BoxThenFilletReplay) {
     EXPECT_EQ(box.countSubShapes(TopAbs_EDGE), 12);
 
     // Get edges for fillet
-    auto edges = oreo::getEdges(*ctx, box);
+    auto edgesR = oreo::getEdges(*ctx, box);
+    ASSERT_TRUE(edgesR.ok());
+    auto edges = edgesR.value();
     ASSERT_GE(edges.size(), 1u);
 
     // Fillet the first edge
@@ -237,7 +240,9 @@ TEST(FeatureTree, HoleOperation) {
     ASSERT_TRUE(boxR.ok());
     auto box = boxR.value();
 
-    auto faces = oreo::getFaces(*ctx, box);
+    auto facesR = oreo::getFaces(*ctx, box);
+    ASSERT_TRUE(facesR.ok());
+    auto faces = facesR.value();
     ASSERT_GE(faces.size(), 1u);
 
     // Drill a hole in the top face
@@ -260,8 +265,8 @@ TEST(FeatureTree, OffsetOperation) {
     // Just verify it doesn't crash
     if (resultR.ok()) {
         auto result = resultR.value();
-        auto origProps = oreo::massProperties(*ctx, box);
-        auto newProps = oreo::massProperties(*ctx, result);
+        auto origProps = oreo::massProperties(*ctx, box).value();
+        auto newProps = oreo::massProperties(*ctx, result).value();
         EXPECT_GT(newProps.volume, origProps.volume);
     }
 }
@@ -303,7 +308,7 @@ TEST(FeatureTree, MakeFaceFromWire) {
     wm.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    oreo::NamedShape wire(wm.Wire(), oreo::NamedShape::nextTag());
+    oreo::NamedShape wire(wm.Wire(), ctx->tags.nextTag());
 
     auto faceR = oreo::makeFaceFromWire(*ctx, wire);
     ASSERT_TRUE(faceR.ok());
@@ -327,7 +332,7 @@ TEST(FeatureTree, DeterministicPrimitives) {
         int faces = box.countSubShapes(TopAbs_FACE);
         int edges = box.countSubShapes(TopAbs_EDGE);
         int verts = box.countSubShapes(TopAbs_VERTEX);
-        double vol = oreo::massProperties(*ctx, box).volume;
+        double vol = oreo::massProperties(*ctx, box).value().volume;
 
         if (i == 0) {
             firstFaces = faces;
@@ -352,13 +357,15 @@ TEST(FeatureTree, DeterministicExtrudeFilletBoolean) {
         auto ctx = oreo::KernelContext::create();
 
         // Extrude a rectangle
-        auto face = makeRectFace(10, 20);
+        auto face = makeRectFace(*ctx, 10, 20);
         auto extR = oreo::extrude(*ctx, face, gp_Vec(0, 0, 30));
         ASSERT_TRUE(extR.ok());
         auto ext = extR.value();
 
         // Fillet an edge
-        auto edges = oreo::getEdges(*ctx, ext);
+        auto edgesR = oreo::getEdges(*ctx, ext);
+        ASSERT_TRUE(edgesR.ok());
+        auto edges = edgesR.value();
         ASSERT_GE(edges.size(), 1u);
         auto filletedR = oreo::fillet(*ctx, ext, {edges[0]}, 2.0);
         ASSERT_TRUE(filletedR.ok());
@@ -373,7 +380,7 @@ TEST(FeatureTree, DeterministicExtrudeFilletBoolean) {
         auto final_shape = final_shapeR.value();
 
         int faceCount = final_shape.countSubShapes(TopAbs_FACE);
-        double volume = oreo::massProperties(*ctx, final_shape).volume;
+        double volume = oreo::massProperties(*ctx, final_shape).value().volume;
 
         if (iter == 0) {
             firstFaces = faceCount;
@@ -392,7 +399,9 @@ TEST(FeatureTree, DeterministicExtrudeFilletBoolean) {
 TEST(Operations, DraftFaces) {
     auto ctx = oreo::KernelContext::create();
     auto box = oreo::makeBox(*ctx, 30, 30, 30).value();
-    auto faces = oreo::getFaces(*ctx, box);
+    auto facesR = oreo::getFaces(*ctx, box);
+    ASSERT_TRUE(facesR.ok());
+    auto faces = facesR.value();
     ASSERT_GE(faces.size(), 1u);
 
     // Draft the first face by 5 degrees
@@ -417,13 +426,13 @@ TEST(Operations, Pocket) {
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace fm(wm.Wire());
-    oreo::NamedShape profile(fm.Face(), oreo::NamedShape::nextTag());
+    oreo::NamedShape profile(fm.Face(), ctx->tags.nextTag());
 
     auto pocketedR = oreo::pocket(*ctx, box, profile, 20.0);
     if (pocketedR.ok()) {
         auto pocketed = pocketedR.value();
-        auto origVol = oreo::massProperties(*ctx, box).volume;
-        auto newVol = oreo::massProperties(*ctx, pocketed).volume;
+        auto origVol = oreo::massProperties(*ctx, box).value().volume;
+        auto newVol = oreo::massProperties(*ctx, pocketed).value().volume;
         EXPECT_LT(newVol, origVol);
     }
 }
@@ -435,7 +444,9 @@ TEST(Operations, Thicken) {
     auto box = oreo::makeBox(*ctx, 20, 20, 20).value();
 
     // Shell it first to get a shell
-    auto faces = oreo::getFaces(*ctx, box);
+    auto facesR = oreo::getFaces(*ctx, box);
+    ASSERT_TRUE(facesR.ok());
+    auto faces = facesR.value();
     ASSERT_GE(faces.size(), 1u);
     auto shelledR = oreo::shell(*ctx, box, {faces[0]}, 1.0);
 
@@ -454,7 +465,9 @@ TEST(Operations, Thicken) {
 TEST(Operations, VariableFillet) {
     auto ctx = oreo::KernelContext::create();
     auto box = oreo::makeBox(*ctx, 30, 30, 30).value();
-    auto edges = oreo::getEdges(*ctx, box);
+    auto edgesR = oreo::getEdges(*ctx, box);
+    ASSERT_TRUE(edgesR.ok());
+    auto edges = edgesR.value();
     ASSERT_GE(edges.size(), 1u);
 
     auto resultR = oreo::filletVariable(*ctx, box, edges[0], 1.0, 5.0);
@@ -472,7 +485,7 @@ TEST(Operations, WireOffset) {
     wm.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    oreo::NamedShape wire(wm.Wire(), oreo::NamedShape::nextTag());
+    oreo::NamedShape wire(wm.Wire(), ctx->tags.nextTag());
 
     auto resultR = oreo::wireOffset(*ctx, wire, 2.0);
     // Wire offset may succeed or fail depending on OCCT version
@@ -486,12 +499,12 @@ TEST(Operations, Rib) {
     auto ctx = oreo::KernelContext::create();
     auto box = oreo::makeBox(*ctx, 50, 50, 10).value();
 
-    auto ribProfile = makeRectFace(2, 40);
+    auto ribProfile = makeRectFace(*ctx, 2, 40);
     auto resultR = oreo::rib(*ctx, box, ribProfile, gp_Dir(0, 0, 1), 30.0);
     if (resultR.ok()) {
         auto result = resultR.value();
-        auto origVol = oreo::massProperties(*ctx, box).volume;
-        auto newVol = oreo::massProperties(*ctx, result).volume;
+        auto origVol = oreo::massProperties(*ctx, box).value().volume;
+        auto newVol = oreo::massProperties(*ctx, result).value().volume;
         EXPECT_GT(newVol, origVol);
     }
 }
@@ -517,7 +530,7 @@ TEST(ParametricReplay, BoxExtrudeFilletChangeHeight) {
     ASSERT_FALSE(shape1.isNull());
     EXPECT_EQ(shape1.countSubShapes(TopAbs_FACE), 6);
 
-    double vol1 = oreo::massProperties(*ctx, shape1).volume;
+    double vol1 = oreo::massProperties(*ctx, shape1).value().volume;
     EXPECT_NEAR(vol1, 8000.0, 1.0);  // 20*20*20
 
     // 3. Change dimension -> re-replay
@@ -526,7 +539,7 @@ TEST(ParametricReplay, BoxExtrudeFilletChangeHeight) {
     ASSERT_FALSE(shape2.isNull());
     EXPECT_EQ(shape2.countSubShapes(TopAbs_FACE), 6);  // Same topology
 
-    double vol2 = oreo::massProperties(*ctx, shape2).volume;
+    double vol2 = oreo::massProperties(*ctx, shape2).value().volume;
     EXPECT_NEAR(vol2, 12000.0, 1.0);  // 30*20*20
 }
 

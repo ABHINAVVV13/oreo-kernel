@@ -138,16 +138,16 @@ NamedShape FeatureTree::replayFrom(const std::string& dirtyFromId) {
         }
 
         // Execute the feature using the tree's context
-        NamedShape result = executeFeature(*ctx_, feature, currentShape, resolver);
+        auto result = executeFeature(*ctx_, feature, currentShape, resolver);
 
-        if (feature.status == FeatureStatus::OK && !result.isNull()) {
-            currentShape = result;
+        if (result.ok() && feature.status == FeatureStatus::OK && !result.value().isNull()) {
+            currentShape = result.value();
             cache_[feature.id] = currentShape;
         } else {
             // Feature failed — keep the previous shape and mark as broken
             if (feature.status == FeatureStatus::OK) {
                 feature.status = FeatureStatus::ExecutionFailed;
-                feature.errorMessage = "Operation returned null shape";
+                feature.errorMessage = result.ok() ? "Operation returned null shape" : result.errorMessage();
             }
             // Cache the current (unchanged) shape so downstream features
             // can still reference elements from before the broken feature
@@ -398,8 +398,8 @@ std::string FeatureTree::toJSON() const {
     // Units from the context
     if (ctx_) {
         doc["units"] = {
-            {"length", unit_convert::lengthUnitName(ctx_->units.documentLength)},
-            {"angle", unit_convert::angleUnitName(ctx_->units.documentAngle)}
+            {"length", unit_convert::lengthUnitName(ctx_->units().documentLength)},
+            {"angle", unit_convert::angleUnitName(ctx_->units().documentAngle)}
         };
     }
 

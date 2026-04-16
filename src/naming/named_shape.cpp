@@ -9,12 +9,6 @@
 
 namespace oreo {
 
-std::atomic<int64_t> NamedShape::tagCounter_{0};
-
-int64_t NamedShape::nextTag() {
-    return ++tagCounter_;
-}
-
 int NamedShape::countSubShapes(TopAbs_ShapeEnum type) const {
     // Use IndexedMapOfShape for unique sub-shapes (not duplicates from shared faces/edges)
     TopTools_IndexedMapOfShape map;

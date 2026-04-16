@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <string>
 
 namespace oreo {
@@ -41,15 +42,19 @@ public:
     int64_t nextTag() {
         int64_t seq = ++counter_;
         if (documentId_ == 0) return seq;
-        return (static_cast<int64_t>(documentId_) << 32) | (static_cast<int64_t>(seq) & 0xFFFFFFFF);
+        if (seq > static_cast<int64_t>(UINT32_MAX)) {
+            // Overflow: counter exceeded 32-bit range in multi-document mode
+            throw std::overflow_error("TagAllocator counter overflow in multi-document mode");
+        }
+        return (static_cast<int64_t>(documentId_) << 32) | (seq & 0xFFFFFFFF);
     }
 
     // Reset counter for deterministic replay.
     // Document ID is preserved — only the operation counter resets.
-    void reset() { counter_.store(0); }
+    void reset() { counter_ = 0; }
 
     // Seed with a specific counter value (for restoring persisted state).
-    void seed(int64_t startValue) { counter_.store(startValue); }
+    void seed(int64_t startValue) { counter_ = startValue; }
 
     // Set document ID (for cross-document uniqueness).
     void setDocumentId(uint32_t id) { documentId_ = id; }
@@ -58,10 +63,10 @@ public:
     uint32_t documentId() const { return documentId_; }
 
     // Current counter value (for persistence).
-    int64_t currentValue() const { return counter_.load(); }
+    int64_t currentValue() const { return counter_; }
 
     // Check if any tags have been allocated.
-    bool empty() const { return counter_.load() == 0; }
+    bool empty() const { return counter_ == 0; }
 
     // Extract the document ID bits from a tag (upper 32 bits).
     static uint32_t extractDocumentId(int64_t tag) {
@@ -97,7 +102,7 @@ public:
 
 private:
     uint32_t documentId_;
-    std::atomic<int64_t> counter_;
+    int64_t counter_;
 };
 
 } // namespace oreo

@@ -36,7 +36,7 @@ GeomResult shell(KernelContext& ctx,
     }
 
     // Unit conversion: thickness is a length
-    const double kThickness = ctx.units.toKernelLength(thickness);
+    const double kThickness = ctx.units().toKernelLength(thickness);
 
     TopTools_ListOfShape faceList;
     for (auto& f : facesToRemove) {
@@ -44,7 +44,7 @@ GeomResult shell(KernelContext& ctx,
     }
 
     BRepOffsetAPI_MakeThickSolid maker;
-    maker.MakeThickSolidByJoin(solid.shape(), faceList, kThickness, ctx.tolerance.linearPrecision);
+    maker.MakeThickSolidByJoin(solid.shape(), faceList, kThickness, ctx.tolerance().linearPrecision);
     maker.Build();
 
     if (!maker.IsDone()) {
@@ -59,7 +59,7 @@ GeomResult shell(KernelContext& ctx,
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -102,7 +102,7 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -139,7 +139,7 @@ GeomResult sweep(KernelContext& ctx, const NamedShape& profile, const NamedShape
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;

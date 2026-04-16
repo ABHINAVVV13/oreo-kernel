@@ -13,24 +13,27 @@
 
 namespace {
 
-oreo::NamedShape makeBoxLocal(double x, double y, double z) {
+oreo::NamedShape makeBoxLocal(oreo::KernelContext& ctx, double x, double y, double z) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, oreo::NamedShape::nextTag());
+    return oreo::NamedShape(box, ctx.tags.nextTag());
 }
 
 } // anonymous namespace
 
 TEST(StepIO, ExportImportRoundTrip) {
     auto ctx = oreo::KernelContext::create();
-    auto box = makeBoxLocal(10, 20, 30);
+    auto box = makeBoxLocal(*ctx, 10, 20, 30);
 
     // Export
-    auto stepData = oreo::exportStep(*ctx, {box});
+    auto stepDataR = oreo::exportStep(*ctx, {box});
+    ASSERT_TRUE(stepDataR.ok());
+    auto stepData = stepDataR.value();
     ASSERT_FALSE(stepData.empty());
 
     // Re-import
-    auto result = oreo::importStep(*ctx, stepData.data(), stepData.size());
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::importStep(*ctx, stepData.data(), stepData.size());
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
     auto& imported = result.shape;
 
@@ -39,23 +42,26 @@ TEST(StepIO, ExportImportRoundTrip) {
     EXPECT_EQ(imported.countSubShapes(TopAbs_EDGE), box.countSubShapes(TopAbs_EDGE));
 
     // Compare volume
-    auto origProps = oreo::massProperties(*ctx, box);
-    auto importProps = oreo::massProperties(*ctx, imported);
+    auto origProps = oreo::massProperties(*ctx, box).value();
+    auto importProps = oreo::massProperties(*ctx, imported).value();
     EXPECT_NEAR(importProps.volume, origProps.volume, 1.0);
 }
 
 TEST(StepIO, ExportFileThenImport) {
     auto ctx = oreo::KernelContext::create();
-    auto box = makeBoxLocal(15, 25, 35);
+    auto box = makeBoxLocal(*ctx, 15, 25, 35);
 
     std::string path = "test_step_roundtrip.step";
-    ASSERT_TRUE(oreo::exportStepFile(*ctx, {box}, path));
+    auto exportR = oreo::exportStepFile(*ctx, {box}, path);
+    ASSERT_TRUE(exportR.ok());
+    ASSERT_TRUE(exportR.value());
 
-    auto result = oreo::importStepFile(*ctx, path);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::importStepFile(*ctx, path);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    auto origProps = oreo::massProperties(*ctx, box);
-    auto importProps = oreo::massProperties(*ctx, result.shape);
+    auto origProps = oreo::massProperties(*ctx, box).value();
+    auto importProps = oreo::massProperties(*ctx, result.shape).value();
     EXPECT_NEAR(importProps.volume, origProps.volume, 1.0);
 
     // Cleanup
@@ -66,6 +72,6 @@ TEST(StepIO, ImportInvalidData) {
     auto ctx = oreo::KernelContext::create();
     uint8_t garbage[] = {0, 1, 2, 3, 4};
     auto importResult = oreo::importStep(*ctx, garbage, sizeof(garbage));
-    EXPECT_TRUE(importResult.isNull());
+    EXPECT_FALSE(importResult.ok());
     EXPECT_TRUE(ctx->diag.hasErrors());
 }

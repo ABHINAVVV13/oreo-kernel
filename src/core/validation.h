@@ -19,6 +19,8 @@
 #include <gp_Vec.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Ax1.hxx>
+#include <gp_Ax2.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 
@@ -29,6 +31,8 @@ namespace oreo {
 // Forward declarations
 class KernelContext;
 class NamedShape;
+enum class LengthUnit;
+enum class AngleUnit;
 
 namespace validation {
 
@@ -71,6 +75,20 @@ bool requireNonZeroVec(KernelContext& ctx, const gp_Vec& vec, const char* paramN
 
 // Direction must be valid (non-degenerate)
 bool requireValidDir(KernelContext& ctx, const gp_Dir& dir, const char* paramName);
+
+// Point must have finite coordinates (no NaN or Inf)
+bool requireFinitePoint(KernelContext& ctx, const gp_Pnt& point, const char* paramName);
+
+// Axis must have finite location and valid direction
+bool requireValidAxis(KernelContext& ctx, const gp_Ax1& axis, const char* paramName);
+bool requireValidAxis2(KernelContext& ctx, const gp_Ax2& axis, const char* paramName);
+
+// ─── Unit enum validation ───────────────────────────────────
+
+// Validate that a LengthUnit value is a known enum member.
+// Returns false and reports error for unknown values.
+bool requireValidLengthUnit(KernelContext& ctx, LengthUnit unit, const char* paramName);
+bool requireValidAngleUnit(KernelContext& ctx, AngleUnit unit, const char* paramName);
 
 // ─── Collection validation ───────────────────────────────────
 

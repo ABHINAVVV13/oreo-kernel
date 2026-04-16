@@ -1,0 +1,14 @@
+test_smoke 5 0.0157333
+test_geometry 5 0.0465175
+test_topo_naming 5 0.0206182
+test_sketch_solver 5 0.0180995
+test_boolean_stress 5 0.0298375
+test_step_roundtrip 5 0.0350982
+test_serialize 5 0.0172419
+test_robustness 5 0.0163608
+test_feature_tree 5 0.0644867
+test_foundation 5 0.0188615
+test_foundation_hardened 4 0.0195944
+test_mesh 5 0.0458979
+test_foundation_production 5 0.0169221
+---

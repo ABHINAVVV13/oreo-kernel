@@ -2,6 +2,8 @@
 
 #include "oreo_serialize.h"
 #include "core/oreo_error.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/element_map.h"
 
 #include <BRepTools.hxx>
@@ -49,13 +51,13 @@ int64_t readI64(const uint8_t* data, size_t& pos, size_t len) {
 
 } // anonymous namespace
 
-std::vector<uint8_t> serialize(KernelContext& ctx, const NamedShape& shape) {
-    ctx.beginOperation();
+OperationResult<std::vector<uint8_t>> serialize(KernelContext& ctx, const NamedShape& shape) {
+    DiagnosticScope scope(ctx);
     std::vector<uint8_t> buf;
 
     if (shape.isNull()) {
         ctx.diag.error(ErrorCode::SERIALIZE_FAILED, "Cannot serialize null shape");
-        return buf;
+        return scope.makeFailure<std::vector<uint8_t>>();
     }
 
     // Serialize BRep
@@ -76,15 +78,15 @@ std::vector<uint8_t> serialize(KernelContext& ctx, const NamedShape& shape) {
     buf.insert(buf.end(), mapData.begin(), mapData.end());
     writeI64(buf, shape.tag());
 
-    return buf;
+    return scope.makeResult(std::move(buf));
 }
 
-NamedShape deserialize(KernelContext& ctx, const uint8_t* data, size_t len) {
-    ctx.beginOperation();
+OperationResult<NamedShape> deserialize(KernelContext& ctx, const uint8_t* data, size_t len) {
+    DiagnosticScope scope(ctx);
 
     if (!data || len < 12) {
         ctx.diag.error(ErrorCode::DESERIALIZE_FAILED, "Buffer too small for deserialization");
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 
     size_t pos = 0;
@@ -93,7 +95,7 @@ NamedShape deserialize(KernelContext& ctx, const uint8_t* data, size_t len) {
     uint32_t brepLen = readU32(data, pos, len);
     if (pos + brepLen > len) {
         ctx.diag.error(ErrorCode::DESERIALIZE_FAILED, "BRep data truncated");
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 
     std::string brepData(reinterpret_cast<const char*>(data + pos), brepLen);
@@ -105,7 +107,7 @@ NamedShape deserialize(KernelContext& ctx, const uint8_t* data, size_t len) {
     BRepTools::Read(shape, brepStream, builder);
     if (shape.IsNull()) {
         ctx.diag.error(ErrorCode::DESERIALIZE_FAILED, "BRep deserialization produced null shape");
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 
     // Read element map
@@ -119,7 +121,7 @@ NamedShape deserialize(KernelContext& ctx, const uint8_t* data, size_t len) {
     // Read tag
     long tag = static_cast<long>(readI64(data, pos, len));
 
-    return NamedShape(shape, map, tag);
+    return scope.makeResult(NamedShape(shape, map, tag));
 }
 
 } // namespace oreo

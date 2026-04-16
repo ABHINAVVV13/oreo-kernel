@@ -58,10 +58,10 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     if (!validation::requireNonZeroVec(ctx, direction, "direction")) return scope.makeFailure<NamedShape>();
 
     // Unit conversion: spacing is a length, direction components are lengths
-    const double kSpacing = ctx.units.toKernelLength(spacing);
-    const gp_Vec kDirection(ctx.units.toKernelLength(direction.X()),
-                            ctx.units.toKernelLength(direction.Y()),
-                            ctx.units.toKernelLength(direction.Z()));
+    const double kSpacing = ctx.units().toKernelLength(spacing);
+    const gp_Vec kDirection(ctx.units().toKernelLength(direction.X()),
+                            ctx.units().toKernelLength(direction.Y()),
+                            ctx.units().toKernelLength(direction.Z()));
 
     gp_Vec unitDir = kDirection.Normalized();
 
@@ -92,7 +92,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
         BRepBndLib::Add(accumulated, bounds);
         BRepBndLib::Add(instances[i], bounds);
         if (!bounds.IsVoid()) {
-            double fuzzy = ctx.tolerance.booleanFuzzyFactor * std::sqrt(bounds.SquareExtent()) * Precision::Confusion();
+            double fuzzy = ctx.tolerance().booleanFuzzyFactor * std::sqrt(bounds.SquareExtent()) * Precision::Confusion();
             if (fuzzy > 0.0) fuser.SetFuzzyValue(fuzzy);
         }
 
@@ -114,7 +114,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     }
 
     if (!isShapeValid(accumulated)) {
-        fixShape(accumulated);
+        fixShape(accumulated, ctx.tolerance());
         if (!isShapeValid(accumulated)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -148,6 +148,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
     DiagnosticScope scope(ctx);
 
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
+    if (!validation::requireValidAxis(ctx, axis, "axis")) return scope.makeFailure<NamedShape>();
     if (!validation::requireMinInt(ctx, count, 2, "count")) return scope.makeFailure<NamedShape>();
     if (!std::isfinite(totalAngleRad)) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Pattern angle is NaN or Inf");
@@ -159,7 +160,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
     }
 
     // Unit conversion: totalAngleRad is an angle
-    const double kTotalAngle = ctx.units.toKernelAngle(totalAngleRad);
+    const double kTotalAngle = ctx.units().toKernelAngle(totalAngleRad);
 
     double stepAngle = kTotalAngle / count;
 
@@ -189,7 +190,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
         BRepBndLib::Add(accumulated, bounds);
         BRepBndLib::Add(instances[i], bounds);
         if (!bounds.IsVoid()) {
-            double fuzzy = ctx.tolerance.booleanFuzzyFactor * std::sqrt(bounds.SquareExtent()) * Precision::Confusion();
+            double fuzzy = ctx.tolerance().booleanFuzzyFactor * std::sqrt(bounds.SquareExtent()) * Precision::Confusion();
             if (fuzzy > 0.0) fuser.SetFuzzyValue(fuzzy);
         }
 
@@ -211,7 +212,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
     }
 
     if (!isShapeValid(accumulated)) {
-        fixShape(accumulated);
+        fixShape(accumulated, ctx.tolerance());
         if (!isShapeValid(accumulated)) {
             Diagnostic d;
             d.severity = Severity::Warning;

@@ -4,6 +4,7 @@
 #include "units.h"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <stdexcept>
 
@@ -68,4 +69,19 @@ AngleUnit parseAngleUnit(const std::string& name) {
 }
 
 } // namespace unit_convert
+
+// ── Checked unit conversions (reject NaN/Inf) ───────────────
+
+double UnitSystem::toKernelLengthChecked(double docValue) const {
+    if (!std::isfinite(docValue))
+        throw std::invalid_argument("NaN or Inf in length conversion");
+    return toKernelLength(docValue);
+}
+
+double UnitSystem::toKernelAngleChecked(double docValue) const {
+    if (!std::isfinite(docValue))
+        throw std::invalid_argument("NaN or Inf in angle conversion");
+    return toKernelAngle(docValue);
+}
+
 } // namespace oreo

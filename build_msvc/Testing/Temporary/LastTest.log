@@ -1,0 +1,933 @@
+Start testing: Apr 16 10:21 Newfoundland Summer Time
+----------------------------------------------------------
+1/13 Testing: test_smoke
+1/13 Test: test_smoke
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_smoke.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_smoke" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 2 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 2 tests from Smoke
+[ RUN      ] Smoke.OcctMakeBox
+[       OK ] Smoke.OcctMakeBox (0 ms)
+[ RUN      ] Smoke.GTestWorks
+[       OK ] Smoke.GTestWorks (0 ms)
+[----------] 2 tests from Smoke (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 2 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 2 tests.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"test_smoke" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_smoke" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/13 Testing: test_geometry
+2/13 Test: test_geometry
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_geometry.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_geometry" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 16 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 12 tests from Geometry
+[ RUN      ] Geometry.ExtrudeRectangle
+[       OK ] Geometry.ExtrudeRectangle (2 ms)
+[ RUN      ] Geometry.ExtrudeNullShape
+[       OK ] Geometry.ExtrudeNullShape (0 ms)
+[ RUN      ] Geometry.ExtrudeZeroVector
+[       OK ] Geometry.ExtrudeZeroVector (0 ms)
+[ RUN      ] Geometry.RevolveFullCircle
+[       OK ] Geometry.RevolveFullCircle (1 ms)
+[ RUN      ] Geometry.BooleanUnionTwoBoxes
+[       OK ] Geometry.BooleanUnionTwoBoxes (14 ms)
+[ RUN      ] Geometry.BooleanSubtract
+[       OK ] Geometry.BooleanSubtract (10 ms)
+[ RUN      ] Geometry.BooleanIntersect
+[       OK ] Geometry.BooleanIntersect (7 ms)
+[ RUN      ] Geometry.FilletBox
+[       OK ] Geometry.FilletBox (2 ms)
+[ RUN      ] Geometry.ChamferBox
+[       OK ] Geometry.ChamferBox (1 ms)
+[ RUN      ] Geometry.MirrorBox
+[       OK ] Geometry.MirrorBox (0 ms)
+[ RUN      ] Geometry.PatternLinear
+[       OK ] Geometry.PatternLinear (7 ms)
+[ RUN      ] Geometry.PatternCircular
+[       OK ] Geometry.PatternCircular (38 ms)
+[----------] 12 tests from Geometry (86 ms total)
+
+[----------] 4 tests from Query
+[ RUN      ] Query.AABBBox
+[       OK ] Query.AABBBox (0 ms)
+[ RUN      ] Query.MassPropertiesBox
+[       OK ] Query.MassPropertiesBox (0 ms)
+[ RUN      ] Query.FaceEdgeCount
+[       OK ] Query.FaceEdgeCount (0 ms)
+[ RUN      ] Query.MeasureDistance
+[       OK ] Query.MeasureDistance (1 ms)
+[----------] 4 tests from Query (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 16 tests from 2 test suites ran. (88 ms total)
+[  PASSED  ] 16 tests.
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"test_geometry" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_geometry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/13 Testing: test_topo_naming
+3/13 Test: test_topo_naming
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_topo_naming.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_topo_naming" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 9 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 9 tests from TopoNaming
+[ RUN      ] TopoNaming.ElementMapBasicSetGet
+[       OK ] TopoNaming.ElementMapBasicSetGet (0 ms)
+[ RUN      ] TopoNaming.ElementMapDuplicateDisambiguates
+[       OK ] TopoNaming.ElementMapDuplicateDisambiguates (0 ms)
+[ RUN      ] TopoNaming.ElementMapCount
+[       OK ] TopoNaming.ElementMapCount (0 ms)
+[ RUN      ] TopoNaming.EncodeElementName
+[       OK ] TopoNaming.EncodeElementName (0 ms)
+[ RUN      ] TopoNaming.ElementMapSerializeRoundTrip
+[       OK ] TopoNaming.ElementMapSerializeRoundTrip (0 ms)
+[ RUN      ] TopoNaming.ExtrudeProducesElementMap
+[       OK ] TopoNaming.ExtrudeProducesElementMap (2 ms)
+[ RUN      ] TopoNaming.BooleanPreservesNames
+[       OK ] TopoNaming.BooleanPreservesNames (13 ms)
+[ RUN      ] TopoNaming.FilletPreservesBaseNames
+[       OK ] TopoNaming.FilletPreservesBaseNames (1 ms)
+[ RUN      ] TopoNaming.NameStabilityExtrudeThenFillet
+[       OK ] TopoNaming.NameStabilityExtrudeThenFillet (9 ms)
+[----------] 9 tests from TopoNaming (26 ms total)
+
+[----------] Global test environment tear-down
+[==========] 9 tests from 1 test suite ran. (26 ms total)
+[  PASSED  ] 9 tests.
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"test_topo_naming" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_topo_naming" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/13 Testing: test_sketch_solver
+4/13 Test: test_sketch_solver
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_sketch_solver.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_sketch_solver" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 35 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 35 tests from SketchSolver
+[ RUN      ] SketchSolver.TwoPointCoincident
+[       OK ] SketchSolver.TwoPointCoincident (0 ms)
+[ RUN      ] SketchSolver.TwoPointDistance
+[       OK ] SketchSolver.TwoPointDistance (0 ms)
+[ RUN      ] SketchSolver.HorizontalLine
+[       OK ] SketchSolver.HorizontalLine (0 ms)
+[ RUN      ] SketchSolver.VerticalLine
+[       OK ] SketchSolver.VerticalLine (0 ms)
+[ RUN      ] SketchSolver.ParallelLines
+[       OK ] SketchSolver.ParallelLines (0 ms)
+[ RUN      ] SketchSolver.PerpendicularLines
+[       OK ] SketchSolver.PerpendicularLines (0 ms)
+[ RUN      ] SketchSolver.RectangleToWire
+[       OK ] SketchSolver.RectangleToWire (0 ms)
+[ RUN      ] SketchSolver.EmptySketchToWire
+[       OK ] SketchSolver.EmptySketchToWire (0 ms)
+[ RUN      ] SketchSolver.UnderconstrainedDOF
+[       OK ] SketchSolver.UnderconstrainedDOF (0 ms)
+[ RUN      ] SketchSolver.CoordinateXY
+[       OK ] SketchSolver.CoordinateXY (0 ms)
+[ RUN      ] SketchSolver.PointOnLineConstraint
+[       OK ] SketchSolver.PointOnLineConstraint (0 ms)
+[ RUN      ] SketchSolver.PointOnCircleConstraint
+[       OK ] SketchSolver.PointOnCircleConstraint (0 ms)
+[ RUN      ] SketchSolver.EqualLengthConstraint
+[       OK ] SketchSolver.EqualLengthConstraint (0 ms)
+[ RUN      ] SketchSolver.CircleRadius
+[       OK ] SketchSolver.CircleRadius (0 ms)
+[ RUN      ] SketchSolver.TangentLineCircle
+[       OK ] SketchSolver.TangentLineCircle (0 ms)
+[ RUN      ] SketchSolver.ConcentricCircles
+[       OK ] SketchSolver.ConcentricCircles (0 ms)
+[ RUN      ] SketchSolver.EqualRadiusCircles
+[       OK ] SketchSolver.EqualRadiusCircles (0 ms)
+[ RUN      ] SketchSolver.AngleConstraint
+[       OK ] SketchSolver.AngleConstraint (0 ms)
+[ RUN      ] SketchSolver.SymmetricConstraint
+[       OK ] SketchSolver.SymmetricConstraint (0 ms)
+[ RUN      ] SketchSolver.FixedPointConstraint
+[       OK ] SketchSolver.FixedPointConstraint (0 ms)
+[ RUN      ] SketchSolver.PointToLineDistance
+[       OK ] SketchSolver.PointToLineDistance (0 ms)
+[ RUN      ] SketchSolver.DistanceXConstraint
+[       OK ] SketchSolver.DistanceXConstraint (0 ms)
+[ RUN      ] SketchSolver.DistanceYConstraint
+[       OK ] SketchSolver.DistanceYConstraint (0 ms)
+[ RUN      ] SketchSolver.MidpointOnLineConstraint
+[       OK ] SketchSolver.MidpointOnLineConstraint (0 ms)
+[ RUN      ] SketchSolver.TangentLineArcConstraint
+[       OK ] SketchSolver.TangentLineArcConstraint (0 ms)
+[ RUN      ] SketchSolver.TangentCircleCircleConstraint
+[       OK ] SketchSolver.TangentCircleCircleConstraint (0 ms)
+[ RUN      ] SketchSolver.PointOnArcConstraint
+[       OK ] SketchSolver.PointOnArcConstraint (0 ms)
+[ RUN      ] SketchSolver.EqualRadiusCircleArcConstraint
+[       OK ] SketchSolver.EqualRadiusCircleArcConstraint (0 ms)
+[ RUN      ] SketchSolver.ArcLengthConstraint
+[       OK ] SketchSolver.ArcLengthConstraint (0 ms)
+[ RUN      ] SketchSolver.CircleToLineDistanceConstraint
+[       OK ] SketchSolver.CircleToLineDistanceConstraint (0 ms)
+[ RUN      ] SketchSolver.PointToCircleDistanceConstraint
+[       OK ] SketchSolver.PointToCircleDistanceConstraint (0 ms)
+[ RUN      ] SketchSolver.CircleDiameterConstraint
+[       OK ] SketchSolver.CircleDiameterConstraint (0 ms)
+[ RUN      ] SketchSolver.CollinearConstraint
+[       OK ] SketchSolver.CollinearConstraint (0 ms)
+[ RUN      ] SketchSolver.TangentCircleArcConstraint
+[       OK ] SketchSolver.TangentCircleArcConstraint (0 ms)
+[ RUN      ] SketchSolver.TangentArcArcConstraint
+[       OK ] SketchSolver.TangentArcArcConstraint (0 ms)
+[----------] 35 tests from SketchSolver (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 35 tests from 1 test suite ran. (5 ms total)
+[  PASSED  ] 35 tests.
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"test_sketch_solver" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_sketch_solver" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/13 Testing: test_boolean_stress
+5/13 Test: test_boolean_stress
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_boolean_stress.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_boolean_stress" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 5 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 5 tests from BooleanStress
+[ RUN      ] BooleanStress.NearCoincidentFaces
+[       OK ] BooleanStress.NearCoincidentFaces (13 ms)
+[ RUN      ] BooleanStress.ThinWallSubtract
+[       OK ] BooleanStress.ThinWallSubtract (4 ms)
+[ RUN      ] BooleanStress.TangentSphereCylinder
+[       OK ] BooleanStress.TangentSphereCylinder (2 ms)
+[ RUN      ] BooleanStress.IdenticalShapes
+[       OK ] BooleanStress.IdenticalShapes (7 ms)
+[ RUN      ] BooleanStress.SequentialSubtractions
+[       OK ] BooleanStress.SequentialSubtractions (38 ms)
+[----------] 5 tests from BooleanStress (67 ms total)
+
+[----------] Global test environment tear-down
+[==========] 5 tests from 1 test suite ran. (67 ms total)
+[  PASSED  ] 5 tests.
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"test_boolean_stress" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_boolean_stress" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/13 Testing: test_step_roundtrip
+6/13 Test: test_step_roundtrip
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_step_roundtrip.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_step_roundtrip" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 3 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 3 tests from StepIO
+[ RUN      ] StepIO.ExportImportRoundTrip
+
+*******************************************************************
+******        Statistics on Transfer (Write)                 ******
+
+*******************************************************************
+******        Transfer Mode = 0  I.E.  As Is       ******
+******        Transferring Shape, ShapeType = 2                      ******
+** WorkSession : Sending all data
+ Step File Name : C:\Users\ABHINA~1\AppData\Local\Temp\oreo_export_0_9353096216414398968.step(350 ents)  Write  Done
+[       OK ] StepIO.ExportImportRoundTrip (66 ms)
+[ RUN      ] StepIO.ExportFileThenImport
+
+*******************************************************************
+******        Statistics on Transfer (Write)                 ******
+
+*******************************************************************
+******        Transfer Mode = 0  I.E.  As Is       ******
+******        Transferring Shape, ShapeType = 2                      ******
+** WorkSession : Sending all data
+ Step File Name : test_step_roundtrip.step(350 ents)  Write  Done
+[       OK ] StepIO.ExportFileThenImport (24 ms)
+[ RUN      ] StepIO.ImportInvalidData
+**** ERR StepFile : Undefined Parsing: Line 2: Incorrect syntax: unexpected QUID, expecting STEP    ****
+**** ERR StepFile : Undefined Parsing: Line 2: Incorrect syntax: unexpected QUID, expecting STEP    ****
+[       OK ] StepIO.ImportInvalidData (5 ms)
+[----------] 3 tests from StepIO (96 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 1 test suite ran. (96 ms total)
+[  PASSED  ] 3 tests.
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"test_step_roundtrip" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_step_roundtrip" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/13 Testing: test_serialize
+7/13 Test: test_serialize
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_serialize.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_serialize" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 4 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 4 tests from Serialize
+[ RUN      ] Serialize.BoxRoundTrip
+[       OK ] Serialize.BoxRoundTrip (1 ms)
+[ RUN      ] Serialize.NullShapeFails
+[       OK ] Serialize.NullShapeFails (0 ms)
+[ RUN      ] Serialize.TruncatedDataFails
+[       OK ] Serialize.TruncatedDataFails (0 ms)
+[ RUN      ] Serialize.ElementMapPreserved
+[       OK ] Serialize.ElementMapPreserved (0 ms)
+[----------] 4 tests from Serialize (2 ms total)
+
+[----------] Global test environment tear-down
+[==========] 4 tests from 1 test suite ran. (2 ms total)
+[  PASSED  ] 4 tests.
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"test_serialize" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_serialize" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/13 Testing: test_robustness
+8/13 Test: test_robustness
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_robustness.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_robustness" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 16 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 16 tests from Robustness
+[ RUN      ] Robustness.ExtrudeNull
+[       OK ] Robustness.ExtrudeNull (0 ms)
+[ RUN      ] Robustness.RevolveNull
+[       OK ] Robustness.RevolveNull (0 ms)
+[ RUN      ] Robustness.BooleanWithNull
+[       OK ] Robustness.BooleanWithNull (0 ms)
+[ RUN      ] Robustness.FilletEmptyEdges
+[       OK ] Robustness.FilletEmptyEdges (0 ms)
+[ RUN      ] Robustness.FilletZeroRadius
+[       OK ] Robustness.FilletZeroRadius (0 ms)
+[ RUN      ] Robustness.ChamferNegativeDistance
+[       OK ] Robustness.ChamferNegativeDistance (0 ms)
+[ RUN      ] Robustness.PatternCountOne
+[       OK ] Robustness.PatternCountOne (0 ms)
+[ RUN      ] Robustness.PatternZeroSpacing
+[       OK ] Robustness.PatternZeroSpacing (0 ms)
+[ RUN      ] Robustness.AABBNull
+[       OK ] Robustness.AABBNull (0 ms)
+[ RUN      ] Robustness.MassPropertiesNull
+[       OK ] Robustness.MassPropertiesNull (0 ms)
+[ RUN      ] Robustness.MeasureDistanceNull
+[       OK ] Robustness.MeasureDistanceNull (0 ms)
+[ RUN      ] Robustness.DeserializeEmpty
+[       OK ] Robustness.DeserializeEmpty (0 ms)
+[ RUN      ] Robustness.DeserializeGarbage
+[       OK ] Robustness.DeserializeGarbage (0 ms)
+[ RUN      ] Robustness.ImportStepNull
+[       OK ] Robustness.ImportStepNull (0 ms)
+[ RUN      ] Robustness.ImportStepNonexistentFile
+[       OK ] Robustness.ImportStepNonexistentFile (2 ms)
+[ RUN      ] Robustness.ImportStepShapeLegacy
+[       OK ] Robustness.ImportStepShapeLegacy (0 ms)
+[----------] 16 tests from Robustness (3 ms total)
+
+[----------] Global test environment tear-down
+[==========] 16 tests from 1 test suite ran. (3 ms total)
+[  PASSED  ] 16 tests.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"test_robustness" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_robustness" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/13 Testing: test_feature_tree
+9/13 Test: test_feature_tree
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_feature_tree.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_feature_tree" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 25 tests from 4 test suites.
+[----------] Global test environment set-up.
+[----------] 16 tests from FeatureTree
+[ RUN      ] FeatureTree.EmptyTreeReplay
+[       OK ] FeatureTree.EmptyTreeReplay (0 ms)
+[ RUN      ] FeatureTree.SingleExtrudeReplay
+[       OK ] FeatureTree.SingleExtrudeReplay (0 ms)
+[ RUN      ] FeatureTree.BoxThenFilletReplay
+[       OK ] FeatureTree.BoxThenFilletReplay (2 ms)
+[ RUN      ] FeatureTree.ParameterChangeTriggersReplay
+[       OK ] FeatureTree.ParameterChangeTriggersReplay (0 ms)
+[ RUN      ] FeatureTree.SuppressFeature
+[       OK ] FeatureTree.SuppressFeature (0 ms)
+[ RUN      ] FeatureTree.RemoveFeature
+[       OK ] FeatureTree.RemoveFeature (0 ms)
+[ RUN      ] FeatureTree.SerializeRoundTrip
+[       OK ] FeatureTree.SerializeRoundTrip (0 ms)
+[ RUN      ] FeatureTree.BrokenFeatureDetection
+[       OK ] FeatureTree.BrokenFeatureDetection (0 ms)
+[ RUN      ] FeatureTree.PrimitivesWork
+[       OK ] FeatureTree.PrimitivesWork (0 ms)
+[ RUN      ] FeatureTree.HoleOperation
+[       OK ] FeatureTree.HoleOperation (13 ms)
+[ RUN      ] FeatureTree.OffsetOperation
+[       OK ] FeatureTree.OffsetOperation (13 ms)
+[ RUN      ] FeatureTree.SplitBodyOperation
+[       OK ] FeatureTree.SplitBodyOperation (6 ms)
+[ RUN      ] FeatureTree.CombineShapes
+[       OK ] FeatureTree.CombineShapes (0 ms)
+[ RUN      ] FeatureTree.MakeFaceFromWire
+[       OK ] FeatureTree.MakeFaceFromWire (0 ms)
+[ RUN      ] FeatureTree.DeterministicPrimitives
+[       OK ] FeatureTree.DeterministicPrimitives (1 ms)
+[ RUN      ] FeatureTree.DeterministicExtrudeFilletBoolean
+[       OK ] FeatureTree.DeterministicExtrudeFilletBoolean (148 ms)
+[----------] 16 tests from FeatureTree (188 ms total)
+
+[----------] 6 tests from Operations
+[ RUN      ] Operations.DraftFaces
+[       OK ] Operations.DraftFaces (1 ms)
+[ RUN      ] Operations.Pocket
+[       OK ] Operations.Pocket (8 ms)
+[ RUN      ] Operations.Thicken
+[       OK ] Operations.Thicken (19 ms)
+[ RUN      ] Operations.VariableFillet
+[       OK ] Operations.VariableFillet (10 ms)
+[ RUN      ] Operations.WireOffset
+[       OK ] Operations.WireOffset (0 ms)
+[ RUN      ] Operations.Rib
+[       OK ] Operations.Rib (13 ms)
+[----------] 6 tests from Operations (54 ms total)
+
+[----------] 2 tests from ParametricReplay
+[ RUN      ] ParametricReplay.BoxExtrudeFilletChangeHeight
+[       OK ] ParametricReplay.BoxExtrudeFilletChangeHeight (0 ms)
+[ RUN      ] ParametricReplay.FeatureTreeSerializeRoundTrip
+[       OK ] ParametricReplay.FeatureTreeSerializeRoundTrip (0 ms)
+[----------] 2 tests from ParametricReplay (0 ms total)
+
+[----------] 1 test from Determinism
+[ RUN      ] Determinism.ElementMapNamesIdentical
+[       OK ] Determinism.ElementMapNamesIdentical (0 ms)
+[----------] 1 test from Determinism (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 25 tests from 4 test suites ran. (243 ms total)
+[  PASSED  ] 25 tests.
+<end of output>
+Test time =   0.32 sec
+----------------------------------------------------------
+Test Passed.
+"test_feature_tree" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_feature_tree" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/13 Testing: test_foundation
+10/13 Test: test_foundation
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_foundation.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_foundation" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 37 tests from 7 test suites.
+[----------] Global test environment set-up.
+[----------] 5 tests from TagAllocator
+[ RUN      ] TagAllocator.SequentialAllocation
+[       OK ] TagAllocator.SequentialAllocation (0 ms)
+[ RUN      ] TagAllocator.ResetForDeterministicReplay
+[       OK ] TagAllocator.ResetForDeterministicReplay (0 ms)
+[ RUN      ] TagAllocator.SeedFromPersistence
+[       OK ] TagAllocator.SeedFromPersistence (0 ms)
+[ RUN      ] TagAllocator.TwoAllocatorsIndependent
+[       OK ] TagAllocator.TwoAllocatorsIndependent (0 ms)
+[ RUN      ] TagAllocator.EmptyCheck
+[       OK ] TagAllocator.EmptyCheck (0 ms)
+[----------] 5 tests from TagAllocator (0 ms total)
+
+[----------] 5 tests from Diagnostic
+[ RUN      ] Diagnostic.ReportAndQuery
+[       OK ] Diagnostic.ReportAndQuery (0 ms)
+[ RUN      ] Diagnostic.MultipleDiagnostics
+[       OK ] Diagnostic.MultipleDiagnostics (0 ms)
+[ RUN      ] Diagnostic.DegradedFlags
+[       OK ] Diagnostic.DegradedFlags (0 ms)
+[ RUN      ] Diagnostic.Clear
+[       OK ] Diagnostic.Clear (0 ms)
+[ RUN      ] Diagnostic.LastError
+[       OK ] Diagnostic.LastError (0 ms)
+[----------] 5 tests from Diagnostic (0 ms total)
+
+[----------] 7 tests from Units
+[ RUN      ] Units.MillimeterIdentity
+[       OK ] Units.MillimeterIdentity (0 ms)
+[ RUN      ] Units.InchToMillimeter
+[       OK ] Units.InchToMillimeter (0 ms)
+[ RUN      ] Units.MeterToMillimeter
+[       OK ] Units.MeterToMillimeter (0 ms)
+[ RUN      ] Units.DegreeToRadian
+[       OK ] Units.DegreeToRadian (0 ms)
+[ RUN      ] Units.RadianIdentity
+[       OK ] Units.RadianIdentity (0 ms)
+[ RUN      ] Units.LengthConversions
+[       OK ] Units.LengthConversions (0 ms)
+[ RUN      ] Units.UnitNameParsing
+[       OK ] Units.UnitNameParsing (0 ms)
+[----------] 7 tests from Units (0 ms total)
+
+[----------] 8 tests from Schema
+[ RUN      ] Schema.VersionCompatibility
+[       OK ] Schema.VersionCompatibility (0 ms)
+[ RUN      ] Schema.VersionParse
+[       OK ] Schema.VersionParse (0 ms)
+[ RUN      ] Schema.VersionToString
+[       OK ] Schema.VersionToString (0 ms)
+[ RUN      ] Schema.VersionJSON
+[       OK ] Schema.VersionJSON (0 ms)
+[ RUN      ] Schema.RegistryCurrentVersion
+[       OK ] Schema.RegistryCurrentVersion (0 ms)
+[ RUN      ] Schema.AddHeader
+[       OK ] Schema.AddHeader (0 ms)
+[ RUN      ] Schema.ReadHeader
+[       OK ] Schema.ReadHeader (0 ms)
+[ RUN      ] Schema.ReadHeaderMissing
+[       OK ] Schema.ReadHeaderMissing (0 ms)
+[----------] 8 tests from Schema (0 ms total)
+
+[----------] 4 tests from Validation
+[ RUN      ] Validation.RequireNonNull
+[       OK ] Validation.RequireNonNull (0 ms)
+[ RUN      ] Validation.RequirePositive
+[       OK ] Validation.RequirePositive (0 ms)
+[ RUN      ] Validation.RequireInRange
+[       OK ] Validation.RequireInRange (0 ms)
+[ RUN      ] Validation.RequireNonZeroVec
+[       OK ] Validation.RequireNonZeroVec (0 ms)
+[----------] 4 tests from Validation (0 ms total)
+
+[----------] 5 tests from KernelContext
+[ RUN      ] KernelContext.CreateWithDefaults
+[       OK ] KernelContext.CreateWithDefaults (0 ms)
+[ RUN      ] KernelContext.CreateWithConfig
+[       OK ] KernelContext.CreateWithConfig (0 ms)
+[ RUN      ] KernelContext.TwoContextsIndependent
+[       OK ] KernelContext.TwoContextsIndependent (0 ms)
+[ RUN      ] KernelContext.DiagClearAndCheck
+[       OK ] KernelContext.DiagClearAndCheck (0 ms)
+[ RUN      ] KernelContext.CreateContextHasId
+[       OK ] KernelContext.CreateContextHasId (0 ms)
+[----------] 5 tests from KernelContext (0 ms total)
+
+[----------] 3 tests from Determinism
+[ RUN      ] Determinism.SameOperationsSameTags
+[       OK ] Determinism.SameOperationsSameTags (0 ms)
+[ RUN      ] Determinism.ResetAndReplayIdentical
+[       OK ] Determinism.ResetAndReplayIdentical (0 ms)
+[ RUN      ] Determinism.TwoDocumentsNeverCollide
+[       OK ] Determinism.TwoDocumentsNeverCollide (0 ms)
+[----------] 3 tests from Determinism (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 37 tests from 7 test suites ran. (0 ms total)
+[  PASSED  ] 37 tests.
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"test_foundation" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_foundation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/13 Testing: test_foundation_hardened
+11/13 Test: test_foundation_hardened
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_foundation_hardened.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_foundation_hardened" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 35 tests from 6 test suites.
+[----------] Global test environment set-up.
+[----------] 19 tests from FailClosed
+[ RUN      ] FailClosed.NaNRejectedByRequirePositive
+[       OK ] FailClosed.NaNRejectedByRequirePositive (0 ms)
+[ RUN      ] FailClosed.InfRejectedByRequirePositive
+[       OK ] FailClosed.InfRejectedByRequirePositive (0 ms)
+[ RUN      ] FailClosed.NaNRejectedByRequireInRange
+[       OK ] FailClosed.NaNRejectedByRequireInRange (0 ms)
+[ RUN      ] FailClosed.NaNRejectedByRequireNonNegative
+[       OK ] FailClosed.NaNRejectedByRequireNonNegative (0 ms)
+[ RUN      ] FailClosed.NaNRejectedByRequireNonZeroVec
+[       OK ] FailClosed.NaNRejectedByRequireNonZeroVec (0 ms)
+[ RUN      ] FailClosed.RequireValidDirNotNoOp
+[       OK ] FailClosed.RequireValidDirNotNoOp (0 ms)
+[ RUN      ] FailClosed.UnknownLengthUnitThrows
+[       OK ] FailClosed.UnknownLengthUnitThrows (0 ms)
+[ RUN      ] FailClosed.UnknownAngleUnitThrows
+[       OK ] FailClosed.UnknownAngleUnitThrows (0 ms)
+[ RUN      ] FailClosed.TryParseLengthUnitReturnsNullopt
+[       OK ] FailClosed.TryParseLengthUnitReturnsNullopt (0 ms)
+[ RUN      ] FailClosed.TryParseAngleUnitReturnsNullopt
+[       OK ] FailClosed.TryParseAngleUnitReturnsNullopt (0 ms)
+[ RUN      ] FailClosed.ValidUnitsStillWork
+[       OK ] FailClosed.ValidUnitsStillWork (0 ms)
+[ RUN      ] FailClosed.SchemaRejectsMissingHeader
+[       OK ] FailClosed.SchemaRejectsMissingHeader (0 ms)
+[ RUN      ] FailClosed.SchemaRejectsUnknownType
+[       OK ] FailClosed.SchemaRejectsUnknownType (0 ms)
+[ RUN      ] FailClosed.SchemaRejectsTypeMismatch
+[       OK ] FailClosed.SchemaRejectsTypeMismatch (0 ms)
+[ RUN      ] FailClosed.SchemaRejectsFutureMajorVersion
+[       OK ] FailClosed.SchemaRejectsFutureMajorVersion (0 ms)
+[ RUN      ] FailClosed.SchemaVersionParseRejectsEmpty
+[       OK ] FailClosed.SchemaVersionParseRejectsEmpty (0 ms)
+[ RUN      ] FailClosed.ExtrudeRejectsNaNDirection
+[       OK ] FailClosed.ExtrudeRejectsNaNDirection (0 ms)
+[ RUN      ] FailClosed.MakeBoxRejectsZeroDimension
+[       OK ] FailClosed.MakeBoxRejectsZeroDimension (0 ms)
+[ RUN      ] FailClosed.MakeBoxRejectsNegativeDimension
+[       OK ] FailClosed.MakeBoxRejectsNegativeDimension (0 ms)
+[----------] 19 tests from FailClosed (0 ms total)
+
+[----------] 4 tests from OperationResult
+[ RUN      ] OperationResult.SuccessCarriesValue
+[       OK ] OperationResult.SuccessCarriesValue (0 ms)
+[ RUN      ] OperationResult.FailureHasNoValue
+[       OK ] OperationResult.FailureHasNoValue (0 ms)
+[ RUN      ] OperationResult.SuccessWithWarnings
+[       OK ] OperationResult.SuccessWithWarnings (0 ms)
+[ RUN      ] OperationResult.ValueOrOnFailure
+[       OK ] OperationResult.ValueOrOnFailure (0 ms)
+[----------] 4 tests from OperationResult (0 ms total)
+
+[----------] 3 tests from DiagnosticScope
+[ RUN      ] DiagnosticScope.DoesNotClearParentDiagnostics
+[       OK ] DiagnosticScope.DoesNotClearParentDiagnostics (0 ms)
+[ RUN      ] DiagnosticScope.MakeResultCapturesOnlyScopeDiags
+[       OK ] DiagnosticScope.MakeResultCapturesOnlyScopeDiags (0 ms)
+[ RUN      ] DiagnosticScope.NestedScopesCompose
+[       OK ] DiagnosticScope.NestedScopesCompose (0 ms)
+[----------] 3 tests from DiagnosticScope (0 ms total)
+
+[----------] 2 tests from OCCTInit
+[ RUN      ] OCCTInit.MultipleCallsAreSafe
+[       OK ] OCCTInit.MultipleCallsAreSafe (0 ms)
+[ RUN      ] OCCTInit.MultipleContextCreationsAreSafe
+[       OK ] OCCTInit.MultipleContextCreationsAreSafe (0 ms)
+[----------] 2 tests from OCCTInit (0 ms total)
+
+[----------] 6 tests from DeterministicIDs
+[ RUN      ] DeterministicIDs.SingleDocumentModeIsSequential
+[       OK ] DeterministicIDs.SingleDocumentModeIsSequential (0 ms)
+[ RUN      ] DeterministicIDs.MultiDocumentTagsEncodeDocumentId
+[       OK ] DeterministicIDs.MultiDocumentTagsEncodeDocumentId (0 ms)
+[ RUN      ] DeterministicIDs.TwoDocumentsNeverCollide
+[       OK ] DeterministicIDs.TwoDocumentsNeverCollide (0 ms)
+[ RUN      ] DeterministicIDs.DocumentIdFromUUID
+[       OK ] DeterministicIDs.DocumentIdFromUUID (0 ms)
+[ RUN      ] DeterministicIDs.ResetPreservesDocumentId
+[       OK ] DeterministicIDs.ResetPreservesDocumentId (0 ms)
+[ RUN      ] DeterministicIDs.TwoDocumentsReplayIdentically
+[       OK ] DeterministicIDs.TwoDocumentsReplayIdentically (0 ms)
+[----------] 6 tests from DeterministicIDs (0 ms total)
+
+[----------] 1 test from UnitsEnforcement
+[ RUN      ] UnitsEnforcement.InchContextProducesLargerBox
+[       OK ] UnitsEnforcement.InchContextProducesLargerBox (0 ms)
+[----------] 1 test from UnitsEnforcement (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 35 tests from 6 test suites ran. (1 ms total)
+[  PASSED  ] 35 tests.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"test_foundation_hardened" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_foundation_hardened" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/13 Testing: test_mesh
+12/13 Test: test_mesh
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_mesh.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_mesh" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 19 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 19 tests from Mesh
+[ RUN      ] Mesh.TessellateBox
+[       OK ] Mesh.TessellateBox (4 ms)
+[ RUN      ] Mesh.TessellateSphere
+[       OK ] Mesh.TessellateSphere (3 ms)
+[ RUN      ] Mesh.TessellateCylinder
+[       OK ] Mesh.TessellateCylinder (1 ms)
+[ RUN      ] Mesh.FaceGroupsMatchFaceCount
+[       OK ] Mesh.FaceGroupsMatchFaceCount (5 ms)
+[ RUN      ] Mesh.FaceGroupNamesExist
+[       OK ] Mesh.FaceGroupNamesExist (1 ms)
+[ RUN      ] Mesh.EdgeWireframe
+[       OK ] Mesh.EdgeWireframe (1 ms)
+[ RUN      ] Mesh.LODCoarseVsFine
+[       OK ] Mesh.LODCoarseVsFine (66 ms)
+[ RUN      ] Mesh.NormalsAreUnitLength
+[       OK ] Mesh.NormalsAreUnitLength (3 ms)
+[ RUN      ] Mesh.TessellateNullShape
+[       OK ] Mesh.TessellateNullShape (0 ms)
+[ RUN      ] Mesh.TessellateInvalidDeflection
+[       OK ] Mesh.TessellateInvalidDeflection (0 ms)
+[ RUN      ] Mesh.WithoutNormals
+[       OK ] Mesh.WithoutNormals (2 ms)
+[ RUN      ] Mesh.WithoutEdges
+[       OK ] Mesh.WithoutEdges (1 ms)
+[ RUN      ] Mesh.DiagnosticsForBox
+[       OK ] Mesh.DiagnosticsForBox (1 ms)
+[ RUN      ] Mesh.DiagnosticsForSphere
+[       OK ] Mesh.DiagnosticsForSphere (3 ms)
+[ RUN      ] Mesh.IncrementalMeshCacheHit
+[       OK ] Mesh.IncrementalMeshCacheHit (2 ms)
+[ RUN      ] Mesh.IncrementalMeshInvalidateOnParamChange
+[       OK ] Mesh.IncrementalMeshInvalidateOnParamChange (2 ms)
+[ RUN      ] Mesh.IncrementalMeshInvalidateSingleFace
+[       OK ] Mesh.IncrementalMeshInvalidateSingleFace (2 ms)
+[ RUN      ] Mesh.DeterministicOutput
+[       OK ] Mesh.DeterministicOutput (13 ms)
+[ RUN      ] Mesh.DeterministicSphereOutput
+[       OK ] Mesh.DeterministicSphereOutput (21 ms)
+[----------] 19 tests from Mesh (140 ms total)
+
+[----------] Global test environment tear-down
+[==========] 19 tests from 1 test suite ran. (140 ms total)
+[  PASSED  ] 19 tests.
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"test_mesh" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_mesh" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/13 Testing: test_foundation_production
+13/13 Test: test_foundation_production
+Command: "C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/Release/test_foundation_production.exe"
+Directory: C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc
+"test_foundation_production" start time: Apr 16 10:21 Newfoundland Summer Time
+Output:
+----------------------------------------------------------
+Running main() from C:\vcpkg\buildtrees\gtest\src\v1.17.0-0c449efaff.clean\googletest\src\gtest_main.cc
+[==========] Running 57 tests from 10 test suites.
+[----------] Global test environment set-up.
+[----------] 22 tests from NaNRejection
+[ RUN      ] NaNRejection.MakeBox
+[       OK ] NaNRejection.MakeBox (0 ms)
+[ RUN      ] NaNRejection.MakeCylinder
+[       OK ] NaNRejection.MakeCylinder (0 ms)
+[ RUN      ] NaNRejection.MakeSphere
+[       OK ] NaNRejection.MakeSphere (0 ms)
+[ RUN      ] NaNRejection.MakeCone
+[       OK ] NaNRejection.MakeCone (0 ms)
+[ RUN      ] NaNRejection.MakeTorus
+[       OK ] NaNRejection.MakeTorus (0 ms)
+[ RUN      ] NaNRejection.MakeWedge
+[       OK ] NaNRejection.MakeWedge (0 ms)
+[ RUN      ] NaNRejection.Extrude
+[       OK ] NaNRejection.Extrude (0 ms)
+[ RUN      ] NaNRejection.Revolve
+[       OK ] NaNRejection.Revolve (0 ms)
+[ RUN      ] NaNRejection.Fillet
+[       OK ] NaNRejection.Fillet (0 ms)
+[ RUN      ] NaNRejection.Chamfer
+[       OK ] NaNRejection.Chamfer (0 ms)
+[ RUN      ] NaNRejection.ShellThickness
+[       OK ] NaNRejection.ShellThickness (0 ms)
+[ RUN      ] NaNRejection.PatternLinearSpacing
+[       OK ] NaNRejection.PatternLinearSpacing (0 ms)
+[ RUN      ] NaNRejection.PatternCircularAngle
+[       OK ] NaNRejection.PatternCircularAngle (0 ms)
+[ RUN      ] NaNRejection.Offset
+[       OK ] NaNRejection.Offset (0 ms)
+[ RUN      ] NaNRejection.Thicken
+[       OK ] NaNRejection.Thicken (0 ms)
+[ RUN      ] NaNRejection.FilletVariable
+[       OK ] NaNRejection.FilletVariable (0 ms)
+[ RUN      ] NaNRejection.WireOffset
+[       OK ] NaNRejection.WireOffset (0 ms)
+[ RUN      ] NaNRejection.DraftAngle
+[       OK ] NaNRejection.DraftAngle (0 ms)
+[ RUN      ] NaNRejection.HoleDiameter
+[       OK ] NaNRejection.HoleDiameter (0 ms)
+[ RUN      ] NaNRejection.HoleDepth
+[       OK ] NaNRejection.HoleDepth (0 ms)
+[ RUN      ] NaNRejection.RibThickness
+[       OK ] NaNRejection.RibThickness (0 ms)
+[ RUN      ] NaNRejection.PocketDepth
+[       OK ] NaNRejection.PocketDepth (0 ms)
+[----------] 22 tests from NaNRejection (1 ms total)
+
+[----------] 3 tests from InfRejection
+[ RUN      ] InfRejection.MakeBoxInf
+[       OK ] InfRejection.MakeBoxInf (0 ms)
+[ RUN      ] InfRejection.MakeBoxNegInf
+[       OK ] InfRejection.MakeBoxNegInf (0 ms)
+[ RUN      ] InfRejection.ExtrudeInf
+[       OK ] InfRejection.ExtrudeInf (0 ms)
+[----------] 3 tests from InfRejection (0 ms total)
+
+[----------] 6 tests from TagAllocator
+[ RUN      ] TagAllocator.SingleDocSequential
+[       OK ] TagAllocator.SingleDocSequential (0 ms)
+[ RUN      ] TagAllocator.MultiDocNoCollision
+[       OK ] TagAllocator.MultiDocNoCollision (0 ms)
+[ RUN      ] TagAllocator.ExtractDocId
+[       OK ] TagAllocator.ExtractDocId (0 ms)
+[ RUN      ] TagAllocator.ExtractCounter
+[       OK ] TagAllocator.ExtractCounter (0 ms)
+[ RUN      ] TagAllocator.ResetDeterministic
+[       OK ] TagAllocator.ResetDeterministic (0 ms)
+[ RUN      ] TagAllocator.HighCounterWorks
+[       OK ] TagAllocator.HighCounterWorks (0 ms)
+[----------] 6 tests from TagAllocator (0 ms total)
+
+[----------] 5 tests from OperationResult
+[ RUN      ] OperationResult.SuccessOK
+[       OK ] OperationResult.SuccessOK (0 ms)
+[ RUN      ] OperationResult.FailureNotOK
+[       OK ] OperationResult.FailureNotOK (0 ms)
+[ RUN      ] OperationResult.FailureThrows
+[       OK ] OperationResult.FailureThrows (0 ms)
+[ RUN      ] OperationResult.ValueOrDefault
+[       OK ] OperationResult.ValueOrDefault (0 ms)
+[ RUN      ] OperationResult.DiagnosticsTravel
+[       OK ] OperationResult.DiagnosticsTravel (0 ms)
+[----------] 5 tests from OperationResult (0 ms total)
+
+[----------] 3 tests from DiagnosticScope
+[ RUN      ] DiagnosticScope.NestedNoLeak
+[       OK ] DiagnosticScope.NestedNoLeak (0 ms)
+[ RUN      ] DiagnosticScope.MakeResultSuccess
+[       OK ] DiagnosticScope.MakeResultSuccess (0 ms)
+[ RUN      ] DiagnosticScope.MakeFailureOnError
+[       OK ] DiagnosticScope.MakeFailureOnError (0 ms)
+[----------] 3 tests from DiagnosticScope (0 ms total)
+
+[----------] 3 tests from ContextIsolation
+[ RUN      ] ContextIsolation.DiagIndependent
+[       OK ] ContextIsolation.DiagIndependent (0 ms)
+[ RUN      ] ContextIsolation.TagsIndependent
+[       OK ] ContextIsolation.TagsIndependent (0 ms)
+[ RUN      ] ContextIsolation.UnitsIndependent
+[       OK ] ContextIsolation.UnitsIndependent (0 ms)
+[----------] 3 tests from ContextIsolation (0 ms total)
+
+[----------] 4 tests from Units
+[ RUN      ] Units.InchToMM
+[       OK ] Units.InchToMM (0 ms)
+[ RUN      ] Units.DegreeToRadian
+[       OK ] Units.DegreeToRadian (0 ms)
+[ RUN      ] Units.RoundTrip
+[       OK ] Units.RoundTrip (0 ms)
+[ RUN      ] Units.MeterToMM
+[       OK ] Units.MeterToMM (0 ms)
+[----------] 4 tests from Units (0 ms total)
+
+[----------] 3 tests from Schema
+[ RUN      ] Schema.UnknownVersionRejected
+[       OK ] Schema.UnknownVersionRejected (0 ms)
+[ RUN      ] Schema.HeaderRoundTrip
+[       OK ] Schema.HeaderRoundTrip (0 ms)
+[ RUN      ] Schema.CompatibleVersionLoads
+[       OK ] Schema.CompatibleVersionLoads (0 ms)
+[----------] 3 tests from Schema (0 ms total)
+
+[----------] 5 tests from Validation
+[ RUN      ] Validation.RejectNaN
+[       OK ] Validation.RejectNaN (0 ms)
+[ RUN      ] Validation.RejectInf
+[       OK ] Validation.RejectInf (0 ms)
+[ RUN      ] Validation.RejectNegInf
+[       OK ] Validation.RejectNegInf (0 ms)
+[ RUN      ] Validation.RejectNaNVec
+[       OK ] Validation.RejectNaNVec (0 ms)
+[ RUN      ] Validation.AcceptValid
+[       OK ] Validation.AcceptValid (0 ms)
+[----------] 5 tests from Validation (0 ms total)
+
+[----------] 3 tests from GeomQuality
+[ RUN      ] GeomQuality.BoxNeverDegraded
+[       OK ] GeomQuality.BoxNeverDegraded (0 ms)
+[ RUN      ] GeomQuality.SphereNeverDegraded
+[       OK ] GeomQuality.SphereNeverDegraded (0 ms)
+[ RUN      ] GeomQuality.CylinderNeverDegraded
+[       OK ] GeomQuality.CylinderNeverDegraded (0 ms)
+[----------] 3 tests from GeomQuality (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 57 tests from 10 test suites ran. (1 ms total)
+[  PASSED  ] 57 tests.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"test_foundation_production" end time: Apr 16 10:21 Newfoundland Summer Time
+"test_foundation_production" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Apr 16 10:21 Newfoundland Summer Time

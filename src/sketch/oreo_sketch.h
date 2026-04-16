@@ -8,6 +8,8 @@
 #define OREO_SKETCH_H
 
 #include "core/kernel_context.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 
 #include <string>
@@ -95,7 +97,7 @@ struct SolveResult {
 // Solve a 2D sketch.
 // Input: arrays of points, lines, circles, arcs, and constraints.
 // Output: solved positions (entities modified in-place), solve result.
-SolveResult solveSketch(
+OperationResult<SolveResult> solveSketch(
     KernelContext& ctx,
     std::vector<SketchPoint>& points,
     std::vector<SketchLine>& lines,
@@ -105,7 +107,7 @@ SolveResult solveSketch(
 
 // Convert a solved sketch to a wire.
 // Takes lines, circles, arcs and produces a TopoDS_Wire.
-NamedShape sketchToWire(
+OperationResult<NamedShape> sketchToWire(
     KernelContext& ctx,
     const std::vector<SketchLine>& lines,
     const std::vector<SketchCircle>& circles,

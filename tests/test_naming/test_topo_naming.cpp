@@ -18,7 +18,7 @@
 
 namespace {
 
-oreo::NamedShape makeRectFace(double w, double h) {
+oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     gp_Pnt p1(0, 0, 0), p2(w, 0, 0), p3(w, h, 0), p4(0, h, 0);
     BRepBuilderAPI_MakeWire wireBuilder;
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p1, p2).Edge());
@@ -26,7 +26,7 @@ oreo::NamedShape makeRectFace(double w, double h) {
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace faceBuilder(wireBuilder.Wire());
-    return oreo::NamedShape(faceBuilder.Face(), oreo::NamedShape::nextTag());
+    return oreo::NamedShape(faceBuilder.Face(), ctx.tags.nextTag());
 }
 
 } // anonymous namespace
@@ -104,7 +104,7 @@ TEST(TopoNaming, ElementMapSerializeRoundTrip) {
 
 TEST(TopoNaming, ExtrudeProducesElementMap) {
     auto ctx = oreo::KernelContext::create();
-    auto face = makeRectFace(10, 20);
+    auto face = makeRectFace(*ctx, 10, 20);
     auto resultR = oreo::extrude(*ctx, face, gp_Vec(0, 0, 30));
     ASSERT_TRUE(resultR.ok());
     auto result = resultR.value();
@@ -140,7 +140,9 @@ TEST(TopoNaming, BooleanPreservesNames) {
 TEST(TopoNaming, FilletPreservesBaseNames) {
     auto ctx = oreo::KernelContext::create();
     auto box = oreo::makeBox(*ctx, 20, 20, 20).value();
-    auto edges = oreo::getEdges(*ctx, box);
+    auto edgesR = oreo::getEdges(*ctx, box);
+    ASSERT_TRUE(edgesR.ok());
+    auto edges = edgesR.value();
     ASSERT_GT(edges.size(), 0u);
 
     std::vector<oreo::NamedEdge> filletEdges = {edges[0]};
@@ -161,12 +163,14 @@ TEST(TopoNaming, NameStabilityExtrudeThenFillet) {
     auto ctx = oreo::KernelContext::create();
 
     // Build: face -> extrude(30) -> fillet(edge[0], 2)
-    auto face1 = makeRectFace(10, 20);
+    auto face1 = makeRectFace(*ctx, 10, 20);
     auto ext1R = oreo::extrude(*ctx, face1, gp_Vec(0, 0, 30));
     ASSERT_TRUE(ext1R.ok());
     auto ext1 = ext1R.value();
 
-    auto edges1 = oreo::getEdges(*ctx, ext1);
+    auto edges1R = oreo::getEdges(*ctx, ext1);
+    ASSERT_TRUE(edges1R.ok());
+    auto edges1 = edges1R.value();
     ASSERT_GT(edges1.size(), 0u);
     std::vector<oreo::NamedEdge> fEdges1 = {edges1[0]};
     auto fillet1R = oreo::fillet(*ctx, ext1, fEdges1, 2.0);
@@ -176,12 +180,14 @@ TEST(TopoNaming, NameStabilityExtrudeThenFillet) {
     int faceCount1 = fillet1.countSubShapes(TopAbs_FACE);
 
     // Rebuild with different extrude height: face -> extrude(50) -> fillet(edge[0], 2)
-    auto face2 = makeRectFace(10, 20);
+    auto face2 = makeRectFace(*ctx, 10, 20);
     auto ext2R = oreo::extrude(*ctx, face2, gp_Vec(0, 0, 50));
     ASSERT_TRUE(ext2R.ok());
     auto ext2 = ext2R.value();
 
-    auto edges2 = oreo::getEdges(*ctx, ext2);
+    auto edges2R = oreo::getEdges(*ctx, ext2);
+    ASSERT_TRUE(edges2R.ok());
+    auto edges2 = edges2R.value();
     ASSERT_GT(edges2.size(), 0u);
     std::vector<oreo::NamedEdge> fEdges2 = {edges2[0]};
     auto fillet2R = oreo::fillet(*ctx, ext2, fEdges2, 2.0);

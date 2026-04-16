@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\capi\oreo_capi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\diagnostic.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\diagnostic_scope.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\kernel_context.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\oreo_error.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\oreo_init.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\oreo_tolerance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\schema.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\units.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\core\validation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\feature\feature.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\feature\feature_tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_boolean.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_extrude.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_fillet_chamfer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_manufacturing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_mirror_pattern.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_primitives.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_revolve.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_shell_loft_sweep.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\geometry\oreo_surface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\io\oreo_serialize.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\io\oreo_step.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\io\shape_fix.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\mesh\oreo_mesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\element_map.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\freecad\ElementMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\freecad\ElementNamingUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\freecad\IndexedName.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\freecad\MappedElement.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\freecad\MappedName.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\freecad\StringHasher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\map_shape_elements.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\named_shape.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\naming\topo_shape_adapter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\query\oreo_query.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\sketch\Constraints.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\sketch\GCS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\sketch\Geo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\sketch\SubSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\sketch\oreo_sketch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\src\sketch\qp_eq.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\build_msvc\vcpkg_installed\x64-windows\share\boost-1.90.0\assert\boost_assert.natvis" />
+    <Natvis Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\build_msvc\vcpkg_installed\x64-windows\share\nlohmann_json\nlohmann_json.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A56D7E44-F5CA-36F7-A106-4CE5B626E30A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

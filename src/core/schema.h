@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -57,7 +58,9 @@ struct OREO_IMMUTABLE SchemaVersion {
     }
 
     static SchemaVersion fromJSON(const nlohmann::json& j) {
-        return {j.value("major", 1), j.value("minor", 0), j.value("patch", 0)};
+        if (!j.contains("major") || !j.contains("minor") || !j.contains("patch"))
+            throw std::invalid_argument("SchemaVersion missing required fields");
+        return {j.at("major").get<int>(), j.at("minor").get<int>(), j.at("patch").get<int>()};
     }
 };
 

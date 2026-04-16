@@ -49,7 +49,7 @@ GeomResult draft(KernelContext& ctx,
     }
 
     // Unit conversion: angleDeg is an angle
-    const double kAngleRad = ctx.units.toKernelAngle(angleDeg);
+    const double kAngleRad = ctx.units().toKernelAngle(angleDeg);
 
     BRepOffsetAPI_DraftAngle maker(solid.shape());
     for (auto& f : faces) {
@@ -77,7 +77,7 @@ GeomResult draft(KernelContext& ctx,
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -111,8 +111,8 @@ GeomResult hole(KernelContext& ctx,
     }
 
     // Unit conversion: diameter and depth are lengths
-    const double kDiameter = ctx.units.toKernelLength(diameter);
-    const double kDepth    = ctx.units.toKernelLength(depth);
+    const double kDiameter = ctx.units().toKernelLength(diameter);
+    const double kDepth    = ctx.units().toKernelLength(depth);
 
     double radius = kDiameter / 2.0;
 
@@ -166,7 +166,7 @@ GeomResult rib(KernelContext& ctx,
     if (!validation::requirePositive(ctx, thickness, "thickness")) return scope.makeFailure<NamedShape>();
 
     // Unit conversion: thickness is a length
-    const double kThickness = ctx.units.toKernelLength(thickness);
+    const double kThickness = ctx.units().toKernelLength(thickness);
 
     // Extrude the rib profile in both directions (half thickness each)
     gp_Vec halfVec(direction);
@@ -198,7 +198,7 @@ GeomResult pocket(KernelContext& ctx,
     if (!validation::requirePositive(ctx, depth, "depth")) return scope.makeFailure<NamedShape>();
 
     // Unit conversion: depth is a length
-    const double kDepth = ctx.units.toKernelLength(depth);
+    const double kDepth = ctx.units().toKernelLength(depth);
 
     // Extrude the profile downward
     gp_Vec cutVec(0, 0, -kDepth);

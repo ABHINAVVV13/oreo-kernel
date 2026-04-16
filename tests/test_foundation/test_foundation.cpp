@@ -321,8 +321,8 @@ TEST(KernelContext, CreateWithConfig) {
     config.tagSeed = 500;
 
     auto ctx = oreo::KernelContext::create(config);
-    EXPECT_NEAR(ctx->tolerance.linearPrecision, 1e-6, 1e-12);
-    EXPECT_EQ(ctx->units.documentLength, oreo::LengthUnit::Inch);
+    EXPECT_NEAR(ctx->tolerance().linearPrecision, 1e-6, 1e-12);
+    EXPECT_EQ(ctx->units().documentLength, oreo::LengthUnit::Inch);
     EXPECT_EQ(ctx->tags.nextTag(), 501);
 }
 
@@ -339,14 +339,14 @@ TEST(KernelContext, TwoContextsIndependent) {
     EXPECT_TRUE(ctx2->diag.empty());
 }
 
-TEST(KernelContext, BeginOperation) {
+TEST(KernelContext, DiagClearAndCheck) {
     auto ctx = oreo::KernelContext::create();
     ctx->diag.error(oreo::ErrorCode::OCCT_FAILURE, "Some old error");
     EXPECT_TRUE(ctx->diag.hasErrors());
 
-    ctx->beginOperation();
+    ctx->diag.clear();
     EXPECT_TRUE(ctx->diag.empty());
-    EXPECT_TRUE(ctx->lastOperationOK());
+    EXPECT_TRUE(!ctx->diag.hasErrors());
 }
 
 TEST(KernelContext, CreateContextHasId) {

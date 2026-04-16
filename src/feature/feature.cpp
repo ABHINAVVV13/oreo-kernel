@@ -4,20 +4,22 @@
 #include "feature.h"
 #include "geometry/oreo_geometry.h"
 #include "core/kernel_context.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "query/oreo_query.h"
 
 namespace oreo {
 
 namespace {
 
-// Extract a NamedShape from a GeomResult, setting feature status on failure.
-NamedShape extractResult(Feature& feature, GeomResult&& result) {
+// Extract an OperationResult<NamedShape> from a GeomResult, setting feature status on failure.
+// Propagates the GeomResult as-is since executeFeature now returns OperationResult<NamedShape>.
+OperationResult<NamedShape> extractResult(Feature& feature, GeomResult&& result) {
     if (!result.ok()) {
         feature.status = FeatureStatus::ExecutionFailed;
         feature.errorMessage = result.errorMessage();
-        return {};
     }
-    return std::move(result).value();
+    return std::move(result);
 }
 
 // Resolve a single ElementRef using the provided resolver.
@@ -68,18 +70,18 @@ std::vector<NamedFace> resolveFaces(Feature& feature,
 
 } // anonymous namespace
 
-NamedShape executeFeature(KernelContext& ctx,
+OperationResult<NamedShape> executeFeature(KernelContext& ctx,
                           Feature& feature,
                           const NamedShape& currentShape,
                           const RefResolver& resolver)
 {
-    ctx.beginOperation();
+    DiagnosticScope scope(ctx);
     feature.status = FeatureStatus::OK;
     feature.errorMessage.clear();
 
     if (feature.suppressed) {
         feature.status = FeatureStatus::Suppressed;
-        return currentShape;  // Pass through unchanged
+        return scope.makeResult(currentShape);  // Pass through unchanged
     }
 
     try {
@@ -103,7 +105,7 @@ NamedShape executeFeature(KernelContext& ctx,
             auto edgeRefs = feature.get<std::vector<ElementRef>>("edges");
             double radius = feature.get<double>("radius");
             auto edges = resolveEdges(feature, edgeRefs, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             return extractResult(feature, fillet(ctx, currentShape, edges, radius));
         }
 
@@ -112,7 +114,7 @@ NamedShape executeFeature(KernelContext& ctx,
             auto edgeRefs = feature.get<std::vector<ElementRef>>("edges");
             double distance = feature.get<double>("distance");
             auto edges = resolveEdges(feature, edgeRefs, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             return extractResult(feature, chamfer(ctx, currentShape, edges, distance));
         }
 
@@ -120,7 +122,7 @@ NamedShape executeFeature(KernelContext& ctx,
         if (type == "BooleanUnion") {
             auto toolRef = feature.get<ElementRef>("tool");
             auto toolShape = resolveRef(feature, toolRef, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             NamedShape tool(toolShape, ctx.tags.nextTag());
             return extractResult(feature, booleanUnion(ctx, currentShape, tool));
         }
@@ -129,7 +131,7 @@ NamedShape executeFeature(KernelContext& ctx,
         if (type == "BooleanSubtract") {
             auto toolRef = feature.get<ElementRef>("tool");
             auto toolShape = resolveRef(feature, toolRef, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             NamedShape tool(toolShape, ctx.tags.nextTag());
             return extractResult(feature, booleanSubtract(ctx, currentShape, tool));
         }
@@ -139,7 +141,7 @@ NamedShape executeFeature(KernelContext& ctx,
             auto faceRefs = feature.get<std::vector<ElementRef>>("faces");
             double thickness = feature.get<double>("thickness");
             auto faces = resolveFaces(feature, faceRefs, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             return extractResult(feature, shell(ctx, currentShape, faces, thickness));
         }
 
@@ -171,7 +173,7 @@ NamedShape executeFeature(KernelContext& ctx,
             double angle = feature.get<double>("angle");
             auto dir = feature.get<gp_Dir>("pullDirection");
             auto faces = resolveFaces(feature, faceRefs, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             return extractResult(feature, draft(ctx, currentShape, faces, angle, dir));
         }
 
@@ -186,7 +188,7 @@ NamedShape executeFeature(KernelContext& ctx,
             if (!resolved.resolved) {
                 feature.status = FeatureStatus::BrokenReference;
                 feature.errorMessage = "Cannot resolve hole face reference";
-                return {};
+                return scope.makeFailure<NamedShape>();
             }
             NamedFace face = {resolved.indexedName, resolved.shape};
             return extractResult(feature, hole(ctx, currentShape, face, center, diameter, depth));
@@ -199,10 +201,10 @@ NamedShape executeFeature(KernelContext& ctx,
             if (profileRef.isNull()) {
                 feature.status = FeatureStatus::ExecutionFailed;
                 feature.errorMessage = "Pocket requires a 'profile' parameter referencing a wire/face";
-                return {};
+                return scope.makeFailure<NamedShape>();
             }
             auto profileShape = resolveRef(feature, profileRef, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             NamedShape profile(profileShape, ctx.tags.nextTag());
             return extractResult(feature, pocket(ctx, currentShape, profile, depth));
         }
@@ -235,7 +237,7 @@ NamedShape executeFeature(KernelContext& ctx,
             if (!resolved.resolved) {
                 feature.status = FeatureStatus::BrokenReference;
                 feature.errorMessage = "Cannot resolve edge for variable fillet";
-                return {};
+                return scope.makeFailure<NamedShape>();
             }
             NamedEdge edge = {resolved.indexedName, resolved.shape};
             return extractResult(feature, filletVariable(ctx, currentShape, edge, startR, endR));
@@ -252,12 +254,12 @@ NamedShape executeFeature(KernelContext& ctx,
             if (shapeRefs.empty()) {
                 feature.status = FeatureStatus::ExecutionFailed;
                 feature.errorMessage = "Combine requires a 'shapes' parameter with references to shapes to combine";
-                return {};
+                return scope.makeFailure<NamedShape>();
             }
             std::vector<NamedShape> shapes = {currentShape};
             for (auto& ref : shapeRefs) {
                 auto resolved = resolveRef(feature, ref, resolver);
-                if (feature.status == FeatureStatus::BrokenReference) return {};
+                if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
                 shapes.emplace_back(resolved, ctx.tags.nextTag());
             }
             return extractResult(feature, combine(ctx, shapes));
@@ -271,10 +273,10 @@ NamedShape executeFeature(KernelContext& ctx,
             if (profileRef.isNull()) {
                 feature.status = FeatureStatus::ExecutionFailed;
                 feature.errorMessage = "Rib requires a 'profile' parameter referencing a wire profile";
-                return {};
+                return scope.makeFailure<NamedShape>();
             }
             auto profileShape = resolveRef(feature, profileRef, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return {};
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
             NamedShape ribProfile(profileShape, ctx.tags.nextTag());
             return extractResult(feature, rib(ctx, currentShape, ribProfile, dir, thickness));
         }
@@ -297,20 +299,20 @@ NamedShape executeFeature(KernelContext& ctx,
         // ── Unknown feature type ─────────────────────────
         feature.status = FeatureStatus::ExecutionFailed;
         feature.errorMessage = "Unknown feature type: " + type;
-        return {};
+        return scope.makeFailure<NamedShape>();
 
     } catch (const std::bad_variant_access& e) {
         feature.status = FeatureStatus::ExecutionFailed;
         feature.errorMessage = std::string("Missing or wrong parameter type: ") + e.what();
-        return {};
+        return scope.makeFailure<NamedShape>();
     } catch (const std::out_of_range& e) {
         feature.status = FeatureStatus::ExecutionFailed;
         feature.errorMessage = std::string("Missing parameter: ") + e.what();
-        return {};
+        return scope.makeFailure<NamedShape>();
     } catch (const std::exception& e) {
         feature.status = FeatureStatus::ExecutionFailed;
         feature.errorMessage = std::string("Execution error: ") + e.what();
-        return {};
+        return scope.makeFailure<NamedShape>();
     }
 }
 

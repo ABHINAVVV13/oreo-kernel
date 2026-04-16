@@ -15,7 +15,6 @@
 #include <TopExp_Explorer.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -42,13 +41,10 @@ public:
 
     const TopoDS_Shape& shape() const { return shape_; }
     TopoDS_Shape& shape() { return shape_; }
-    void setShape(const TopoDS_Shape& s) { shape_ = s; }
 
     ElementMapPtr elementMap() const { return elementMap_; }
-    void setElementMap(ElementMapPtr map) { elementMap_ = map; }
 
     int64_t tag() const { return tag_; }
-    void setTag(int64_t t) { tag_ = t; }
 
     bool isNull() const { return shape_.IsNull(); }
 
@@ -66,17 +62,10 @@ public:
     // Get the indexed name for a stable name
     IndexedName getIndexedName(const MappedName& name) const;
 
-    // --- Tag generation ---
-
-    // Generate a unique tag for a new operation
-    static int64_t nextTag();
-
 private:
     TopoDS_Shape shape_;
     ElementMapPtr elementMap_;
     int64_t tag_;
-
-    static std::atomic<int64_t> tagCounter_;
 };
 
 // Convenience: list of named edges for fillet/chamfer input

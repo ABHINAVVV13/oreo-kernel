@@ -61,7 +61,9 @@ TEST(Robustness, FilletEmptyEdges) {
 TEST(Robustness, FilletZeroRadius) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
-    auto edges = oreo::getEdges(*ctx, box);
+    auto edgesR = oreo::getEdges(*ctx, box);
+    ASSERT_TRUE(edgesR.ok());
+    auto edges = edgesR.value();
     ASSERT_GT(edges.size(), 0u);
 
     std::vector<oreo::NamedEdge> filletEdges = {edges[0]};
@@ -73,7 +75,9 @@ TEST(Robustness, FilletZeroRadius) {
 TEST(Robustness, ChamferNegativeDistance) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
-    auto edges = oreo::getEdges(*ctx, box);
+    auto edgesR = oreo::getEdges(*ctx, box);
+    ASSERT_TRUE(edgesR.ok());
+    auto edges = edgesR.value();
     ASSERT_GT(edges.size(), 0u);
 
     std::vector<oreo::NamedEdge> chamferEdges = {edges[0]};
@@ -104,6 +108,7 @@ TEST(Robustness, AABBNull) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
     auto bbox = oreo::aabb(*ctx, null);
+    EXPECT_FALSE(bbox.ok());
     EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
@@ -111,6 +116,7 @@ TEST(Robustness, MassPropertiesNull) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
     auto props = oreo::massProperties(*ctx, null);
+    EXPECT_FALSE(props.ok());
     EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
@@ -118,8 +124,8 @@ TEST(Robustness, MeasureDistanceNull) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
     oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
-    double dist = oreo::measureDistance(*ctx, null, box);
-    EXPECT_LT(dist, 0.0);
+    auto distR = oreo::measureDistance(*ctx, null, box);
+    EXPECT_FALSE(distR.ok());
     EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
@@ -128,7 +134,7 @@ TEST(Robustness, MeasureDistanceNull) {
 TEST(Robustness, DeserializeEmpty) {
     auto ctx = oreo::KernelContext::create();
     auto result = oreo::deserialize(*ctx, nullptr, 0);
-    EXPECT_TRUE(result.isNull());
+    EXPECT_FALSE(result.ok());
 }
 
 TEST(Robustness, DeserializeGarbage) {
@@ -136,8 +142,8 @@ TEST(Robustness, DeserializeGarbage) {
     uint8_t garbage[] = {0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
                          0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00};
     auto result = oreo::deserialize(*ctx, garbage, sizeof(garbage));
-    // Should not crash -- either returns null or a shape
-    if (result.isNull()) {
+    // Should not crash -- either fails or returns a shape
+    if (!result.ok()) {
         SUCCEED();
     }
 }
@@ -147,13 +153,13 @@ TEST(Robustness, DeserializeGarbage) {
 TEST(Robustness, ImportStepNull) {
     auto ctx = oreo::KernelContext::create();
     auto result = oreo::importStep(*ctx, nullptr, 0);
-    EXPECT_TRUE(result.isNull());
+    EXPECT_FALSE(result.ok());
 }
 
 TEST(Robustness, ImportStepNonexistentFile) {
     auto ctx = oreo::KernelContext::create();
     auto result = oreo::importStepFile(*ctx, "this_file_does_not_exist.step");
-    EXPECT_TRUE(result.isNull());
+    EXPECT_FALSE(result.ok());
     EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
@@ -161,5 +167,5 @@ TEST(Robustness, ImportStepShapeLegacy) {
     auto ctx = oreo::KernelContext::create();
     // Legacy API should also handle null gracefully
     auto result = oreo::importStepShape(*ctx, nullptr, 0);
-    EXPECT_TRUE(result.isNull());
+    EXPECT_FALSE(result.ok());
 }

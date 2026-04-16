@@ -7,6 +7,8 @@
 #define OREO_QUERY_H
 
 #include "core/kernel_context.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 
 namespace oreo {
@@ -29,22 +31,22 @@ struct MassProperties {
 // ═══════════════════════════════════════════════════════════════
 
 // Axis-aligned bounding box
-BBox aabb(KernelContext& ctx, const NamedShape& shape);
+OperationResult<BBox> aabb(KernelContext& ctx, const NamedShape& shape);
 
 // Change footprint: AABB of before vs after
-BBox footprint(KernelContext& ctx, const NamedShape& before, const NamedShape& after);
+OperationResult<BBox> footprint(KernelContext& ctx, const NamedShape& before, const NamedShape& after);
 
 // Get all face sub-shapes with their element-map names
-std::vector<NamedFace> getFaces(KernelContext& ctx, const NamedShape& shape);
+OperationResult<std::vector<NamedFace>> getFaces(KernelContext& ctx, const NamedShape& shape);
 
 // Get all edge sub-shapes with their element-map names
-std::vector<NamedEdge> getEdges(KernelContext& ctx, const NamedShape& shape);
+OperationResult<std::vector<NamedEdge>> getEdges(KernelContext& ctx, const NamedShape& shape);
 
 // Minimum distance between two entities
-double measureDistance(KernelContext& ctx, const NamedShape& a, const NamedShape& b);
+OperationResult<double> measureDistance(KernelContext& ctx, const NamedShape& a, const NamedShape& b);
 
 // Mass properties (volume, surface area, center of mass, moments of inertia)
-MassProperties massProperties(KernelContext& ctx, const NamedShape& shape);
+OperationResult<MassProperties> massProperties(KernelContext& ctx, const NamedShape& shape);
 
 } // namespace oreo
 

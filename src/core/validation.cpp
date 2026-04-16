@@ -4,6 +4,7 @@
 // No silent defaults. No no-ops. If the input is bad, it's rejected.
 
 #include "validation.h"
+#include "units.h"
 #include "kernel_context.h"
 #include "diagnostic.h"
 #include "oreo_error.h"
@@ -152,6 +153,70 @@ bool requireValidDir(KernelContext& ctx, const gp_Dir& dir, const char* paramNam
         return false;
     }
     return true;
+}
+
+// ── Point validation ─────────────────────────────────────────
+
+bool requireFinitePoint(KernelContext& ctx, const gp_Pnt& point, const char* paramName) {
+    if (!isFinite(point.X()) || !isFinite(point.Y()) || !isFinite(point.Z())) {
+        ctx.diag.error(ErrorCode::INVALID_INPUT,
+                       std::string("Parameter '") + paramName
+                       + "' point contains NaN or Inf coordinates");
+        return false;
+    }
+    return true;
+}
+
+// ── Axis validation ──────────────────────────────────────────
+
+bool requireValidAxis(KernelContext& ctx, const gp_Ax1& axis, const char* paramName) {
+    std::string locName = std::string(paramName) + ".location";
+    std::string dirName = std::string(paramName) + ".direction";
+    if (!requireFinitePoint(ctx, axis.Location(), locName.c_str())) return false;
+    if (!requireValidDir(ctx, axis.Direction(), dirName.c_str())) return false;
+    return true;
+}
+
+bool requireValidAxis2(KernelContext& ctx, const gp_Ax2& axis, const char* paramName) {
+    std::string locName = std::string(paramName) + ".location";
+    std::string dirName = std::string(paramName) + ".direction";
+    std::string xDirName = std::string(paramName) + ".xDirection";
+    if (!requireFinitePoint(ctx, axis.Location(), locName.c_str())) return false;
+    if (!requireValidDir(ctx, axis.Direction(), dirName.c_str())) return false;
+    if (!requireValidDir(ctx, axis.XDirection(), xDirName.c_str())) return false;
+    return true;
+}
+
+// ── Unit enum validation ─────────────────────────────────────
+
+bool requireValidLengthUnit(KernelContext& ctx, LengthUnit unit, const char* paramName) {
+    switch (unit) {
+        case LengthUnit::Meter:
+        case LengthUnit::Millimeter:
+        case LengthUnit::Centimeter:
+        case LengthUnit::Micrometer:
+        case LengthUnit::Inch:
+        case LengthUnit::Foot:
+            return true;
+    }
+    ctx.diag.error(ErrorCode::INVALID_INPUT,
+                   std::string("Parameter '") + paramName
+                   + "' has unknown LengthUnit value ("
+                   + std::to_string(static_cast<int>(unit)) + ")");
+    return false;
+}
+
+bool requireValidAngleUnit(KernelContext& ctx, AngleUnit unit, const char* paramName) {
+    switch (unit) {
+        case AngleUnit::Radian:
+        case AngleUnit::Degree:
+            return true;
+    }
+    ctx.diag.error(ErrorCode::INVALID_INPUT,
+                   std::string("Parameter '") + paramName
+                   + "' has unknown AngleUnit value ("
+                   + std::to_string(static_cast<int>(unit)) + ")");
+    return false;
 }
 
 // ── String validation ────────────────────────────────────────

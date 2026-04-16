@@ -225,7 +225,10 @@ void refineNormalsFromSurface(const std::vector<gp_Pnt>& points,
             if (temp * vertexnormals[i] < 0.0) temp = -temp;
             vertexnormals[i] = temp;
         } catch (...) {
-            // Keep the triangle-averaged normal on failure
+            // Surface normal refinement failed — keep averaged normals.
+            // This is non-fatal; averaged normals from getPointNormals() are
+            // an acceptable fallback. UV projection can fail for degenerate
+            // surface patches or singular points without affecting mesh quality.
         }
     }
 }
@@ -572,7 +575,6 @@ MeshResult tessellate(KernelContext& ctx,
                       const NamedShape& shape,
                       const MeshParams& params)
 {
-    ctx.beginOperation();
     MeshResult result;
 
     if (shape.isNull()) {
@@ -634,7 +636,6 @@ MeshResult tessellateIncremental(KernelContext& ctx,
                                  MeshCache& cache,
                                  const MeshParams& params)
 {
-    ctx.beginOperation();
     MeshResult result;
 
     if (shape.isNull()) {

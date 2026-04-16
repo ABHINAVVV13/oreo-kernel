@@ -167,7 +167,11 @@ bool TopoShapeAdapter::findPlane(const TopoDS_Shape& face, gp_Pln& pln) {
                 return true;
             }
         }
-    } catch (...) {}
+    } catch (...) {
+        // findPlane is a best-effort geometry query used during element naming.
+        // Failure here is non-fatal — the caller treats a false return as
+        // "not planar" and skips parallel/coplanar face detection for this element.
+    }
     return false;
 }
 

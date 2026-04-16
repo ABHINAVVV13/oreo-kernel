@@ -1,0 +1,10 @@
+^C:\USERS\ABHINAVPUTTA\DESKTOP\PROJECTS\OREOCAD\OREO-KERNEL\CMAKELISTS.TXT
+setlocal
+C:\Users\AbhinavPutta\scoop\apps\mingw-winlibs-llvm\14.2.0-19.1.1-12.0.0-r2\bin\cmake.exe -SC:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel -BC:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc --check-stamp-file C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

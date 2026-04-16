@@ -76,6 +76,7 @@ void DiagnosticCollector::fatal(ErrorCode code, const std::string& msg) {
 
 void DiagnosticCollector::clear() {
     diagnostics_.clear();
+    ++generation_;  // Invalidate any live DiagnosticScope instances
 }
 
 bool DiagnosticCollector::hasErrors() const {

@@ -46,6 +46,10 @@
     #define OREO_GUARDED_BY(x)     __attribute__((guarded_by(x)))
     #define OREO_REQUIRES(x)       __attribute__((requires_capability(x)))
 #else
+    // On non-Clang compilers (MSVC, GCC), these annotations are intentionally
+    // no-ops. MSVC has no equivalent to Clang's thread safety analysis.
+    // For MSVC builds, rely on code review and the documented contracts above
+    // to enforce thread safety invariants.
     #define OREO_IMMUTABLE
     #define OREO_CONTEXT_BOUND
     #define OREO_NOT_THREAD_SAFE

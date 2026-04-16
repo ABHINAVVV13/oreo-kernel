@@ -18,9 +18,9 @@ GeomResult extrude(KernelContext& ctx, const NamedShape& base, const gp_Vec& dir
     if (!validation::requireNonZeroVec(ctx, direction, "direction")) return scope.makeFailure<NamedShape>();
 
     // Convert direction vector from document units to kernel units
-    gp_Vec kernelDir(ctx.units.toKernelLength(direction.X()),
-                     ctx.units.toKernelLength(direction.Y()),
-                     ctx.units.toKernelLength(direction.Z()));
+    gp_Vec kernelDir(ctx.units().toKernelLength(direction.X()),
+                     ctx.units().toKernelLength(direction.Y()),
+                     ctx.units().toKernelLength(direction.Z()));
 
     BRepPrimAPI_MakePrism maker(base.shape(), kernelDir);
     if (!maker.IsDone()) {
@@ -35,7 +35,7 @@ GeomResult extrude(KernelContext& ctx, const NamedShape& base, const gp_Vec& dir
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;

@@ -14,10 +14,13 @@ struct TolerancePolicy;
 // Attempt to fix an invalid shape using OCCT's ShapeFix.
 // Returns true if the shape was modified (fixed).
 // The shape is modified in-place.
-// Overload with explicit tolerance policy.
+//
+// Primary overload: pass the tolerance from the current KernelContext
+// via ctx.tolerance(). All geometry operations should use this form.
 bool fixShape(TopoDS_Shape& shape, const TolerancePolicy& tol);
 
 // Convenience overload using default tolerance.
+// Prefer the TolerancePolicy overload in production code paths.
 bool fixShape(TopoDS_Shape& shape);
 
 // Check if a shape is valid (BRepCheck_Analyzer).

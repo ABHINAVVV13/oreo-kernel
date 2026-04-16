@@ -2,6 +2,8 @@
 
 #include "oreo_query.h"
 #include "core/oreo_error.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 
 #include <Bnd_Box.hxx>
 #include <BRepBndLib.hxx>
@@ -13,38 +15,47 @@
 
 namespace oreo {
 
-BBox aabb(KernelContext& ctx, const NamedShape& shape) {
-    ctx.beginOperation();
+OperationResult<BBox> aabb(KernelContext& ctx, const NamedShape& shape) {
+    DiagnosticScope scope(ctx);
     BBox box = {0,0,0,0,0,0};
 
     if (shape.isNull()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot compute AABB of null shape");
-        return box;
+        return scope.makeFailure<BBox>();
     }
 
     Bnd_Box bbox;
     BRepBndLib::Add(shape.shape(), bbox);
     if (bbox.IsVoid()) {
         ctx.diag.error(ErrorCode::OCCT_FAILURE, "AABB computation returned void");
-        return box;
+        return scope.makeFailure<BBox>();
     }
 
     bbox.Get(box.xmin, box.ymin, box.zmin, box.xmax, box.ymax, box.zmax);
-    return box;
+    return scope.makeResult(box);
 }
 
-BBox footprint(KernelContext& ctx, const NamedShape& before, const NamedShape& after) {
-    BBox a = aabb(ctx, before);
-    BBox b = aabb(ctx, after);
-    return {
-        b.xmin - a.xmin, b.ymin - a.ymin, b.zmin - a.zmin,
-        b.xmax - a.xmax, b.ymax - a.ymax, b.zmax - a.zmax
+OperationResult<BBox> footprint(KernelContext& ctx, const NamedShape& before, const NamedShape& after) {
+    DiagnosticScope scope(ctx);
+    auto a = aabb(ctx, before);
+    auto b = aabb(ctx, after);
+    if (!a.ok() || !b.ok()) {
+        return scope.makeFailure<BBox>();
+    }
+    BBox result = {
+        b.value().xmin - a.value().xmin, b.value().ymin - a.value().ymin, b.value().zmin - a.value().zmin,
+        b.value().xmax - a.value().xmax, b.value().ymax - a.value().ymax, b.value().zmax - a.value().zmax
     };
+    return scope.makeResult(result);
 }
 
-std::vector<NamedFace> getFaces(KernelContext& ctx, const NamedShape& shape) {
+OperationResult<std::vector<NamedFace>> getFaces(KernelContext& ctx, const NamedShape& shape) {
+    DiagnosticScope scope(ctx);
     std::vector<NamedFace> result;
-    if (shape.isNull()) return result;
+    if (shape.isNull()) {
+        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot get faces of null shape");
+        return scope.makeFailure<std::vector<NamedFace>>();
+    }
 
     int i = 0;
     for (TopExp_Explorer ex(shape.shape(), TopAbs_FACE); ex.More(); ex.Next()) {
@@ -56,12 +67,16 @@ std::vector<NamedFace> getFaces(KernelContext& ctx, const NamedShape& shape) {
         }
         result.push_back({idx, ex.Current()});
     }
-    return result;
+    return scope.makeResult(std::move(result));
 }
 
-std::vector<NamedEdge> getEdges(KernelContext& ctx, const NamedShape& shape) {
+OperationResult<std::vector<NamedEdge>> getEdges(KernelContext& ctx, const NamedShape& shape) {
+    DiagnosticScope scope(ctx);
     std::vector<NamedEdge> result;
-    if (shape.isNull()) return result;
+    if (shape.isNull()) {
+        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot get edges of null shape");
+        return scope.makeFailure<std::vector<NamedEdge>>();
+    }
 
     int i = 0;
     for (TopExp_Explorer ex(shape.shape(), TopAbs_EDGE); ex.More(); ex.Next()) {
@@ -73,33 +88,33 @@ std::vector<NamedEdge> getEdges(KernelContext& ctx, const NamedShape& shape) {
         }
         result.push_back({idx, ex.Current()});
     }
-    return result;
+    return scope.makeResult(std::move(result));
 }
 
-double measureDistance(KernelContext& ctx, const NamedShape& a, const NamedShape& b) {
-    ctx.beginOperation();
+OperationResult<double> measureDistance(KernelContext& ctx, const NamedShape& a, const NamedShape& b) {
+    DiagnosticScope scope(ctx);
 
     if (a.isNull() || b.isNull()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot measure distance with null shape");
-        return -1.0;
+        return scope.makeFailure<double>();
     }
 
     BRepExtrema_DistShapeShape dist(a.shape(), b.shape());
     if (!dist.IsDone()) {
         ctx.diag.error(ErrorCode::OCCT_FAILURE, "Distance computation failed");
-        return -1.0;
+        return scope.makeFailure<double>();
     }
 
-    return dist.Value();
+    return scope.makeResult(dist.Value());
 }
 
-MassProperties massProperties(KernelContext& ctx, const NamedShape& shape) {
-    ctx.beginOperation();
+OperationResult<MassProperties> massProperties(KernelContext& ctx, const NamedShape& shape) {
+    DiagnosticScope scope(ctx);
     MassProperties props = {};
 
     if (shape.isNull()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot compute mass properties of null shape");
-        return props;
+        return scope.makeFailure<MassProperties>();
     }
 
     GProp_GProps volProps;
@@ -122,7 +137,7 @@ MassProperties massProperties(KernelContext& ctx, const NamedShape& shape) {
     BRepGProp::SurfaceProperties(shape.shape(), surfProps);
     props.surfaceArea = surfProps.Mass();
 
-    return props;
+    return scope.makeResult(props);
 }
 
 } // namespace oreo

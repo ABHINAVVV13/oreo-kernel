@@ -14,6 +14,8 @@
 #include "shape_fix.h"
 #include "core/occt_scope_guard.h"
 #include "core/oreo_error.h"
+#include "core/operation_result.h"
+#include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 #include "naming/element_map.h"
 
@@ -284,12 +286,12 @@ bool exportBasicFallback(const std::vector<NamedShape>& shapes, const std::strin
 
 // ── Import from memory buffer ────────────────────────────────────────────────
 
-StepImportResult importStep(KernelContext& ctx, const uint8_t* data, size_t len) {
-    ctx.beginOperation();
+OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* data, size_t len) {
+    DiagnosticScope scope(ctx);
 
     if (!data || len == 0) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Empty STEP data buffer");
-        return {};
+        return scope.makeFailure<StepImportResult>();
     }
 
     // OCCT's STEP readers require a file path.
@@ -300,7 +302,7 @@ StepImportResult importStep(KernelContext& ctx, const uint8_t* data, size_t len)
         if (!ofs) {
             ctx.diag.error(ErrorCode::STEP_IMPORT_FAILED,
                          "Failed to create temp file for STEP import");
-            return {};
+            return scope.makeFailure<StepImportResult>();
         }
         ofs.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(len));
     }
@@ -310,12 +312,12 @@ StepImportResult importStep(KernelContext& ctx, const uint8_t* data, size_t len)
 
 // ── Import from file path ────────────────────────────────────────────────────
 
-StepImportResult importStepFile(KernelContext& ctx, const std::string& path) {
-    ctx.beginOperation();
+OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::string& path) {
+    DiagnosticScope scope(ctx);
 
     if (path.empty()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Empty STEP file path");
-        return {};
+        return scope.makeFailure<StepImportResult>();
     }
 
     // Scoped guard for OCCT global settings during import
@@ -336,7 +338,7 @@ StepImportResult importStepFile(KernelContext& ctx, const std::string& path) {
             ctx.diag.error(ErrorCode::STEP_IMPORT_FAILED,
                          "STEP import failed (both XCAF and basic readers): " + path,
                          {}, "Check file exists and is a valid STEP/AP214 file");
-            return {};
+            return scope.makeFailure<StepImportResult>();
         }
         // Warn that metadata was lost
         ctx.diag.warning(ErrorCode::SHAPE_INVALID,
@@ -348,7 +350,7 @@ StepImportResult importStepFile(KernelContext& ctx, const std::string& path) {
     if (shape.IsNull()) {
         ctx.diag.error(ErrorCode::STEP_IMPORT_FAILED,
                      "STEP import produced null shape from: " + path);
-        return {};
+        return scope.makeFailure<StepImportResult>();
     }
 
     // Run ShapeFix pipeline on imported geometry
@@ -360,68 +362,77 @@ StepImportResult importStepFile(KernelContext& ctx, const std::string& path) {
     auto map = initImportedElementMap(shape);
     result.shape = NamedShape(shape, map, tag);
     result.metadata = meta;
-    return result;
+    return scope.makeResult(std::move(result));
 }
 
 // ── Legacy overloads (return NamedShape only) ────────────────────────────────
 
-NamedShape importStepShape(KernelContext& ctx, const uint8_t* data, size_t len) {
-    return importStep(ctx, data, len).shape;
+OperationResult<NamedShape> importStepShape(KernelContext& ctx, const uint8_t* data, size_t len) {
+    auto result = importStep(ctx, data, len);
+    if (!result.ok()) {
+        return OperationResult<NamedShape>::failure(result.diagnostics());
+    }
+    return OperationResult<NamedShape>::success(std::move(result).value().shape, result.diagnostics());
 }
 
-NamedShape importStepShapeFile(KernelContext& ctx, const std::string& path) {
-    return importStepFile(ctx, path).shape;
+OperationResult<NamedShape> importStepShapeFile(KernelContext& ctx, const std::string& path) {
+    auto result = importStepFile(ctx, path);
+    if (!result.ok()) {
+        return OperationResult<NamedShape>::failure(result.diagnostics());
+    }
+    return OperationResult<NamedShape>::success(std::move(result).value().shape, result.diagnostics());
 }
 
 // ── Export to memory buffer ──────────────────────────────────────────────────
 
-std::vector<uint8_t> exportStep(KernelContext& ctx, const std::vector<NamedShape>& shapes,
+OperationResult<std::vector<uint8_t>> exportStep(KernelContext& ctx, const std::vector<NamedShape>& shapes,
                                 const std::vector<StepShapeMetadata>& metadata) {
-    ctx.beginOperation();
+    DiagnosticScope scope(ctx);
 
     if (shapes.empty()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "No shapes to export");
-        return {};
+        return scope.makeFailure<std::vector<uint8_t>>();
     }
 
     TempFile tmp("oreo_export", ".step");
-    if (!exportStepFile(ctx, shapes, tmp.path, metadata)) {
-        return {};  // Error already set
+    auto fileResult = exportStepFile(ctx, shapes, tmp.path, metadata);
+    if (!fileResult.ok()) {
+        return scope.makeFailure<std::vector<uint8_t>>();  // Error already set
     }
 
     // Read the file back into memory
     std::ifstream ifs(tmp.path, std::ios::binary | std::ios::ate);
     if (!ifs) {
         ctx.diag.error(ErrorCode::STEP_EXPORT_FAILED, "Failed to read back exported STEP file");
-        return {};
+        return scope.makeFailure<std::vector<uint8_t>>();
     }
 
     auto fileSize = ifs.tellg();
     if (fileSize <= 0) {
         ctx.diag.error(ErrorCode::STEP_EXPORT_FAILED, "Exported STEP file is empty");
-        return {};
+        return scope.makeFailure<std::vector<uint8_t>>();
     }
 
     ifs.seekg(0);
     std::vector<uint8_t> buf(static_cast<size_t>(fileSize));
     ifs.read(reinterpret_cast<char*>(buf.data()), fileSize);
-    return buf;
+    return scope.makeResult(std::move(buf));
 }
 
 // ── Export to file path ──────────────────────────────────────────────────────
 
-bool exportStepFile(KernelContext& ctx, const std::vector<NamedShape>& shapes,
+OperationResult<bool> exportStepFile(KernelContext& ctx, const std::vector<NamedShape>& shapes,
                     const std::string& path,
                     const std::vector<StepShapeMetadata>& metadata) {
-    ctx.beginOperation();
+    DiagnosticScope scope(ctx);
 
     if (shapes.empty()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "No shapes to export");
-        return false;
+        return scope.makeFailure<bool>();
     }
     if (path.empty()) {
         ctx.diag.error(ErrorCode::INVALID_INPUT, "Empty export file path");
-        return false;
+        return scope.makeFailure<bool>();
     }
 
     // Scoped guard: locks OCCT global mutex, saves/restores Interface_Static settings
@@ -433,7 +444,7 @@ bool exportStepFile(KernelContext& ctx, const std::vector<NamedShape>& shapes,
     // ── Attempt 1: XCAF writer (preserves colors, names, layers) ────
     bool xcafOk = exportWithXcaf(shapes, metadata, path);
 
-    if (xcafOk) return true;
+    if (xcafOk) return scope.makeResult(true);
 
     // ── Attempt 2: Basic writer fallback ────────────────────────────
     bool basicOk = exportBasicFallback(shapes, path);
@@ -442,14 +453,14 @@ bool exportStepFile(KernelContext& ctx, const std::vector<NamedShape>& shapes,
                      "STEP export failed (both XCAF and basic writers): " + path,
                      {}, "Shape may be invalid — try running ShapeFix first. "
                          "Check write permissions for the target path.");
-        return false;
+        return scope.makeFailure<bool>();
     }
 
     // Warn that metadata was lost
     ctx.diag.warning(ErrorCode::SHAPE_INVALID,
                  "STEP export fell back to basic writer — colors, names, and layers not written",
                  "File geometry is intact but XDE metadata could not be serialized");
-    return true;
+    return scope.makeResult(true);
 }
 
 } // namespace oreo

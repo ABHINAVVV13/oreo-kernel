@@ -48,7 +48,10 @@ constexpr double lengthToMM(double value, LengthUnit from) {
         case LengthUnit::Inch:       return value * 25.4;
         case LengthUnit::Foot:       return value * 304.8;
     }
-    return value;
+    // Unreachable: all enum values handled above.
+    // If a new enum value is added, this fail-open return
+    // will be caught by -Wswitch compiler warnings.
+    return value;  // NOLINT: fail-open safeguard
 }
 
 // Millimeters → target unit
@@ -61,7 +64,10 @@ constexpr double mmToLength(double valueMM, LengthUnit to) {
         case LengthUnit::Inch:       return valueMM / 25.4;
         case LengthUnit::Foot:       return valueMM / 304.8;
     }
-    return valueMM;
+    // Unreachable: all enum values handled above.
+    // If a new enum value is added, this fail-open return
+    // will be caught by -Wswitch compiler warnings.
+    return valueMM;  // NOLINT: fail-open safeguard
 }
 
 // Angle → radians (OCCT internal unit)
@@ -70,7 +76,10 @@ constexpr double angleToRad(double value, AngleUnit from) {
         case AngleUnit::Radian: return value;
         case AngleUnit::Degree: return value * 3.14159265358979323846 / 180.0;
     }
-    return value;
+    // Unreachable: all enum values handled above.
+    // If a new enum value is added, this fail-open return
+    // will be caught by -Wswitch compiler warnings.
+    return value;  // NOLINT: fail-open safeguard
 }
 
 // Radians → target unit
@@ -79,7 +88,10 @@ constexpr double radToAngle(double valueRad, AngleUnit to) {
         case AngleUnit::Radian: return valueRad;
         case AngleUnit::Degree: return valueRad * 180.0 / 3.14159265358979323846;
     }
-    return valueRad;
+    // Unreachable: all enum values handled above.
+    // If a new enum value is added, this fail-open return
+    // will be caught by -Wswitch compiler warnings.
+    return valueRad;  // NOLINT: fail-open safeguard
 }
 
 // Length-to-length conversion
@@ -147,6 +159,11 @@ struct OREO_IMMUTABLE UnitSystem {
     double fromStepLength(double stepValue, LengthUnit stepUnit) const {
         return unit_convert::convertLength(stepValue, stepUnit, kernelLength);
     }
+
+    // Checked conversion — rejects NaN/Inf (throws std::invalid_argument).
+    // Use these in subsystems that don't validate via requirePositive first.
+    double toKernelLengthChecked(double docValue) const;
+    double toKernelAngleChecked(double docValue) const;
 };
 
 } // namespace oreo

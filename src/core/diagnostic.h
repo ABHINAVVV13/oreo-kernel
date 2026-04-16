@@ -53,7 +53,7 @@ enum class Severity {
 
 struct Diagnostic {
     Severity severity = Severity::Error;
-    ErrorCode code;                     // Specific error code
+    ErrorCode code = ErrorCode::OK;     // Specific error code
     std::string message;                // Human-readable description
     std::string featureId;              // Which feature produced this (empty if not in feature context)
     std::string elementRef;             // Which element reference failed (empty if not applicable)
@@ -93,8 +93,13 @@ public:
                const std::string& entityRef, const std::string& suggestion);
     void fatal(ErrorCode code, const std::string& msg);
 
-    // Clear all diagnostics (call before a new operation)
+    // Clear all diagnostics. Increments the generation counter so that
+    // any live DiagnosticScope detects invalidation.
     void clear();
+
+    // Generation counter — incremented on every clear(). Used by
+    // DiagnosticScope to detect if its startIndex_ was invalidated.
+    int scopeGeneration() const { return generation_; }
 
     // ── Query ────────────────────────────────────────────
 
@@ -122,6 +127,7 @@ public:
 
 private:
     std::vector<Diagnostic> diagnostics_;
+    int generation_ = 0;  // Incremented on clear(); see scopeGeneration()
 };
 
 } // namespace oreo

@@ -44,7 +44,9 @@ double computeAutoFuzzy(KernelContext& ctx, const TopoDS_Shape& a, const TopoDS_
     BRepBndLib::Add(a, bounds);
     BRepBndLib::Add(b, bounds);
     if (bounds.IsVoid()) return 0.0;
-    return ctx.tolerance.booleanFuzzyFactor * std::sqrt(bounds.SquareExtent()) * Precision::Confusion();
+    double extent = bounds.SquareExtent();
+    if (!std::isfinite(extent) || extent < 0.0) return 0.0;
+    return ctx.tolerance().booleanFuzzyFactor * std::sqrt(extent) * Precision::Confusion();
 }
 
 // Expand a compound shape into its constituent solids/shells.
@@ -102,8 +104,10 @@ GeomResult executeBooleanWithRetry(
     TopoDS_Shape shapeB = b.shape();
 
     // -- Attempt 1: Direct boolean ----------------------------------------
+    // Returns the entire BRepAlgoAPI_BooleanOperation so we can reuse its
+    // history for element mapping without a costly re-execution.
     auto tryBoolean = [&](const TopoDS_Shape& sa, const TopoDS_Shape& sb,
-                          double fuzzy) -> TopoDS_Shape {
+                          double fuzzy) -> std::unique_ptr<BRepAlgoAPI_BooleanOperation> {
         std::unique_ptr<BRepAlgoAPI_BooleanOperation> mkOp;
         switch (op) {
             case BoolOp::Fuse:   mkOp = std::make_unique<BRepAlgoAPI_Fuse>(sa, sb); break;
@@ -122,31 +126,31 @@ GeomResult executeBooleanWithRetry(
         mkOp->Build();
 
         if (mkOp->IsDone() && !mkOp->HasErrors()) {
-            return mkOp->Shape();
+            return mkOp;
         }
-        return {};
+        return nullptr;
     };
 
     // Attempt 1: with user-specified tolerance
     double fuzzy = tolerance;
-    TopoDS_Shape result = tryBoolean(shapeA, shapeB, fuzzy);
+    std::unique_ptr<BRepAlgoAPI_BooleanOperation> successfulOp = tryBoolean(shapeA, shapeB, fuzzy);
 
     // -- Attempt 2: ShapeFix inputs and retry -----------------------------
-    if (result.IsNull()) {
+    if (!successfulOp) {
         TopoDS_Shape fixedA = shapeA;
         TopoDS_Shape fixedB = shapeB;
         bool fixedSomething = false;
 
         if (!isShapeValid(fixedA)) {
-            fixedSomething |= fixShape(fixedA);
+            fixedSomething |= fixShape(fixedA, ctx.tolerance());
         }
         if (!isShapeValid(fixedB)) {
-            fixedSomething |= fixShape(fixedB);
+            fixedSomething |= fixShape(fixedB, ctx.tolerance());
         }
 
         if (fixedSomething) {
-            result = tryBoolean(fixedA, fixedB, fuzzy);
-            if (!result.IsNull()) {
+            successfulOp = tryBoolean(fixedA, fixedB, fuzzy);
+            if (successfulOp) {
                 shapeA = fixedA;
                 shapeB = fixedB;
             }
@@ -154,17 +158,17 @@ GeomResult executeBooleanWithRetry(
     }
 
     // -- Attempt 3: Increase tolerance (2x, then 10x) --------------------
-    if (result.IsNull()) {
+    if (!successfulOp) {
         double autoFuzzy = computeAutoFuzzy(ctx, shapeA, shapeB);
         for (double multiplier : {2.0, 10.0, 100.0}) {
             double escalatedFuzzy = std::max(autoFuzzy * multiplier, 1e-5);
-            result = tryBoolean(shapeA, shapeB, escalatedFuzzy);
-            if (!result.IsNull()) break;
+            successfulOp = tryBoolean(shapeA, shapeB, escalatedFuzzy);
+            if (successfulOp) break;
         }
     }
 
     // -- All attempts failed ----------------------------------------------
-    if (result.IsNull()) {
+    if (!successfulOp) {
         ctx.diag.error(ErrorCode::BOOLEAN_FAILED,
                        std::string(opName) + " failed after multiple retry attempts",
                        "Geometry may be too complex or near-degenerate for boolean. "
@@ -172,9 +176,11 @@ GeomResult executeBooleanWithRetry(
         return scope.makeFailure<NamedShape>();
     }
 
+    TopoDS_Shape result = successfulOp->Shape();
+
     // -- Validate and optionally fix result --------------------------------
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         // If still invalid after fix, warn but still return the result
         if (!isShapeValid(result)) {
             ctx.diag.warning(ErrorCode::SHAPE_INVALID,
@@ -184,39 +190,11 @@ GeomResult executeBooleanWithRetry(
     }
 
     // -- Build element map ------------------------------------------------
-    // Re-execute the boolean to get the mapper (we need the BRepAlgoAPI object for history)
-    std::unique_ptr<BRepAlgoAPI_BooleanOperation> finalOp;
-    switch (op) {
-        case BoolOp::Fuse:   finalOp = std::make_unique<BRepAlgoAPI_Fuse>(shapeA, shapeB); break;
-        case BoolOp::Cut:    finalOp = std::make_unique<BRepAlgoAPI_Cut>(shapeA, shapeB); break;
-        case BoolOp::Common: finalOp = std::make_unique<BRepAlgoAPI_Common>(shapeA, shapeB); break;
-    }
-    {
-        double autoFuzzy = computeAutoFuzzy(ctx, shapeA, shapeB);
-        if (tolerance > 0.0) finalOp->SetFuzzyValue(tolerance);
-        else if (autoFuzzy > 0.0) finalOp->SetFuzzyValue(autoFuzzy);
-    }
-    finalOp->SetRunParallel(Standard_True);
-    finalOp->Build();
-
+    // Reuse the successful operation object directly — it already has the
+    // modification/generation history needed for element mapping.
     auto tag = ctx.tags.nextTag();
-    if (finalOp->IsDone() && !finalOp->HasErrors()) {
-        MakerMapper mapper(*finalOp);
-        auto mapped = mapShapeElements(ctx, finalOp->Shape(), mapper, {a, b}, tag, opName);
-        return scope.makeResult(mapped);
-    }
-
-    // Fallback: use the result from retry but with no element map history.
-    // This means the final re-execution for element mapping failed, so we lose
-    // topological naming history. Warn the caller so they know face/edge
-    // identity tracking is degraded for this operation.
-    ctx.diag.warning(ErrorCode::SHAPE_INVALID,
-                     std::string(opName) + " element mapping unavailable — "
-                     "re-execution for history tracking failed",
-                     "Result geometry is valid but topological naming history is lost. "
-                     "Downstream features referencing faces/edges of this result may break on regen.");
-    NullMapper nullMapper;
-    auto mapped = mapShapeElements(ctx, result, nullMapper, {a, b}, tag, opName);
+    MakerMapper mapper(*successfulOp);
+    auto mapped = mapShapeElements(ctx, result, mapper, {a, b}, tag, opName);
     return scope.makeResult(mapped);
 }
 

@@ -1,9 +1,8 @@
 // diagnostic_scope.h — Composable diagnostic scoping.
 //
-// Problem: beginOperation() clears all diagnostics. If operation A calls
-// operation B internally, B's beginOperation() wipes A's diagnostics.
-//
-// Solution: DiagnosticScope captures diagnostics within a scope.
+// Every kernel operation opens a DiagnosticScope. The scope captures
+// diagnostics added during that operation, and can compose them into
+// an OperationResult or propagate to the parent context.
 // When the scope ends, its diagnostics can be:
 //   - Extracted into an OperationResult
 //   - Merged back into the parent context
@@ -74,7 +73,9 @@ public:
 
 private:
     KernelContext& ctx_;
-    int startIndex_;  // Diagnostic count when scope was entered
+    int startIndex_;   // Diagnostic count when scope was entered
+    int generation_;   // DiagnosticCollector generation at scope entry;
+                       // if it changes, clear() was called and startIndex_ is invalid
 };
 
 } // namespace oreo

@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\AbhinavPutta\Desktop\projects\oreoCAD\oreo-kernel\build_msvc\CMakeFiles\7f34598e754af6d20872bb672ae5776b\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{8419A079-47EA-3436-AE23-58D40F364CFB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

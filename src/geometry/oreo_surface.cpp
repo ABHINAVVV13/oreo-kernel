@@ -40,10 +40,10 @@ GeomResult offset(KernelContext& ctx, const NamedShape& solid, double distance) 
     }
 
     // Unit conversion: distance is a length
-    const double kDistance = ctx.units.toKernelLength(distance);
+    const double kDistance = ctx.units().toKernelLength(distance);
 
     BRepOffsetAPI_MakeOffsetShape maker;
-    maker.PerformByJoin(solid.shape(), kDistance, ctx.tolerance.linearPrecision);
+    maker.PerformByJoin(solid.shape(), kDistance, ctx.tolerance().linearPrecision);
 
     if (!maker.IsDone()) {
         ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_MakeOffsetShape failed",
@@ -58,7 +58,7 @@ GeomResult offset(KernelContext& ctx, const NamedShape& solid, double distance) 
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -89,12 +89,12 @@ GeomResult thicken(KernelContext& ctx, const NamedShape& shellOrFace, double thi
     }
 
     // Unit conversion: thickness is a length
-    const double kThickness = ctx.units.toKernelLength(thickness);
+    const double kThickness = ctx.units().toKernelLength(thickness);
 
     BRepOffsetAPI_MakeThickSolid maker;
     TopTools_ListOfShape emptyFaceList;
 
-    maker.MakeThickSolidByJoin(shellOrFace.shape(), emptyFaceList, kThickness, ctx.tolerance.linearPrecision);
+    maker.MakeThickSolidByJoin(shellOrFace.shape(), emptyFaceList, kThickness, ctx.tolerance().linearPrecision);
     maker.Build();
 
     if (!maker.IsDone()) {
@@ -110,7 +110,7 @@ GeomResult thicken(KernelContext& ctx, const NamedShape& shellOrFace, double thi
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -181,8 +181,8 @@ GeomResult filletVariable(KernelContext& ctx,
     if (!validation::requirePositive(ctx, endRadius, "endRadius")) return scope.makeFailure<NamedShape>();
 
     // Unit conversion: radii are lengths
-    const double kStartRadius = ctx.units.toKernelLength(startRadius);
-    const double kEndRadius   = ctx.units.toKernelLength(endRadius);
+    const double kStartRadius = ctx.units().toKernelLength(startRadius);
+    const double kEndRadius   = ctx.units().toKernelLength(endRadius);
 
     BRepFilletAPI_MakeFillet maker(solid.shape());
     TopoDS_Edge e = TopoDS::Edge(edge.edge);
@@ -202,7 +202,7 @@ GeomResult filletVariable(KernelContext& ctx,
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;
@@ -233,7 +233,7 @@ GeomResult wireOffset(KernelContext& ctx, const NamedShape& wire, double distanc
     }
 
     // Unit conversion: distance is a length
-    const double kDistance = ctx.units.toKernelLength(distance);
+    const double kDistance = ctx.units().toKernelLength(distance);
 
     BRepOffsetAPI_MakeOffset maker(TopoDS::Wire(wire.shape()));
     maker.Perform(kDistance);
@@ -305,7 +305,7 @@ GeomResult wireFillet(KernelContext& ctx,
     if (!validation::requirePositive(ctx, radius, "radius")) return scope.makeFailure<NamedShape>();
 
     // Unit conversion: radius is a length
-    const double kRadius = ctx.units.toKernelLength(radius);
+    const double kRadius = ctx.units().toKernelLength(radius);
 
     // BRepFilletAPI_MakeFillet2d works on faces
     TopoDS_Face face;

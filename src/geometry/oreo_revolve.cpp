@@ -15,9 +15,10 @@ GeomResult revolve(KernelContext& ctx, const NamedShape& base, const gp_Ax1& axi
     DiagnosticScope scope(ctx);
 
     if (!validation::requireNonNull(ctx, base, "base")) return scope.makeFailure<NamedShape>();
+    if (!validation::requireValidAxis(ctx, axis, "axis")) return scope.makeFailure<NamedShape>();
 
     // Convert angle from document units to kernel units (radians)
-    double kernelAngle = ctx.units.toKernelAngle(angleRad);
+    double kernelAngle = ctx.units().toKernelAngle(angleRad);
     if (!validation::requireInRange(ctx, kernelAngle, 0.0 + 1e-12, 2.0 * M_PI + 1e-6, "angle")) return scope.makeFailure<NamedShape>();
 
     BRepPrimAPI_MakeRevol maker(base.shape(), axis, kernelAngle);
@@ -33,7 +34,7 @@ GeomResult revolve(KernelContext& ctx, const NamedShape& base, const gp_Ax1& axi
     }
 
     if (!isShapeValid(result)) {
-        fixShape(result);
+        fixShape(result, ctx.tolerance());
         if (!isShapeValid(result)) {
             Diagnostic d;
             d.severity = Severity::Warning;

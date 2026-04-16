@@ -4,6 +4,7 @@
 
 #include "schema.h"
 
+#include <set>
 #include <stdexcept>
 
 namespace oreo {
@@ -16,23 +17,38 @@ SchemaVersion SchemaVersion::parse(const std::string& s) {
     SchemaVersion v = {0, 0, 0};
     int pos = 0;
     int field = 0;
-    bool parsedAny = false;
 
     for (size_t i = 0; i <= s.size(); ++i) {
         if (i == s.size() || s[i] == '.') {
-            if (pos < (int)i) {
-                int val = std::stoi(s.substr(pos, i - pos));
-                if (field == 0) v.major = val;
-                else if (field == 1) v.minor = val;
-                else if (field == 2) v.patch = val;
-                parsedAny = true;
+            if (pos >= (int)i) {
+                throw std::invalid_argument(
+                    "Malformed schema version (empty segment): '" + s + "'");
+            }
+            std::string segment = s.substr(pos, i - pos);
+            // Validate that segment contains only digits
+            for (char c : segment) {
+                if (c < '0' || c > '9') {
+                    throw std::invalid_argument(
+                        "Malformed schema version (non-digit character): '" + s + "'");
+                }
+            }
+            int val = std::stoi(segment);
+            if (field == 0) v.major = val;
+            else if (field == 1) v.minor = val;
+            else if (field == 2) v.patch = val;
+            else {
+                throw std::invalid_argument(
+                    "Malformed schema version (too many segments): '" + s + "'");
             }
             pos = static_cast<int>(i) + 1;
             ++field;
         }
     }
-    if (!parsedAny) {
-        throw std::invalid_argument("Cannot parse schema version: '" + s + "'");
+
+    // Require exactly 3 segments: major.minor.patch
+    if (field != 3) {
+        throw std::invalid_argument(
+            "Malformed schema version (expected major.minor.patch): '" + s + "'");
     }
     return v;
 }
@@ -84,12 +100,21 @@ nlohmann::json SchemaRegistry::migrate(const std::string& type,
             + " for type '" + type + "' (current: " + current.toString() + ")");
     }
 
-    // Find migration chain
+    // Find migration chain (with cycle detection)
     nlohmann::json result = data;
     SchemaVersion ver = header.version;
+    std::set<std::string> visited;
 
     int maxSteps = 100;
     while (ver != current && maxSteps-- > 0) {
+        auto key = ver.toString();
+        if (visited.count(key)) {
+            throw std::runtime_error(
+                "Cyclic schema migration detected at version " + key
+                + " for type '" + type + "'");
+        }
+        visited.insert(key);
+
         bool found = false;
         for (auto& m : migrations_) {
             if (m.type == type && m.from == ver) {
@@ -117,10 +142,15 @@ bool SchemaRegistry::canLoad(const std::string& type, SchemaVersion version) con
     if (it == currentVersions_.end()) return false;
     if (it->second.canLoad(version)) return true;
 
-    // Check migration path
+    // Check migration path (with cycle detection)
     SchemaVersion ver = version;
+    std::set<std::string> visited;
     int maxSteps = 100;
     while (ver != it->second && maxSteps-- > 0) {
+        auto key = ver.toString();
+        if (visited.count(key)) return false;  // cycle — no valid path
+        visited.insert(key);
+
         bool found = false;
         for (auto& m : migrations_) {
             if (m.type == type && m.from == ver) {
