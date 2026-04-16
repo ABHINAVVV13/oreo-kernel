@@ -1,8 +1,9 @@
 // test_feature_tree.cpp — Comprehensive feature tree tests.
-// Validates the core of parametric CAD: build → replay → modify → re-replay.
+// Validates the core of parametric CAD: build -> replay -> modify -> re-replay.
 
 #include <gtest/gtest.h>
 
+#include "core/kernel_context.h"
 #include "feature/feature.h"
 #include "feature/feature_tree.h"
 #include "geometry/oreo_geometry.h"
@@ -29,7 +30,7 @@ oreo::NamedShape makeRectFace(double w, double h) {
 
 } // anonymous namespace
 
-// ── Basic tree building and replay ───────────────────────────
+// -- Basic tree building and replay -----------------------------------
 
 TEST(FeatureTree, EmptyTreeReplay) {
     oreo::FeatureTree tree;
@@ -52,34 +53,37 @@ TEST(FeatureTree, SingleExtrudeReplay) {
     tree.addFeature(ext);
 
     // We need to seed the tree with the initial shape.
-    // The tree's replay starts from nothing — so the first feature needs
+    // The tree's replay starts from nothing -- so the first feature needs
     // to operate on an existing shape. For now, we test with MakeBox primitive.
 }
 
 TEST(FeatureTree, BoxThenFilletReplay) {
+    auto ctx = oreo::KernelContext::create();
     oreo::FeatureTree tree;
 
     // Feature 1: Create a box (using the geometry operation directly,
     // then check that the feature tree can reference its edges)
-    auto box = oreo::makeBox(20, 20, 20);
-    ASSERT_FALSE(box.isNull());
+    auto boxR = oreo::makeBox(*ctx, 20, 20, 20);
+    ASSERT_TRUE(boxR.ok());
+    auto box = boxR.value();
     EXPECT_EQ(box.countSubShapes(TopAbs_FACE), 6);
     EXPECT_EQ(box.countSubShapes(TopAbs_EDGE), 12);
 
     // Get edges for fillet
-    auto edges = oreo::getEdges(box);
+    auto edges = oreo::getEdges(*ctx, box);
     ASSERT_GE(edges.size(), 1u);
 
     // Fillet the first edge
     std::vector<oreo::NamedEdge> filletEdges = {edges[0]};
-    auto filleted = oreo::fillet(box, filletEdges, 2.0);
-    ASSERT_FALSE(filleted.isNull());
+    auto filletedR = oreo::fillet(*ctx, box, filletEdges, 2.0);
+    ASSERT_TRUE(filletedR.ok());
+    auto filleted = filletedR.value();
 
     // Filleted box should have more faces
     EXPECT_GT(filleted.countSubShapes(TopAbs_FACE), 6);
 }
 
-// ── Feature tree with parameter changes ──────────────────────
+// -- Feature tree with parameter changes ------------------------------
 
 TEST(FeatureTree, ParameterChangeTriggersReplay) {
     oreo::FeatureTree tree;
@@ -99,7 +103,7 @@ TEST(FeatureTree, ParameterChangeTriggersReplay) {
     EXPECT_NEAR(dir.Z(), 50.0, 0.01);
 }
 
-// ── Feature suppression ──────────────────────────────────────
+// -- Feature suppression ----------------------------------------------
 
 TEST(FeatureTree, SuppressFeature) {
     oreo::FeatureTree tree;
@@ -120,7 +124,7 @@ TEST(FeatureTree, SuppressFeature) {
     EXPECT_FALSE(feature->suppressed);
 }
 
-// ── Feature removal ──────────────────────────────────────────
+// -- Feature removal --------------------------------------------------
 
 TEST(FeatureTree, RemoveFeature) {
     oreo::FeatureTree tree;
@@ -139,7 +143,7 @@ TEST(FeatureTree, RemoveFeature) {
     EXPECT_FALSE(tree.removeFeature("nonexistent"));
 }
 
-// ── Serialization round-trip ─────────────────────────────────
+// -- Serialization round-trip -----------------------------------------
 
 TEST(FeatureTree, SerializeRoundTrip) {
     oreo::FeatureTree tree;
@@ -171,7 +175,7 @@ TEST(FeatureTree, SerializeRoundTrip) {
     EXPECT_NE(json.find("Edge3"), std::string::npos);
 }
 
-// ── Broken feature detection ─────────────────────────────────
+// -- Broken feature detection -----------------------------------------
 
 TEST(FeatureTree, BrokenFeatureDetection) {
     oreo::FeatureTree tree;
@@ -196,83 +200,102 @@ TEST(FeatureTree, BrokenFeatureDetection) {
     EXPECT_EQ(broken[0]->status, oreo::FeatureStatus::BrokenReference);
 }
 
-// ── Primitives integration ───────────────────────────────────
+// -- Primitives integration -------------------------------------------
 
 TEST(FeatureTree, PrimitivesWork) {
+    auto ctx = oreo::KernelContext::create();
+
     // Test all new primitives
-    auto cyl = oreo::makeCylinder(5.0, 20.0);
-    ASSERT_FALSE(cyl.isNull());
+    auto cylR = oreo::makeCylinder(*ctx, 5.0, 20.0);
+    ASSERT_TRUE(cylR.ok());
+    auto cyl = cylR.value();
     EXPECT_EQ(cyl.countSubShapes(TopAbs_FACE), 3);  // top + bottom + lateral
 
-    auto sphere = oreo::makeSphere(10.0);
-    ASSERT_FALSE(sphere.isNull());
+    auto sphereR = oreo::makeSphere(*ctx, 10.0);
+    ASSERT_TRUE(sphereR.ok());
+    auto sphere = sphereR.value();
     EXPECT_GT(sphere.countSubShapes(TopAbs_FACE), 0);
 
-    auto cone = oreo::makeCone(5.0, 2.0, 10.0);
-    ASSERT_FALSE(cone.isNull());
+    auto coneR = oreo::makeCone(*ctx, 5.0, 2.0, 10.0);
+    ASSERT_TRUE(coneR.ok());
+    auto cone = coneR.value();
 
-    auto torus = oreo::makeTorus(10.0, 3.0);
-    ASSERT_FALSE(torus.isNull());
+    auto torusR = oreo::makeTorus(*ctx, 10.0, 3.0);
+    ASSERT_TRUE(torusR.ok());
+    auto torus = torusR.value();
 
-    auto wedge = oreo::makeWedge(10, 10, 10, 5);
-    ASSERT_FALSE(wedge.isNull());
+    auto wedgeR = oreo::makeWedge(*ctx, 10, 10, 10, 5);
+    ASSERT_TRUE(wedgeR.ok());
+    auto wedge = wedgeR.value();
 }
 
-// ── Manufacturing operations ─────────────────────────────────
+// -- Manufacturing operations -----------------------------------------
 
 TEST(FeatureTree, HoleOperation) {
-    auto box = oreo::makeBox(50, 50, 50);
-    ASSERT_FALSE(box.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto boxR = oreo::makeBox(*ctx, 50, 50, 50);
+    ASSERT_TRUE(boxR.ok());
+    auto box = boxR.value();
 
-    auto faces = oreo::getFaces(box);
+    auto faces = oreo::getFaces(*ctx, box);
     ASSERT_GE(faces.size(), 1u);
 
     // Drill a hole in the top face
-    auto result = oreo::hole(box, faces[0], gp_Pnt(25, 25, 50), 10.0, 30.0);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::hole(*ctx, box, faces[0], gp_Pnt(25, 25, 50), 10.0, 30.0);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
     // Should have more faces than original box (hole adds cylindrical face)
     EXPECT_GT(result.countSubShapes(TopAbs_FACE), box.countSubShapes(TopAbs_FACE));
 }
 
 TEST(FeatureTree, OffsetOperation) {
-    auto box = oreo::makeBox(10, 10, 10);
-    ASSERT_FALSE(box.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto boxR = oreo::makeBox(*ctx, 10, 10, 10);
+    ASSERT_TRUE(boxR.ok());
+    auto box = boxR.value();
 
-    auto result = oreo::offset(box, 1.0);
+    auto resultR = oreo::offset(*ctx, box, 1.0);
     // Offset may or may not succeed depending on OCCT's handling
     // Just verify it doesn't crash
-    if (!result.isNull()) {
-        auto origProps = oreo::massProperties(box);
-        auto newProps = oreo::massProperties(result);
+    if (resultR.ok()) {
+        auto result = resultR.value();
+        auto origProps = oreo::massProperties(*ctx, box);
+        auto newProps = oreo::massProperties(*ctx, result);
         EXPECT_GT(newProps.volume, origProps.volume);
     }
 }
 
 TEST(FeatureTree, SplitBodyOperation) {
-    auto box = oreo::makeBox(20, 20, 20);
-    ASSERT_FALSE(box.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto boxR = oreo::makeBox(*ctx, 20, 20, 20);
+    ASSERT_TRUE(boxR.ok());
+    auto box = boxR.value();
 
     // Split at Z=10
     gp_Pln plane(gp_Pnt(0, 0, 10), gp_Dir(0, 0, 1));
-    auto result = oreo::splitBody(box, plane);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::splitBody(*ctx, box, plane);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
     // Split produces a compound with more faces
     EXPECT_GT(result.countSubShapes(TopAbs_FACE), box.countSubShapes(TopAbs_FACE));
 }
 
 TEST(FeatureTree, CombineShapes) {
-    auto box1 = oreo::makeBox(10, 10, 10);
-    auto box2 = oreo::makeBox(gp_Pnt(20, 0, 0), 10, 10, 10);
+    auto ctx = oreo::KernelContext::create();
+    auto box1 = oreo::makeBox(*ctx, 10, 10, 10).value();
+    auto box2 = oreo::makeBox(*ctx, gp_Pnt(20, 0, 0), 10, 10, 10).value();
 
-    auto combined = oreo::combine({box1, box2});
-    ASSERT_FALSE(combined.isNull());
+    auto combinedR = oreo::combine(*ctx, {box1, box2});
+    ASSERT_TRUE(combinedR.ok());
+    auto combined = combinedR.value();
     // Compound should have faces from both boxes
     EXPECT_EQ(combined.countSubShapes(TopAbs_FACE), 12);
 }
 
 TEST(FeatureTree, MakeFaceFromWire) {
+    auto ctx = oreo::KernelContext::create();
     // Create a rectangular wire
     gp_Pnt p1(0,0,0), p2(10,0,0), p3(10,10,0), p4(0,10,0);
     BRepBuilderAPI_MakeWire wm;
@@ -282,12 +305,13 @@ TEST(FeatureTree, MakeFaceFromWire) {
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     oreo::NamedShape wire(wm.Wire(), oreo::NamedShape::nextTag());
 
-    auto face = oreo::makeFaceFromWire(wire);
-    ASSERT_FALSE(face.isNull());
+    auto faceR = oreo::makeFaceFromWire(*ctx, wire);
+    ASSERT_TRUE(faceR.ok());
+    auto face = faceR.value();
     EXPECT_EQ(face.shape().ShapeType(), TopAbs_FACE);
 }
 
-// ── Deterministic replay ─────────────────────────────────────
+// -- Deterministic replay ---------------------------------------------
 
 TEST(FeatureTree, DeterministicPrimitives) {
     // Create the same box 10 times, verify identical topology
@@ -295,13 +319,15 @@ TEST(FeatureTree, DeterministicPrimitives) {
     double firstVolume = -1;
 
     for (int i = 0; i < 10; ++i) {
-        auto box = oreo::makeBox(10, 20, 30);
-        ASSERT_FALSE(box.isNull());
+        auto ctx = oreo::KernelContext::create();
+        auto boxR = oreo::makeBox(*ctx, 10, 20, 30);
+        ASSERT_TRUE(boxR.ok());
+        auto box = boxR.value();
 
         int faces = box.countSubShapes(TopAbs_FACE);
         int edges = box.countSubShapes(TopAbs_EDGE);
         int verts = box.countSubShapes(TopAbs_VERTEX);
-        double vol = oreo::massProperties(box).volume;
+        double vol = oreo::massProperties(*ctx, box).volume;
 
         if (i == 0) {
             firstFaces = faces;
@@ -323,24 +349,31 @@ TEST(FeatureTree, DeterministicExtrudeFilletBoolean) {
     int firstFaces = -1;
 
     for (int iter = 0; iter < 10; ++iter) {
+        auto ctx = oreo::KernelContext::create();
+
         // Extrude a rectangle
         auto face = makeRectFace(10, 20);
-        auto ext = oreo::extrude(face, gp_Vec(0, 0, 30));
-        ASSERT_FALSE(ext.isNull());
+        auto extR = oreo::extrude(*ctx, face, gp_Vec(0, 0, 30));
+        ASSERT_TRUE(extR.ok());
+        auto ext = extR.value();
 
         // Fillet an edge
-        auto edges = oreo::getEdges(ext);
+        auto edges = oreo::getEdges(*ctx, ext);
         ASSERT_GE(edges.size(), 1u);
-        auto filleted = oreo::fillet(ext, {edges[0]}, 2.0);
-        ASSERT_FALSE(filleted.isNull());
+        auto filletedR = oreo::fillet(*ctx, ext, {edges[0]}, 2.0);
+        ASSERT_TRUE(filletedR.ok());
+        auto filleted = filletedR.value();
 
         // Boolean subtract a cylinder
-        auto cyl = oreo::makeCylinder(gp_Ax2(gp_Pnt(5, 10, -1), gp_Dir(0, 0, 1)), 3.0, 32.0);
-        auto final_shape = oreo::booleanSubtract(filleted, cyl);
-        ASSERT_FALSE(final_shape.isNull());
+        auto cylR = oreo::makeCylinder(*ctx, gp_Ax2(gp_Pnt(5, 10, -1), gp_Dir(0, 0, 1)), 3.0, 32.0);
+        ASSERT_TRUE(cylR.ok());
+        auto cyl = cylR.value();
+        auto final_shapeR = oreo::booleanSubtract(*ctx, filleted, cyl);
+        ASSERT_TRUE(final_shapeR.ok());
+        auto final_shape = final_shapeR.value();
 
         int faceCount = final_shape.countSubShapes(TopAbs_FACE);
-        double volume = oreo::massProperties(final_shape).volume;
+        double volume = oreo::massProperties(*ctx, final_shape).volume;
 
         if (iter == 0) {
             firstFaces = faceCount;
@@ -352,27 +385,28 @@ TEST(FeatureTree, DeterministicExtrudeFilletBoolean) {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// =====================================================================
 // Gap 5: Tests for previously untested operations
-// ═══════════════════════════════════════════════════════════════
+// =====================================================================
 
 TEST(Operations, DraftFaces) {
-    auto box = oreo::makeBox(30, 30, 30);
-    ASSERT_FALSE(box.isNull());
-    auto faces = oreo::getFaces(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 30, 30, 30).value();
+    auto faces = oreo::getFaces(*ctx, box);
     ASSERT_GE(faces.size(), 1u);
 
     // Draft the first face by 5 degrees
-    auto result = oreo::draft(box, {faces[0]}, 5.0, gp_Dir(0, 0, 1));
-    // Draft may fail on certain faces — just verify no crash
-    if (!result.isNull()) {
+    auto resultR = oreo::draft(*ctx, box, {faces[0]}, 5.0, gp_Dir(0, 0, 1));
+    // Draft may fail on certain faces -- just verify no crash
+    if (resultR.ok()) {
+        auto result = resultR.value();
         EXPECT_GT(result.countSubShapes(TopAbs_FACE), 0);
     }
 }
 
 TEST(Operations, Pocket) {
-    auto box = oreo::makeBox(50, 50, 50);
-    ASSERT_FALSE(box.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 50, 50, 50).value();
 
     // Pocket is extrude-cut. Create a face positioned on top of the box.
     // The pocket function extrudes in -Z, so the face at z=50 cuts into the box.
@@ -385,48 +419,53 @@ TEST(Operations, Pocket) {
     BRepBuilderAPI_MakeFace fm(wm.Wire());
     oreo::NamedShape profile(fm.Face(), oreo::NamedShape::nextTag());
 
-    auto pocketed = oreo::pocket(box, profile, 20.0);
-    if (!pocketed.isNull()) {
-        auto origVol = oreo::massProperties(box).volume;
-        auto newVol = oreo::massProperties(pocketed).volume;
+    auto pocketedR = oreo::pocket(*ctx, box, profile, 20.0);
+    if (pocketedR.ok()) {
+        auto pocketed = pocketedR.value();
+        auto origVol = oreo::massProperties(*ctx, box).volume;
+        auto newVol = oreo::massProperties(*ctx, pocketed).volume;
         EXPECT_LT(newVol, origVol);
     }
 }
 
 TEST(Operations, Thicken) {
+    auto ctx = oreo::KernelContext::create();
     // Thicken works on shells (not bare faces).
     // Create a box, shell it, then thicken the result.
-    auto box = oreo::makeBox(20, 20, 20);
-    ASSERT_FALSE(box.isNull());
+    auto box = oreo::makeBox(*ctx, 20, 20, 20).value();
 
     // Shell it first to get a shell
-    auto faces = oreo::getFaces(box);
+    auto faces = oreo::getFaces(*ctx, box);
     ASSERT_GE(faces.size(), 1u);
-    auto shelled = oreo::shell(box, {faces[0]}, 1.0);
+    auto shelledR = oreo::shell(*ctx, box, {faces[0]}, 1.0);
 
-    if (!shelled.isNull()) {
+    if (shelledR.ok()) {
+        auto shelled = shelledR.value();
         // Now try to thicken the shelled result
-        auto thick = oreo::thicken(shelled, 2.0);
-        // Thicken may succeed or fail — just verify no crash
-        if (!thick.isNull()) {
+        auto thickR = oreo::thicken(*ctx, shelled, 2.0);
+        // Thicken may succeed or fail -- just verify no crash
+        if (thickR.ok()) {
+            auto thick = thickR.value();
             EXPECT_GT(thick.countSubShapes(TopAbs_FACE), 0);
         }
     }
 }
 
 TEST(Operations, VariableFillet) {
-    auto box = oreo::makeBox(30, 30, 30);
-    ASSERT_FALSE(box.isNull());
-    auto edges = oreo::getEdges(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 30, 30, 30).value();
+    auto edges = oreo::getEdges(*ctx, box);
     ASSERT_GE(edges.size(), 1u);
 
-    auto result = oreo::filletVariable(box, edges[0], 1.0, 5.0);
-    if (!result.isNull()) {
+    auto resultR = oreo::filletVariable(*ctx, box, edges[0], 1.0, 5.0);
+    if (resultR.ok()) {
+        auto result = resultR.value();
         EXPECT_GT(result.countSubShapes(TopAbs_FACE), box.countSubShapes(TopAbs_FACE));
     }
 }
 
 TEST(Operations, WireOffset) {
+    auto ctx = oreo::KernelContext::create();
     gp_Pnt p1(0,0,0), p2(20,0,0), p3(20,20,0), p4(0,20,0);
     BRepBuilderAPI_MakeWire wm;
     wm.Add(BRepBuilderAPI_MakeEdge(p1, p2).Edge());
@@ -435,31 +474,35 @@ TEST(Operations, WireOffset) {
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     oreo::NamedShape wire(wm.Wire(), oreo::NamedShape::nextTag());
 
-    auto result = oreo::wireOffset(wire, 2.0);
+    auto resultR = oreo::wireOffset(*ctx, wire, 2.0);
     // Wire offset may succeed or fail depending on OCCT version
-    if (!result.isNull()) {
+    if (resultR.ok()) {
+        auto result = resultR.value();
         EXPECT_GT(result.countSubShapes(TopAbs_EDGE), 0);
     }
 }
 
 TEST(Operations, Rib) {
-    auto box = oreo::makeBox(50, 50, 10);
-    ASSERT_FALSE(box.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 50, 50, 10).value();
 
     auto ribProfile = makeRectFace(2, 40);
-    auto result = oreo::rib(box, ribProfile, gp_Dir(0, 0, 1), 30.0);
-    if (!result.isNull()) {
-        auto origVol = oreo::massProperties(box).volume;
-        auto newVol = oreo::massProperties(result).volume;
+    auto resultR = oreo::rib(*ctx, box, ribProfile, gp_Dir(0, 0, 1), 30.0);
+    if (resultR.ok()) {
+        auto result = resultR.value();
+        auto origVol = oreo::massProperties(*ctx, box).volume;
+        auto newVol = oreo::massProperties(*ctx, result).volume;
         EXPECT_GT(newVol, origVol);
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// =====================================================================
 // Gap 7: End-to-end parametric replay test
-// ═══════════════════════════════════════════════════════════════
+// =====================================================================
 
 TEST(ParametricReplay, BoxExtrudeFilletChangeHeight) {
+    auto ctx = oreo::KernelContext::create();
+
     // 1. Create box via feature tree
     oreo::FeatureTree tree;
 
@@ -469,21 +512,21 @@ TEST(ParametricReplay, BoxExtrudeFilletChangeHeight) {
     makeBoxF.params["dimensions"] = gp_Vec(20, 20, 20);
     tree.addFeature(makeBoxF);
 
-    // 2. Replay → get box
+    // 2. Replay -> get box
     auto shape1 = tree.replay();
     ASSERT_FALSE(shape1.isNull());
     EXPECT_EQ(shape1.countSubShapes(TopAbs_FACE), 6);
 
-    double vol1 = oreo::massProperties(shape1).volume;
+    double vol1 = oreo::massProperties(*ctx, shape1).volume;
     EXPECT_NEAR(vol1, 8000.0, 1.0);  // 20*20*20
 
-    // 3. Change dimension → re-replay
+    // 3. Change dimension -> re-replay
     tree.updateParameter("F1", "dimensions", oreo::ParamValue(gp_Vec(30, 20, 20)));
     auto shape2 = tree.replay();
     ASSERT_FALSE(shape2.isNull());
     EXPECT_EQ(shape2.countSubShapes(TopAbs_FACE), 6);  // Same topology
 
-    double vol2 = oreo::massProperties(shape2).volume;
+    double vol2 = oreo::massProperties(*ctx, shape2).volume;
     EXPECT_NEAR(vol2, 12000.0, 1.0);  // 30*20*20
 }
 
@@ -521,17 +564,17 @@ TEST(ParametricReplay, FeatureTreeSerializeRoundTrip) {
     EXPECT_NEAR(std::get<double>(rf2->params.at("distance")), 1.5, 0.001);
 }
 
-// ═══════════════════════════════════════════════════════════════
+// =====================================================================
 // Gap 9: Element map name determinism
-// ═══════════════════════════════════════════════════════════════
+// =====================================================================
 
 TEST(Determinism, ElementMapNamesIdentical) {
     // Run the same operations 10 times, verify element map names are identical
     std::map<std::string, std::string> firstNames;
 
     for (int iter = 0; iter < 10; ++iter) {
-        auto box = oreo::makeBox(15, 25, 35);
-        ASSERT_FALSE(box.isNull());
+        auto ctx = oreo::KernelContext::create();
+        auto box = oreo::makeBox(*ctx, 15, 25, 35).value();
 
         // Collect all face names
         std::map<std::string, std::string> names;

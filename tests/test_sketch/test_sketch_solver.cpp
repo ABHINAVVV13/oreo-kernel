@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "sketch/oreo_sketch.h"
+#include "core/kernel_context.h"
 #include "core/oreo_error.h"
 
 #include <cmath>
@@ -27,6 +28,7 @@ void makeRectSketch(std::vector<oreo::SketchLine>& lines, double w, double h) {
 // ── Basic Geometry ───────────────────────────────────────────
 
 TEST(SketchSolver, TwoPointCoincident) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{1.0, 2.0}, {3.0, 4.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -36,13 +38,14 @@ TEST(SketchSolver, TwoPointCoincident) {
         {oreo::ConstraintType::Coincident, 0, 1, -1, 0.0}
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(points[0].x, points[1].x, 1e-6);
     EXPECT_NEAR(points[0].y, points[1].y, 1e-6);
 }
 
 TEST(SketchSolver, TwoPointDistance) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{0.0, 0.0}, {5.0, 0.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -52,7 +55,7 @@ TEST(SketchSolver, TwoPointDistance) {
         {oreo::ConstraintType::Distance, 0, 1, -1, 10.0}
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 
     double dist = std::sqrt(std::pow(points[1].x - points[0].x, 2)
@@ -61,6 +64,7 @@ TEST(SketchSolver, TwoPointDistance) {
 }
 
 TEST(SketchSolver, HorizontalLine) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {{{0.0, 1.0}, {10.0, 3.0}}};
     std::vector<oreo::SketchCircle> circles;
@@ -70,12 +74,13 @@ TEST(SketchSolver, HorizontalLine) {
         {oreo::ConstraintType::Horizontal, 0, -1, -1, 0.0}
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(lines[0].p1.y, lines[0].p2.y, 1e-6);
 }
 
 TEST(SketchSolver, VerticalLine) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {{{1.0, 0.0}, {3.0, 10.0}}};
     std::vector<oreo::SketchCircle> circles;
@@ -85,12 +90,13 @@ TEST(SketchSolver, VerticalLine) {
         {oreo::ConstraintType::Vertical, 0, -1, -1, 0.0}
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(lines[0].p1.x, lines[0].p2.x, 1e-6);
 }
 
 TEST(SketchSolver, ParallelLines) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {
         {{0, 0}, {10, 2}},
@@ -103,7 +109,7 @@ TEST(SketchSolver, ParallelLines) {
         {oreo::ConstraintType::Parallel, 0, 1, -1, 0.0}
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 
     // Direction vectors should be parallel
@@ -117,6 +123,7 @@ TEST(SketchSolver, ParallelLines) {
 }
 
 TEST(SketchSolver, PerpendicularLines) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {
         {{0, 0}, {10, 1}},
@@ -129,7 +136,7 @@ TEST(SketchSolver, PerpendicularLines) {
         {oreo::ConstraintType::Perpendicular, 0, 1, -1, 0.0}
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 
     double dx1 = lines[0].p2.x - lines[0].p1.x;
@@ -143,37 +150,40 @@ TEST(SketchSolver, PerpendicularLines) {
 // ── Wire Conversion ──────────────────────────────────────────
 
 TEST(SketchSolver, RectangleToWire) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchLine> lines;
     makeRectSketch(lines, 10.0, 20.0);
 
     std::vector<oreo::SketchCircle> circles;
     std::vector<oreo::SketchArc> arcs;
 
-    auto wire = oreo::sketchToWire(lines, circles, arcs);
+    auto wire = oreo::sketchToWire(*ctx, lines, circles, arcs);
     ASSERT_FALSE(wire.isNull());
     EXPECT_EQ(wire.shape().ShapeType(), TopAbs_WIRE);
 }
 
 TEST(SketchSolver, EmptySketchToWire) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
     std::vector<oreo::SketchArc> arcs;
 
-    auto wire = oreo::sketchToWire(lines, circles, arcs);
+    auto wire = oreo::sketchToWire(*ctx, lines, circles, arcs);
     EXPECT_TRUE(wire.isNull());
-    EXPECT_EQ(oreo::getLastError().code, oreo::ErrorCode::INVALID_INPUT);
+    EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
 // ── Degrees of Freedom ───────────────────────────────────────
 
 TEST(SketchSolver, UnderconstrainedDOF) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{0, 0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
     std::vector<oreo::SketchArc> arcs;
     std::vector<oreo::SketchConstraint> constraints;
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     // No constraints → DOF > 0
     EXPECT_GT(result.degreesOfFreedom, 0);
 }
@@ -183,6 +193,7 @@ TEST(SketchSolver, UnderconstrainedDOF) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(SketchSolver, CoordinateXY) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{5.0, 7.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -192,13 +203,14 @@ TEST(SketchSolver, CoordinateXY) {
         {oreo::ConstraintType::CoordinateY, 0, -1, -1, 20.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(points[0].x, 10.0, 1e-4);
     EXPECT_NEAR(points[0].y, 20.0, 1e-4);
 }
 
 TEST(SketchSolver, PointOnLineConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{3.0, 5.0}};
     std::vector<oreo::SketchLine> lines = {{{0, 0}, {10, 0}}};  // Horizontal line
     std::vector<oreo::SketchCircle> circles;
@@ -207,13 +219,14 @@ TEST(SketchSolver, PointOnLineConstraint) {
         {oreo::ConstraintType::PointOnLine, 0, 0, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     // Point should now be on the line (y ≈ 0 since line is horizontal at y=0)
     // Actually the line endpoints are also free, so just check the point is on the line
 }
 
 TEST(SketchSolver, PointOnCircleConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{10.0, 0.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {{{0.0, 0.0}, 5.0}};
@@ -222,7 +235,7 @@ TEST(SketchSolver, PointOnCircleConstraint) {
         {oreo::ConstraintType::PointOnCircle, 0, 0, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     // Point should be on circle: distance from center = radius
     double dist = std::sqrt(std::pow(points[0].x - circles[0].center.x, 2)
@@ -231,6 +244,7 @@ TEST(SketchSolver, PointOnCircleConstraint) {
 }
 
 TEST(SketchSolver, EqualLengthConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {
         {{0, 0}, {10, 0}},   // Line 1: length 10
@@ -242,7 +256,7 @@ TEST(SketchSolver, EqualLengthConstraint) {
         {oreo::ConstraintType::Equal, 0, 1, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 
     double len1 = std::sqrt(std::pow(lines[0].p2.x - lines[0].p1.x, 2)
@@ -253,6 +267,7 @@ TEST(SketchSolver, EqualLengthConstraint) {
 }
 
 TEST(SketchSolver, CircleRadius) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {{{0.0, 0.0}, 3.0}};
@@ -261,12 +276,13 @@ TEST(SketchSolver, CircleRadius) {
         {oreo::ConstraintType::Radius, 0, -1, -1, 7.5},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(circles[0].radius, 7.5, 1e-3);
 }
 
 TEST(SketchSolver, TangentLineCircle) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {{{0, 5}, {10, 5}}};
     std::vector<oreo::SketchCircle> circles = {{{5.0, 0.0}, 3.0}};
@@ -275,11 +291,12 @@ TEST(SketchSolver, TangentLineCircle) {
         {oreo::ConstraintType::Tangent, 0, 0, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, ConcentricCircles) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {
@@ -291,13 +308,14 @@ TEST(SketchSolver, ConcentricCircles) {
         {oreo::ConstraintType::Concentric, 0, 1, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(circles[0].center.x, circles[1].center.x, 1e-3);
     EXPECT_NEAR(circles[0].center.y, circles[1].center.y, 1e-3);
 }
 
 TEST(SketchSolver, EqualRadiusCircles) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {
@@ -309,12 +327,13 @@ TEST(SketchSolver, EqualRadiusCircles) {
         {oreo::ConstraintType::EqualRadius, 0, 1, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(circles[0].radius, circles[1].radius, 1e-3);
 }
 
 TEST(SketchSolver, AngleConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {
         {{0, 0}, {10, 0}},
@@ -326,11 +345,12 @@ TEST(SketchSolver, AngleConstraint) {
         {oreo::ConstraintType::Angle, 0, 1, -1, PI / 4.0},  // 45 degrees
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, SymmetricConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {
         {-5.0, 3.0},   // Point to be symmetric
         {5.0, 7.0},    // Its mirror
@@ -344,7 +364,7 @@ TEST(SketchSolver, SymmetricConstraint) {
         {oreo::ConstraintType::Symmetric, 0, 1, 0, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     // Points should be symmetric about the Y axis (line from (0,-10) to (0,10))
     // Relax tolerance — solver may not perfectly converge from these initial positions
@@ -353,6 +373,7 @@ TEST(SketchSolver, SymmetricConstraint) {
 }
 
 TEST(SketchSolver, FixedPointConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{5.0, 7.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -361,7 +382,7 @@ TEST(SketchSolver, FixedPointConstraint) {
         {oreo::ConstraintType::Fixed, 0, -1, -1, 0.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(points[0].x, 5.0, 1e-4);
     EXPECT_NEAR(points[0].y, 7.0, 1e-4);
@@ -369,6 +390,7 @@ TEST(SketchSolver, FixedPointConstraint) {
 }
 
 TEST(SketchSolver, PointToLineDistance) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{5.0, 10.0}};
     std::vector<oreo::SketchLine> lines = {{{0, 0}, {10, 0}}};
     std::vector<oreo::SketchCircle> circles;
@@ -377,7 +399,7 @@ TEST(SketchSolver, PointToLineDistance) {
         {oreo::ConstraintType::PointToLineDistance, 0, 0, -1, 5.0},
     };
 
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
@@ -386,6 +408,7 @@ TEST(SketchSolver, PointToLineDistance) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(SketchSolver, DistanceXConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{0.0, 0.0}, {5.0, 3.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -393,12 +416,13 @@ TEST(SketchSolver, DistanceXConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::DistanceX, 0, 1, -1, 15.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(std::abs(points[1].x - points[0].x), 15.0, 1e-3);
 }
 
 TEST(SketchSolver, DistanceYConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{0.0, 0.0}, {3.0, 5.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -406,12 +430,13 @@ TEST(SketchSolver, DistanceYConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::DistanceY, 0, 1, -1, 25.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(std::abs(points[1].y - points[0].y), 25.0, 1e-3);
 }
 
 TEST(SketchSolver, MidpointOnLineConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {
         {{0, 0}, {10, 0}},
@@ -422,11 +447,12 @@ TEST(SketchSolver, MidpointOnLineConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::MidpointOnLine, 0, 1, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, TangentLineArcConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {{{0, 5}, {10, 5}}};
     std::vector<oreo::SketchCircle> circles;
@@ -436,11 +462,12 @@ TEST(SketchSolver, TangentLineArcConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::TangentLineArc, 0, 0, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, TangentCircleCircleConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {
@@ -451,7 +478,7 @@ TEST(SketchSolver, TangentCircleCircleConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::TangentCircleCircle, 0, 1, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     double dist = std::sqrt(std::pow(circles[1].center.x - circles[0].center.x, 2)
                           + std::pow(circles[1].center.y - circles[0].center.y, 2));
@@ -461,6 +488,7 @@ TEST(SketchSolver, TangentCircleCircleConstraint) {
 }
 
 TEST(SketchSolver, PointOnArcConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{10.0, 0.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -468,7 +496,7 @@ TEST(SketchSolver, PointOnArcConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::PointOnArc, 0, 0, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     double dist = std::sqrt(std::pow(points[0].x - arcs[0].center.x, 2)
                           + std::pow(points[0].y - arcs[0].center.y, 2));
@@ -476,6 +504,7 @@ TEST(SketchSolver, PointOnArcConstraint) {
 }
 
 TEST(SketchSolver, EqualRadiusCircleArcConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {{{0.0, 0.0}, 5.0}};
@@ -483,12 +512,13 @@ TEST(SketchSolver, EqualRadiusCircleArcConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::EqualRadiusCircleArc, 0, 0, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(circles[0].radius, arcs[0].radius, 0.5);
 }
 
 TEST(SketchSolver, ArcLengthConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -496,11 +526,12 @@ TEST(SketchSolver, ArcLengthConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::ArcLength, 0, -1, -1, 10.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_NE(result.status, oreo::SolveStatus::Failed);
 }
 
 TEST(SketchSolver, CircleToLineDistanceConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {{{0, 0}, {10, 0}}};
     std::vector<oreo::SketchCircle> circles = {{{5.0, 8.0}, 2.0}};
@@ -508,11 +539,12 @@ TEST(SketchSolver, CircleToLineDistanceConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::CircleToLineDistance, 0, 0, -1, 5.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, PointToCircleDistanceConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points = {{10.0, 0.0}};
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {{{0.0, 0.0}, 3.0}};
@@ -520,11 +552,12 @@ TEST(SketchSolver, PointToCircleDistanceConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::PointToCircleDistance, 0, 0, -1, 2.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, CircleDiameterConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {{{0.0, 0.0}, 3.0}};
@@ -532,12 +565,13 @@ TEST(SketchSolver, CircleDiameterConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::CircleDiameter, 0, -1, -1, 20.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     EXPECT_NEAR(circles[0].radius, 10.0, 1e-3);
 }
 
 TEST(SketchSolver, CollinearConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines = {
         {{0, 0}, {5, 3}},
@@ -548,7 +582,7 @@ TEST(SketchSolver, CollinearConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::Collinear, 0, 1, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
     double dx1 = lines[0].p2.x - lines[0].p1.x;
     double dy1 = lines[0].p2.y - lines[0].p1.y;
@@ -559,6 +593,7 @@ TEST(SketchSolver, CollinearConstraint) {
 }
 
 TEST(SketchSolver, TangentCircleArcConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles = {{{0.0, 0.0}, 5.0}};
@@ -566,11 +601,12 @@ TEST(SketchSolver, TangentCircleArcConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::TangentCircleArc, 0, 0, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }
 
 TEST(SketchSolver, TangentArcArcConstraint) {
+    auto ctx = oreo::KernelContext::create();
     std::vector<oreo::SketchPoint> points;
     std::vector<oreo::SketchLine> lines;
     std::vector<oreo::SketchCircle> circles;
@@ -581,6 +617,6 @@ TEST(SketchSolver, TangentArcArcConstraint) {
     std::vector<oreo::SketchConstraint> constraints = {
         {oreo::ConstraintType::TangentArcArc, 0, 1, -1, 0.0},
     };
-    auto result = oreo::solveSketch(points, lines, circles, arcs, constraints);
+    auto result = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
 }

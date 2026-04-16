@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/kernel_context.h"
 #include "core/oreo_error.h"
 #include "geometry/oreo_geometry.h"
 #include "naming/named_shape.h"
@@ -16,11 +17,6 @@
 #include <TopoDS.hxx>
 
 namespace {
-
-oreo::NamedShape makeBox(double x, double y, double z) {
-    TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, oreo::NamedShape::nextTag());
-}
 
 oreo::NamedShape makeRectWire(double w, double h) {
     gp_Pnt p1(0, 0, 0), p2(w, 0, 0), p3(w, h, 0), p4(0, h, 0);
@@ -45,163 +41,193 @@ oreo::NamedShape makeRectFace(double w, double h) {
 
 } // anonymous namespace
 
-// ── Extrude ──────────────────────────────────────────────────
+// -- Extrude ----------------------------------------------------------
 
 TEST(Geometry, ExtrudeRectangle) {
+    auto ctx = oreo::KernelContext::create();
     auto face = makeRectFace(10, 20);
-    auto result = oreo::extrude(face, gp_Vec(0, 0, 30));
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::extrude(*ctx, face, gp_Vec(0, 0, 30));
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    auto box = oreo::aabb(result);
+    auto box = oreo::aabb(*ctx, result);
     EXPECT_NEAR(box.xmax - box.xmin, 10.0, 0.01);
     EXPECT_NEAR(box.ymax - box.ymin, 20.0, 0.01);
     EXPECT_NEAR(box.zmax - box.zmin, 30.0, 0.01);
 }
 
 TEST(Geometry, ExtrudeNullShape) {
+    auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
-    auto result = oreo::extrude(null, gp_Vec(0, 0, 10));
-    EXPECT_TRUE(result.isNull());
-    EXPECT_EQ(oreo::getLastError().code, oreo::ErrorCode::INVALID_INPUT);
+    auto result = oreo::extrude(*ctx, null, gp_Vec(0, 0, 10));
+    EXPECT_FALSE(result.ok());
+    EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
 TEST(Geometry, ExtrudeZeroVector) {
+    auto ctx = oreo::KernelContext::create();
     auto face = makeRectFace(10, 20);
-    auto result = oreo::extrude(face, gp_Vec(0, 0, 0));
-    EXPECT_TRUE(result.isNull());
-    EXPECT_EQ(oreo::getLastError().code, oreo::ErrorCode::INVALID_INPUT);
+    auto result = oreo::extrude(*ctx, face, gp_Vec(0, 0, 0));
+    EXPECT_FALSE(result.ok());
+    EXPECT_TRUE(ctx->diag.hasErrors());
 }
 
-// ── Revolve ──────────────────────────────────────────────────
+// -- Revolve ----------------------------------------------------------
 
 TEST(Geometry, RevolveFullCircle) {
+    auto ctx = oreo::KernelContext::create();
     auto face = makeRectFace(5, 10);
     gp_Ax1 axis(gp_Pnt(20, 0, 0), gp_Dir(0, 0, 1));
-    auto result = oreo::revolve(face, axis, 2.0 * M_PI);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::revolve(*ctx, face, axis, 2.0 * M_PI);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
     // Result should be a toroidal-like shape
     EXPECT_GT(result.countSubShapes(TopAbs_FACE), 0);
 }
 
-// ── Boolean Operations ───────────────────────────────────────
+// -- Boolean Operations -----------------------------------------------
 
 TEST(Geometry, BooleanUnionTwoBoxes) {
-    auto a = makeBox(10, 10, 10);
-    // Second box offset by 5 in X — overlapping
+    auto ctx = oreo::KernelContext::create();
+    auto aR = oreo::makeBox(*ctx, 10, 10, 10);
+    ASSERT_TRUE(aR.ok());
+    auto a = aR.value();
+    // Second box offset by 5 in X -- overlapping
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(5, 0, 0), 10, 10, 10).Shape();
     oreo::NamedShape b(box2, oreo::NamedShape::nextTag());
 
-    auto result = oreo::booleanUnion(a, b);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::booleanUnion(*ctx, a, b);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    auto bbox = oreo::aabb(result);
+    auto bbox = oreo::aabb(*ctx, result);
     EXPECT_NEAR(bbox.xmax - bbox.xmin, 15.0, 0.01);
     EXPECT_NEAR(bbox.ymax - bbox.ymin, 10.0, 0.01);
 }
 
 TEST(Geometry, BooleanSubtract) {
-    auto a = makeBox(10, 10, 10);
+    auto ctx = oreo::KernelContext::create();
+    auto aR = oreo::makeBox(*ctx, 10, 10, 10);
+    ASSERT_TRUE(aR.ok());
+    auto a = aR.value();
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(2, 2, -1), 6, 6, 12).Shape();
     oreo::NamedShape b(box2, oreo::NamedShape::nextTag());
 
-    auto result = oreo::booleanSubtract(a, b);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::booleanSubtract(*ctx, a, b);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
     // Volume should be less than original
-    auto origProps = oreo::massProperties(a);
-    auto resultProps = oreo::massProperties(result);
+    auto origProps = oreo::massProperties(*ctx, a);
+    auto resultProps = oreo::massProperties(*ctx, result);
     EXPECT_LT(resultProps.volume, origProps.volume);
 }
 
 TEST(Geometry, BooleanIntersect) {
-    auto a = makeBox(10, 10, 10);
+    auto ctx = oreo::KernelContext::create();
+    auto aR = oreo::makeBox(*ctx, 10, 10, 10);
+    ASSERT_TRUE(aR.ok());
+    auto a = aR.value();
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(5, 5, 5), 10, 10, 10).Shape();
     oreo::NamedShape b(box2, oreo::NamedShape::nextTag());
 
-    auto result = oreo::booleanIntersect(a, b);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::booleanIntersect(*ctx, a, b);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    auto bbox = oreo::aabb(result);
+    auto bbox = oreo::aabb(*ctx, result);
     EXPECT_NEAR(bbox.xmax - bbox.xmin, 5.0, 0.01);
     EXPECT_NEAR(bbox.ymax - bbox.ymin, 5.0, 0.01);
     EXPECT_NEAR(bbox.zmax - bbox.zmin, 5.0, 0.01);
 }
 
-// ── Fillet ────────────────────────────────────────────────────
+// -- Fillet ------------------------------------------------------------
 
 TEST(Geometry, FilletBox) {
-    auto box = makeBox(20, 20, 20);
-    auto edges = oreo::getEdges(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 20, 20, 20).value();
+    auto edges = oreo::getEdges(*ctx, box);
     ASSERT_GT(edges.size(), 0u);
 
     // Fillet the first edge
     std::vector<oreo::NamedEdge> filletEdges = {edges[0]};
-    auto result = oreo::fillet(box, filletEdges, 2.0);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::fillet(*ctx, box, filletEdges, 2.0);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    // Filleted box should have more faces than original (6 → 7)
+    // Filleted box should have more faces than original (6 -> 7)
     EXPECT_GT(result.countSubShapes(TopAbs_FACE), box.countSubShapes(TopAbs_FACE));
 }
 
-// ── Chamfer ──────────────────────────────────────────────────
+// -- Chamfer ----------------------------------------------------------
 
 TEST(Geometry, ChamferBox) {
-    auto box = makeBox(20, 20, 20);
-    auto edges = oreo::getEdges(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 20, 20, 20).value();
+    auto edges = oreo::getEdges(*ctx, box);
     ASSERT_GT(edges.size(), 0u);
 
     std::vector<oreo::NamedEdge> chamferEdges = {edges[0]};
-    auto result = oreo::chamfer(box, chamferEdges, 3.0);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::chamfer(*ctx, box, chamferEdges, 3.0);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
     EXPECT_GT(result.countSubShapes(TopAbs_FACE), box.countSubShapes(TopAbs_FACE));
 }
 
-// ── Mirror ───────────────────────────────────────────────────
+// -- Mirror -----------------------------------------------------------
 
 TEST(Geometry, MirrorBox) {
-    auto box = makeBox(10, 10, 10);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 10, 10, 10).value();
     gp_Ax2 plane(gp_Pnt(0, 0, 0), gp_Dir(1, 0, 0));  // YZ plane
-    auto result = oreo::mirror(box, plane);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::mirror(*ctx, box, plane);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    auto bbox = oreo::aabb(result);
+    auto bbox = oreo::aabb(*ctx, result);
     // Mirrored box should be on the negative X side
     EXPECT_LT(bbox.xmin, 0.0);
 }
 
-// ── Pattern ──────────────────────────────────────────────────
+// -- Pattern ----------------------------------------------------------
 
 TEST(Geometry, PatternLinear) {
-    auto box = makeBox(5, 5, 5);
-    auto result = oreo::patternLinear(box, gp_Vec(1, 0, 0), 3, 10.0);
-    ASSERT_FALSE(result.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 5, 5, 5).value();
+    auto resultR = oreo::patternLinear(*ctx, box, gp_Vec(1, 0, 0), 3, 10.0);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
 
-    auto bbox = oreo::aabb(result);
+    auto bbox = oreo::aabb(*ctx, result);
     // 3 boxes: 0-5, 10-15, 20-25
     EXPECT_NEAR(bbox.xmax - bbox.xmin, 25.0, 0.1);
 }
 
 TEST(Geometry, PatternCircular) {
-    auto box = makeBox(5, 5, 5);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 5, 5, 5).value();
     gp_Ax1 axis(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1));
-    auto result = oreo::patternCircular(box, axis, 4, 2.0 * M_PI);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::patternCircular(*ctx, box, axis, 4, 2.0 * M_PI);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
     EXPECT_GT(result.countSubShapes(TopAbs_FACE), box.countSubShapes(TopAbs_FACE));
 }
 
-// ── Queries ──────────────────────────────────────────────────
+// -- Queries ----------------------------------------------------------
 
 TEST(Query, AABBBox) {
-    auto box = makeBox(10, 20, 30);
-    auto bbox = oreo::aabb(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 10, 20, 30).value();
+    auto bbox = oreo::aabb(*ctx, box);
     EXPECT_NEAR(bbox.xmax - bbox.xmin, 10.0, 0.01);
     EXPECT_NEAR(bbox.ymax - bbox.ymin, 20.0, 0.01);
     EXPECT_NEAR(bbox.zmax - bbox.zmin, 30.0, 0.01);
 }
 
 TEST(Query, MassPropertiesBox) {
-    auto box = makeBox(10, 20, 30);
-    auto props = oreo::massProperties(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 10, 20, 30).value();
+    auto props = oreo::massProperties(*ctx, box);
     EXPECT_NEAR(props.volume, 6000.0, 1.0);
     EXPECT_NEAR(props.centerOfMassX, 5.0, 0.1);
     EXPECT_NEAR(props.centerOfMassY, 10.0, 0.1);
@@ -209,17 +235,19 @@ TEST(Query, MassPropertiesBox) {
 }
 
 TEST(Query, FaceEdgeCount) {
-    auto box = makeBox(10, 10, 10);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 10, 10, 10).value();
     EXPECT_EQ(box.countSubShapes(TopAbs_FACE), 6);
     EXPECT_EQ(box.countSubShapes(TopAbs_EDGE), 12);
     EXPECT_EQ(box.countSubShapes(TopAbs_VERTEX), 8);
 }
 
 TEST(Query, MeasureDistance) {
-    auto a = makeBox(10, 10, 10);
+    auto ctx = oreo::KernelContext::create();
+    auto a = oreo::makeBox(*ctx, 10, 10, 10).value();
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(20, 0, 0), 10, 10, 10).Shape();
     oreo::NamedShape b(box2, oreo::NamedShape::nextTag());
 
-    double dist = oreo::measureDistance(a, b);
+    double dist = oreo::measureDistance(*ctx, a, b);
     EXPECT_NEAR(dist, 10.0, 0.01);
 }

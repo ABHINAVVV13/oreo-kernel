@@ -260,7 +260,7 @@ NamedShape executeFeature(KernelContext& ctx,
                 if (feature.status == FeatureStatus::BrokenReference) return {};
                 shapes.emplace_back(resolved, ctx.tags.nextTag());
             }
-            return combine(shapes);
+            return extractResult(feature, combine(ctx, shapes));
         }
 
         // ── Rib ──────────────────────────────────────────
@@ -282,16 +282,16 @@ NamedShape executeFeature(KernelContext& ctx,
         // ── Primitives (used as first feature) ───────────
         if (type == "MakeBox") {
             auto d = feature.get<gp_Vec>("dimensions");
-            return makeBox(d.X(), d.Y(), d.Z());
+            return extractResult(feature, makeBox(ctx, d.X(), d.Y(), d.Z()));
         }
         if (type == "MakeCylinder") {
             double r = feature.get<double>("radius");
             double h = feature.get<double>("height");
-            return makeCylinder(r, h);
+            return extractResult(feature, makeCylinder(ctx, r, h));
         }
         if (type == "MakeSphere") {
             double r = feature.get<double>("radius");
-            return makeSphere(r);
+            return extractResult(feature, makeSphere(ctx, r));
         }
 
         // ── Unknown feature type ─────────────────────────

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "core/kernel_context.h"
 #include "core/oreo_error.h"
 #include "geometry/oreo_geometry.h"
 #include "naming/named_shape.h"
@@ -16,11 +17,6 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 
 namespace {
-
-oreo::NamedShape makeBox(double x, double y, double z) {
-    TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, oreo::NamedShape::nextTag());
-}
 
 oreo::NamedShape makeRectFace(double w, double h) {
     gp_Pnt p1(0, 0, 0), p2(w, 0, 0), p3(w, h, 0), p4(0, h, 0);
@@ -35,7 +31,7 @@ oreo::NamedShape makeRectFace(double w, double h) {
 
 } // anonymous namespace
 
-// ── Element Map Basics ───────────────────────────────────────
+// -- Element Map Basics -----------------------------------------------
 
 TEST(TopoNaming, ElementMapBasicSetGet) {
     oreo::ElementMap map;
@@ -75,7 +71,7 @@ TEST(TopoNaming, ElementMapCount) {
     EXPECT_EQ(map.count("Vertex"), 0);
 }
 
-// ── Name Encoding ────────────────────────────────────────────
+// -- Name Encoding ----------------------------------------------------
 
 TEST(TopoNaming, EncodeElementName) {
     oreo::MappedName input("Face1");
@@ -85,7 +81,7 @@ TEST(TopoNaming, EncodeElementName) {
     EXPECT_NE(encoded.data().find("1a"), std::string::npos);
 }
 
-// ── Serialization Round-trip ─────────────────────────────────
+// -- Serialization Round-trip -----------------------------------------
 
 TEST(TopoNaming, ElementMapSerializeRoundTrip) {
     oreo::ElementMap map;
@@ -104,12 +100,14 @@ TEST(TopoNaming, ElementMapSerializeRoundTrip) {
     EXPECT_EQ(restored->getMappedName(oreo::IndexedName("Edge", 1)).data(), "E1;:Hb;:M");
 }
 
-// ── Operation Produces Element Map ───────────────────────────
+// -- Operation Produces Element Map -----------------------------------
 
 TEST(TopoNaming, ExtrudeProducesElementMap) {
+    auto ctx = oreo::KernelContext::create();
     auto face = makeRectFace(10, 20);
-    auto result = oreo::extrude(face, gp_Vec(0, 0, 30));
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::extrude(*ctx, face, gp_Vec(0, 0, 30));
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
     ASSERT_NE(result.elementMap(), nullptr);
 
     // Extruded shape should have named faces
@@ -125,10 +123,12 @@ TEST(TopoNaming, ExtrudeProducesElementMap) {
 }
 
 TEST(TopoNaming, BooleanPreservesNames) {
-    auto a = makeBox(10, 10, 10);
-    auto b = makeBox(10, 10, 10);
-    auto result = oreo::booleanUnion(a, b);
-    ASSERT_FALSE(result.isNull());
+    auto ctx = oreo::KernelContext::create();
+    auto a = oreo::makeBox(*ctx, 10, 10, 10).value();
+    auto b = oreo::makeBox(*ctx, 10, 10, 10).value();
+    auto resultR = oreo::booleanUnion(*ctx, a, b);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
     ASSERT_NE(result.elementMap(), nullptr);
 
     // Result should have named faces
@@ -138,13 +138,15 @@ TEST(TopoNaming, BooleanPreservesNames) {
 }
 
 TEST(TopoNaming, FilletPreservesBaseNames) {
-    auto box = makeBox(20, 20, 20);
-    auto edges = oreo::getEdges(box);
+    auto ctx = oreo::KernelContext::create();
+    auto box = oreo::makeBox(*ctx, 20, 20, 20).value();
+    auto edges = oreo::getEdges(*ctx, box);
     ASSERT_GT(edges.size(), 0u);
 
     std::vector<oreo::NamedEdge> filletEdges = {edges[0]};
-    auto result = oreo::fillet(box, filletEdges, 2.0);
-    ASSERT_FALSE(result.isNull());
+    auto resultR = oreo::fillet(*ctx, box, filletEdges, 2.0);
+    ASSERT_TRUE(resultR.ok());
+    auto result = resultR.value();
     ASSERT_NE(result.elementMap(), nullptr);
 
     // The fillet should have produced new faces
@@ -153,35 +155,41 @@ TEST(TopoNaming, FilletPreservesBaseNames) {
     EXPECT_EQ(result.elementMap()->count("Face"), result.countSubShapes(TopAbs_FACE));
 }
 
-// ── Name Stability Across Rebuilds ───────────────────────────
+// -- Name Stability Across Rebuilds -----------------------------------
 
 TEST(TopoNaming, NameStabilityExtrudeThenFillet) {
-    // Build: face → extrude(30) → fillet(edge[0], 2)
-    auto face1 = makeRectFace(10, 20);
-    auto ext1 = oreo::extrude(face1, gp_Vec(0, 0, 30));
-    ASSERT_FALSE(ext1.isNull());
+    auto ctx = oreo::KernelContext::create();
 
-    auto edges1 = oreo::getEdges(ext1);
+    // Build: face -> extrude(30) -> fillet(edge[0], 2)
+    auto face1 = makeRectFace(10, 20);
+    auto ext1R = oreo::extrude(*ctx, face1, gp_Vec(0, 0, 30));
+    ASSERT_TRUE(ext1R.ok());
+    auto ext1 = ext1R.value();
+
+    auto edges1 = oreo::getEdges(*ctx, ext1);
     ASSERT_GT(edges1.size(), 0u);
     std::vector<oreo::NamedEdge> fEdges1 = {edges1[0]};
-    auto fillet1 = oreo::fillet(ext1, fEdges1, 2.0);
-    ASSERT_FALSE(fillet1.isNull());
+    auto fillet1R = oreo::fillet(*ctx, ext1, fEdges1, 2.0);
+    ASSERT_TRUE(fillet1R.ok());
+    auto fillet1 = fillet1R.value();
 
     int faceCount1 = fillet1.countSubShapes(TopAbs_FACE);
 
-    // Rebuild with different extrude height: face → extrude(50) → fillet(edge[0], 2)
+    // Rebuild with different extrude height: face -> extrude(50) -> fillet(edge[0], 2)
     auto face2 = makeRectFace(10, 20);
-    auto ext2 = oreo::extrude(face2, gp_Vec(0, 0, 50));
-    ASSERT_FALSE(ext2.isNull());
+    auto ext2R = oreo::extrude(*ctx, face2, gp_Vec(0, 0, 50));
+    ASSERT_TRUE(ext2R.ok());
+    auto ext2 = ext2R.value();
 
-    auto edges2 = oreo::getEdges(ext2);
+    auto edges2 = oreo::getEdges(*ctx, ext2);
     ASSERT_GT(edges2.size(), 0u);
     std::vector<oreo::NamedEdge> fEdges2 = {edges2[0]};
-    auto fillet2 = oreo::fillet(ext2, fEdges2, 2.0);
-    ASSERT_FALSE(fillet2.isNull());
+    auto fillet2R = oreo::fillet(*ctx, ext2, fEdges2, 2.0);
+    ASSERT_TRUE(fillet2R.ok());
+    auto fillet2 = fillet2R.value();
 
     int faceCount2 = fillet2.countSubShapes(TopAbs_FACE);
 
-    // Same topology → same face count
+    // Same topology -> same face count
     EXPECT_EQ(faceCount1, faceCount2);
 }
