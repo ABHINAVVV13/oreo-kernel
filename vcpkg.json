@@ -1,0 +1,22 @@
+{
+  "name": "oreo-kernel",
+  "version": "0.1.0",
+  "description": "oreoCAD geometry kernel — OCCT wrapper with topo naming and constraint solving",
+  "dependencies": [
+    "opencascade",
+    "gtest",
+    "eigen3",
+    "boost-graph",
+    "boost-math",
+    "boost-algorithm",
+    "boost-bimap",
+    "boost-iostreams",
+    "boost-io",
+    "nlohmann-json",
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": []
+    }
+  ]
+}
