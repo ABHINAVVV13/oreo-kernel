@@ -17,6 +17,8 @@
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
 #include <TopoDS.hxx>
 #include <gp_Trsf.hxx>
 #include <Precision.hxx>
@@ -139,15 +141,33 @@ GeomResult hole(KernelContext& ctx,
         }
     }
 
-    // Create the hole cylinder
-    double holeDepth = (type == HoleType::Through) ? 1000.0 : kDepth;
+    // Compute through-hole depth from shape bounding box instead of hardcoded 1000mm
+    double throughDepth = 1000.0; // fallback
+    if (type == HoleType::Through) {
+        Bnd_Box bbox;
+        BRepBndLib::Add(solid.shape(), bbox);
+        if (!bbox.IsVoid()) {
+            double xmin, ymin, zmin, xmax, ymax, zmax;
+            bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+            double diagonal = std::sqrt((xmax-xmin)*(xmax-xmin) + (ymax-ymin)*(ymax-ymin) + (zmax-zmin)*(zmax-zmin));
+            throughDepth = diagonal * 2.0; // 2x diagonal ensures full penetration
+        }
+    }
 
+    // Create the hole cylinder directly in kernel units (already converted above)
+    double holeDepth = (type == HoleType::Through) ? throughDepth : kDepth;
     gp_Ax2 cylAxis(center, normal);
-    auto cylResult = makeCylinder(ctx, cylAxis, radius, holeDepth);
-    if (!cylResult) return scope.makeFailure<NamedShape>();
+    TopoDS_Shape cylShape = BRepPrimAPI_MakeCylinder(cylAxis, radius, holeDepth).Shape();
+    if (cylShape.IsNull()) {
+        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Failed to create hole cylinder");
+        return scope.makeFailure<NamedShape>();
+    }
+    auto cylTag = ctx.tags.nextTag();
+    NullMapper nullMapper;
+    auto cylinder = mapShapeElements(ctx, cylShape, nullMapper, {}, cylTag, "HoleCylinder");
 
     // Subtract the cylinder from the solid
-    auto cutResult = booleanSubtract(ctx, solid, cylResult.value());
+    auto cutResult = booleanSubtract(ctx, solid, cylinder);
     if (!cutResult) return scope.makeFailure<NamedShape>();
 
     return scope.makeResult(cutResult.value());

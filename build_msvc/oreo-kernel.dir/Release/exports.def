@@ -1666,10 +1666,7 @@ EXPORTS
 	??1?$handle@VPoly_Polygon3D@@@opencascade@@QEAA@XZ
 	??1?$handle@VPoly_PolygonOnTriangulation@@@opencascade@@QEAA@XZ
 	??1?$handle@VPoly_Triangulation@@@opencascade@@QEAA@XZ
-	??1?$handle@VShapeFix_Face@@@opencascade@@QEAA@XZ
 	??1?$handle@VShapeFix_Shape@@@opencascade@@QEAA@XZ
-	??1?$handle@VShapeFix_Shell@@@opencascade@@QEAA@XZ
-	??1?$handle@VShapeFix_Solid@@@opencascade@@QEAA@XZ
 	??1?$handle@VTDF_Attribute@@@opencascade@@QEAA@XZ
 	??1?$handle@VTDataStd_Name@@@opencascade@@QEAA@XZ
 	??1?$handle@VTDocStd_Document@@@opencascade@@QEAA@XZ
@@ -1770,9 +1767,6 @@ EXPORTS
 	??1?$unique_ptr@V?$vector@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@V?$allocator@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@@std@@@std@@V<lambda_1>@?1???$create@V?$vector@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@V?$allocator@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@@std@@@std@@AEBV12@@?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@CAPEAV12@AEBV12@@Z@@std@@QEAA@XZ
 	??1?$unique_ptr@V?$vector@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@V?$allocator@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@@std@@@std@@V<lambda_1>@?1???$create@V?$vector@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@V?$allocator@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@@std@@@std@@PEBV?$json_ref@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@@detail@json_abi_v3_12_0@nlohmann@@PEBV3456@@?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@CAPEAV12@$$QEAPEBV?$json_ref@V?$basic_json@Vmap@std@@Vvector@2@V?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@_N_J_KNVallocator@2@Uadl_serializer@json_abi_v3_12_0@nlohmann@@V?$vector@EV?$allocator@E@std@@@2@X@json_abi_v3_12_0@nlohmann@@@detail@56@0@Z@@std@@QEAA@XZ
 	??1?$unique_ptr@VBRepAlgoAPI_BooleanOperation@@U?$default_delete@VBRepAlgoAPI_BooleanOperation@@@std@@@std@@QEAA@XZ
-	??1?$unique_ptr@VBRepAlgoAPI_Common@@U?$default_delete@VBRepAlgoAPI_Common@@@std@@@std@@QEAA@XZ
-	??1?$unique_ptr@VBRepAlgoAPI_Cut@@U?$default_delete@VBRepAlgoAPI_Cut@@@std@@@std@@QEAA@XZ
-	??1?$unique_ptr@VBRepAlgoAPI_Fuse@@U?$default_delete@VBRepAlgoAPI_Fuse@@@std@@@std@@QEAA@XZ
 	??1?$unique_ptr@V_Facet_base@std@@U?$default_delete@V_Facet_base@std@@@2@@std@@QEAA@XZ
 	??1?$unique_ptr@V_PPLTaskChore@_DefaultPPLTaskScheduler@details@Concurrency@@U?$default_delete@V_PPLTaskChore@_DefaultPPLTaskScheduler@details@Concurrency@@@std@@@std@@QEAA@XZ
 	??1?$variant@NH_NV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@Vgp_Vec@@Vgp_Pnt@@Vgp_Dir@@Vgp_Ax1@@Vgp_Ax2@@Vgp_Pln@@UElementRef@oreo@@V?$vector@UElementRef@oreo@@V?$allocator@UElementRef@oreo@@@std@@@2@@std@@QEAA@XZ
@@ -2047,6 +2041,7 @@ EXPORTS
 	??3BRepAlgoAPI_Cut@@SAXPEAX@Z
 	??3BRepAlgoAPI_Fuse@@SAXPEAX@Z
 	??3Standard_Transient@@SAXPEAX@Z
+	??4?$NCollection_List@VTopoDS_Shape@@@@QEAAAEAV0@AEBV0@@Z
 	??4?$QList@VStringIDRef@App@@@@QEAAAEAV0@$$QEAV0@@Z
 	??4?$QList@VStringIDRef@App@@@@QEAAAEAV0@AEBV0@@Z
 	??4?$SparseMatrix@N$0A@H@Eigen@@QEAAAEAV01@AEBV01@@Z

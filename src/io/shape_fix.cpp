@@ -1,12 +1,12 @@
 // shape_fix.cpp — Production-grade multi-step ShapeFix pipeline.
 //
 // Runs multiple OCCT ShapeFix classes in sequence:
-//   1. ShapeFix_Shape (general shape fixing)
-//   2. ShapeFix_Solid (fix solid shell consistency)
-//   3. ShapeFix_Wire (fix wire edge connectivity)
-//   4. ShapeFix_Face (fix face bounds)
-//   5. ShapeUpgrade_ShellSewing (sew disconnected shells)
-//   6. SameParameter fix (fix curve/surface alignment)
+//   1. ShapeFix_Shape (general — delegates to Solid/Shell/Wire/Face internally)
+//   2. SameParameter fix (fix curve/surface alignment)
+//   3. ShapeUpgrade_ShellSewing (sew disconnected shells, last resort)
+//   4. Relaxed tolerance pass
+//
+// Exception-safe: rolls back to the original shape on OCCT Standard_Failure.
 
 #include "shape_fix.h"
 #include "core/kernel_context.h"
@@ -40,82 +40,74 @@ bool fixShape(TopoDS_Shape& shape, const TolerancePolicy& tol) {
 
     // Already valid — no fix needed
     if (isShapeValid(shape)) return false;
+
+    TopoDS_Shape original = shape; // Save for rollback
     bool modified = false;
 
-    // ── Step 1: General ShapeFix_Shape ───────────────────────
-    {
-        Handle(ShapeFix_Shape) fixer = new ShapeFix_Shape(shape);
-        fixer->SetPrecision(tol.linearPrecision);
-        fixer->SetMaxTolerance(tol.linearPrecision * 100.0);
-        fixer->SetMinTolerance(tol.linearPrecision * 0.01);
-        fixer->Perform();
-        TopoDS_Shape fixed = fixer->Shape();
-        if (!fixed.IsNull()) {
-            shape = fixed;
-            modified = true;
+    try {
+        // ── Step 1: General ShapeFix_Shape ───────────────────────
+        // ShapeFix_Shape::Perform() internally delegates to ShapeFix_Solid,
+        // ShapeFix_Shell, ShapeFix_Wire, and ShapeFix_Face, so no manual
+        // sub-shape iteration is needed.
+        {
+            Handle(ShapeFix_Shape) fixer = new ShapeFix_Shape(shape);
+            fixer->SetPrecision(tol.linearPrecision);
+            fixer->SetMaxTolerance(tol.linearPrecision * 100.0);
+            fixer->SetMinTolerance(tol.linearPrecision * 0.01);
+            fixer->Perform();
+            TopoDS_Shape fixed = fixer->Shape();
+            if (!fixed.IsNull()) {
+                shape = fixed;
+                modified = true;
+            }
         }
-    }
 
-    if (isShapeValid(shape)) return modified;
+        if (isShapeValid(shape)) return modified;
 
-    // ── Step 2: Fix solids ───────────────────────────────────
-    for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) {
-        Handle(ShapeFix_Solid) solidFix = new ShapeFix_Solid(TopoDS::Solid(ex.Current()));
-        solidFix->SetPrecision(tol.linearPrecision);
-        solidFix->Perform();
-    }
+        // ── Step 2: SameParameter fix ────────────────────────────
+        // Ensures that curves on surfaces match 3D curves
+        BRepLib::SameParameter(shape, tol.linearPrecision, Standard_True);
 
-    // ── Step 3: Fix shells ───────────────────────────────────
-    for (TopExp_Explorer ex(shape, TopAbs_SHELL); ex.More(); ex.Next()) {
-        Handle(ShapeFix_Shell) shellFix = new ShapeFix_Shell(TopoDS::Shell(ex.Current()));
-        shellFix->SetPrecision(tol.linearPrecision);
-        shellFix->Perform();
-    }
+        if (isShapeValid(shape)) return true;
 
-    // ── Step 4: Fix faces and their wires ────────────────────
-    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
-        Handle(ShapeFix_Face) faceFix = new ShapeFix_Face(TopoDS::Face(ex.Current()));
-        faceFix->SetPrecision(tol.linearPrecision);
-        faceFix->Perform();
-    }
-
-    // ── Step 5: SameParameter fix ────────────────────────────
-    // Ensures that curves on surfaces match 3D curves
-    BRepLib::SameParameter(shape, tol.linearPrecision, Standard_True);
-
-    if (isShapeValid(shape)) return true;
-
-    // ── Step 6: Shell sewing (last resort) ───────────────────
-    // Sews disconnected shells together
-    {
-        ShapeUpgrade_ShellSewing sewing;
-        TopoDS_Shape sewn = sewing.ApplySewing(shape);
-        if (!sewn.IsNull()) {
-            shape = sewn;
-            modified = true;
+        // ── Step 3: Shell sewing (last resort) ───────────────────
+        // Sews disconnected shells together
+        {
+            ShapeUpgrade_ShellSewing sewing;
+            TopoDS_Shape sewn = sewing.ApplySewing(shape);
+            if (!sewn.IsNull()) {
+                shape = sewn;
+                modified = true;
+            }
         }
-    }
 
-    if (isShapeValid(shape)) return modified;
+        if (isShapeValid(shape)) return modified;
 
-    // ── Step 7: One more pass with relaxed tolerance ─────────
-    {
-        Handle(ShapeFix_Shape) fixer = new ShapeFix_Shape(shape);
-        fixer->SetPrecision(tol.linearPrecision * 10.0);
-        fixer->SetMaxTolerance(tol.linearPrecision * 1000.0);
-        fixer->Perform();
-        TopoDS_Shape fixed = fixer->Shape();
-        if (!fixed.IsNull()) {
-            shape = fixed;
-            modified = true;
+        // ── Step 4: One more pass with relaxed tolerance ─────────
+        {
+            Handle(ShapeFix_Shape) fixer = new ShapeFix_Shape(shape);
+            fixer->SetPrecision(tol.linearPrecision * 10.0);
+            fixer->SetMaxTolerance(tol.linearPrecision * 1000.0);
+            fixer->Perform();
+            TopoDS_Shape fixed = fixer->Shape();
+            if (!fixed.IsNull()) {
+                shape = fixed;
+                modified = true;
+            }
         }
-    }
 
-    if (!isShapeValid(shape)) {
+        if (!isShapeValid(shape)) {
+            return false;
+        }
+
+        return modified;
+    } catch (const Standard_Failure&) {
+        shape = original; // Rollback
+        return false;
+    } catch (...) {
+        shape = original; // Rollback
         return false;
     }
-
-    return modified;
 }
 
 bool fixShape(TopoDS_Shape& shape) {

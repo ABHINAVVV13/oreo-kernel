@@ -27,9 +27,15 @@ GeomResult fillet(KernelContext& ctx,
     double kernelRadius = ctx.units().toKernelLength(radius);
 
     BRepFilletAPI_MakeFillet maker(solid.shape());
+    int validEdgeCount = 0;
     for (auto& e : edges) {
         if (e.edge.IsNull() || e.edge.ShapeType() != TopAbs_EDGE) continue;
         maker.Add(kernelRadius, TopoDS::Edge(e.edge));
+        ++validEdgeCount;
+    }
+    if (validEdgeCount == 0) {
+        ctx.diag.error(ErrorCode::INVALID_INPUT, "No valid edges for fillet — all edges were null or wrong type");
+        return scope.makeFailure<NamedShape>();
     }
 
     maker.Build();
@@ -76,9 +82,15 @@ GeomResult chamfer(KernelContext& ctx,
     double kernelDist = ctx.units().toKernelLength(distance);
 
     BRepFilletAPI_MakeChamfer maker(solid.shape());
+    int validEdgeCount = 0;
     for (auto& e : edges) {
         if (e.edge.IsNull() || e.edge.ShapeType() != TopAbs_EDGE) continue;
         maker.Add(kernelDist, TopoDS::Edge(e.edge));
+        ++validEdgeCount;
+    }
+    if (validEdgeCount == 0) {
+        ctx.diag.error(ErrorCode::INVALID_INPUT, "No valid edges for chamfer — all edges were null or wrong type");
+        return scope.makeFailure<NamedShape>();
     }
 
     maker.Build();

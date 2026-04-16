@@ -12,6 +12,8 @@ C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles
 C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/test_foundation_hardened.dir
 C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/test_mesh.dir
 C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/test_foundation_production.dir
+C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/test_foundation_battle.dir
+C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/test_foundation_battle2.dir
 C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/RUN_TESTS.dir
 C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/ALL_BUILD.dir
 C:/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/build_msvc/CMakeFiles/ZERO_CHECK.dir

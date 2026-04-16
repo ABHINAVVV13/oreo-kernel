@@ -18,6 +18,8 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRep_Builder.hxx>
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopTools_ListOfShape.hxx>
@@ -132,8 +134,19 @@ GeomResult splitBody(KernelContext& ctx, const NamedShape& solid, const gp_Pln& 
 
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
 
-    // Create a large face from the plane
-    BRepBuilderAPI_MakeFace planeFace(plane, -1000, 1000, -1000, 1000);
+    // Size the splitting plane based on the input shape's bounding box
+    double extent = 1000.0; // fallback
+    {
+        Bnd_Box bbox;
+        BRepBndLib::Add(solid.shape(), bbox);
+        if (!bbox.IsVoid()) {
+            double xmin, ymin, zmin, xmax, ymax, zmax;
+            bbox.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+            double diagonal = std::sqrt((xmax-xmin)*(xmax-xmin) + (ymax-ymin)*(ymax-ymin) + (zmax-zmin)*(zmax-zmin));
+            extent = diagonal * 2.0; // 2x diagonal ensures full coverage
+        }
+    }
+    BRepBuilderAPI_MakeFace planeFace(plane, -extent, extent, -extent, extent);
     if (!planeFace.IsDone()) {
         ctx.diag.error(ErrorCode::OCCT_FAILURE, "Failed to create splitting plane face");
         return scope.makeFailure<NamedShape>();

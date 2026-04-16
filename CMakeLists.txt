@@ -149,3 +149,7 @@ oreo_add_test(test_foundation_hardened tests/test_foundation/test_foundation_har
 oreo_add_test(test_mesh tests/test_mesh/test_mesh.cpp)
 
 oreo_add_test(test_foundation_production tests/test_foundation/test_foundation_production.cpp)
+
+# Foundation battle tests (adversarial: all 4 layers, threading, overflow, corruption, C API boundary)
+oreo_add_test(test_foundation_battle tests/test_foundation/test_foundation_battle.cpp)
+oreo_add_test(test_foundation_battle2 tests/test_foundation/test_foundation_battle_part2.cpp)

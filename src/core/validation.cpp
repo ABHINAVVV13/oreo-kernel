@@ -101,6 +101,11 @@ bool requireNonNegative(KernelContext& ctx, double value, const char* paramName)
 
 bool requireInRange(KernelContext& ctx, double value, double min, double max, const char* paramName) {
     if (!rejectNonFinite(ctx, value, paramName)) return false;
+    if (!std::isfinite(min) || !std::isfinite(max)) {
+        ctx.diag.error(ErrorCode::INTERNAL_ERROR,
+                       std::string("Parameter '") + paramName + "' range bounds are NaN or Inf");
+        return false;
+    }
     if (value < min || value > max) {
         ctx.diag.error(ErrorCode::INVALID_INPUT,
                        std::string("Parameter '") + paramName + "' = " + std::to_string(value)

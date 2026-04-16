@@ -63,6 +63,7 @@ bool KernelContext::isOCCTInitialized() {
 }
 
 double computeBooleanFuzzy(const KernelContext& ctx, double bboxSquareExtent) {
+    if (!std::isfinite(bboxSquareExtent) || bboxSquareExtent < 0.0) return 0.0;
     return ctx.tolerance().booleanFuzzyFactor
            * std::sqrt(bboxSquareExtent)
            * Precision::Confusion();

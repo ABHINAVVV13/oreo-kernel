@@ -82,11 +82,18 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
     if (!validation::requireMinInt(ctx, static_cast<int>(profiles.size()), 2, "profiles.size")) return scope.makeFailure<NamedShape>();
 
     BRepOffsetAPI_ThruSections maker(makeSolid ? Standard_True : Standard_False);
+    int wireCount = 0;
     for (auto& p : profiles) {
         if (p.isNull()) continue;
         if (p.shape().ShapeType() == TopAbs_WIRE) {
             maker.AddWire(TopoDS::Wire(p.shape()));
+            ++wireCount;
         }
+    }
+    if (wireCount < 2) {
+        ctx.diag.error(ErrorCode::INVALID_INPUT,
+                       "Loft requires at least 2 valid wire profiles, got " + std::to_string(wireCount));
+        return scope.makeFailure<NamedShape>();
     }
 
     maker.Build();

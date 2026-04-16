@@ -109,12 +109,23 @@ GeomResult executeBooleanWithRetry(
     auto tryBoolean = [&](const TopoDS_Shape& sa, const TopoDS_Shape& sb,
                           double fuzzy) -> std::unique_ptr<BRepAlgoAPI_BooleanOperation> {
         std::unique_ptr<BRepAlgoAPI_BooleanOperation> mkOp;
+
+        // Use default constructors — the 2-arg constructors auto-execute the
+        // operation in OCCT 7.x, which means SetFuzzyValue() would be too late.
         switch (op) {
-            case BoolOp::Fuse:   mkOp = std::make_unique<BRepAlgoAPI_Fuse>(sa, sb); break;
-            case BoolOp::Cut:    mkOp = std::make_unique<BRepAlgoAPI_Cut>(sa, sb); break;
-            case BoolOp::Common: mkOp = std::make_unique<BRepAlgoAPI_Common>(sa, sb); break;
+            case BoolOp::Fuse:   mkOp = std::make_unique<BRepAlgoAPI_Fuse>(); break;
+            case BoolOp::Cut:    mkOp = std::make_unique<BRepAlgoAPI_Cut>(); break;
+            case BoolOp::Common: mkOp = std::make_unique<BRepAlgoAPI_Common>(); break;
         }
 
+        // Set arguments explicitly before Build()
+        TopTools_ListOfShape args, tools;
+        args.Append(sa);
+        tools.Append(sb);
+        mkOp->SetArguments(args);
+        mkOp->SetTools(tools);
+
+        // Set fuzzy BEFORE Build() — this is the critical fix
         if (fuzzy > 0.0) {
             mkOp->SetFuzzyValue(fuzzy);
         } else if (fuzzy < 0.0) {
