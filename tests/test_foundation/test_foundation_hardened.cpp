@@ -308,13 +308,13 @@ TEST(DeterministicIDs, SingleDocumentModeIsSequential) {
 
 TEST(DeterministicIDs, MultiDocumentTagsEncodeDocumentId) {
     oreo::TagAllocator alloc(42);  // documentId = 42
-    long tag1 = alloc.nextTag();
-    long tag2 = alloc.nextTag();
+    auto tag1 = alloc.nextTag();
+    auto tag2 = alloc.nextTag();
 
-    // Tags encode document ID in upper 16 bits, counter in lower 16
-    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag1), 42u & 0xFFFF);
+    // Tags encode document ID in upper 32 bits, counter in lower 32
+    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag1), 42u);
     EXPECT_EQ(oreo::TagAllocator::extractCounter(tag1), 1u);
-    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag2), 42u & 0xFFFF);
+    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag2), 42u);
     EXPECT_EQ(oreo::TagAllocator::extractCounter(tag2), 2u);
 }
 
@@ -322,10 +322,10 @@ TEST(DeterministicIDs, TwoDocumentsNeverCollide) {
     oreo::TagAllocator doc1(100);
     oreo::TagAllocator doc2(200);
 
-    long tag1a = doc1.nextTag();
-    long tag2a = doc2.nextTag();
-    long tag1b = doc1.nextTag();
-    long tag2b = doc2.nextTag();
+    auto tag1a = doc1.nextTag();
+    auto tag2a = doc2.nextTag();
+    auto tag1b = doc1.nextTag();
+    auto tag2b = doc2.nextTag();
 
     // Same counter values but different document IDs → different tags
     EXPECT_NE(tag1a, tag2a);
@@ -343,9 +343,9 @@ TEST(DeterministicIDs, DocumentIdFromUUID) {
     auto ctx = oreo::KernelContext::create(config);
     EXPECT_NE(ctx->tags.documentId(), 0u);  // Should have a non-zero doc ID
 
-    long tag = ctx->tags.nextTag();
-    // Extract matches lower 16 bits of document ID
-    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), ctx->tags.documentId() & 0xFFFF);
+    auto tag = ctx->tags.nextTag();
+    // Extract matches full document ID (32-bit packing)
+    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), ctx->tags.documentId());
 }
 
 TEST(DeterministicIDs, ResetPreservesDocumentId) {
@@ -354,8 +354,8 @@ TEST(DeterministicIDs, ResetPreservesDocumentId) {
     alloc.nextTag();
     alloc.reset();
 
-    long tag = alloc.nextTag();
-    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), 77u & 0xFFFF);
+    auto tag = alloc.nextTag();
+    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), 77u);
     EXPECT_EQ(oreo::TagAllocator::extractCounter(tag), 1u);  // Counter reset, docId preserved
 }
 
