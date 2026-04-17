@@ -17,17 +17,17 @@ namespace {
 
 oreo::NamedShape makeTestBox(oreo::KernelContext& ctx, double x, double y, double z, double ox = 0, double oy = 0, double oz = 0) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(gp_Pnt(ox, oy, oz), x, y, z).Shape();
-    return oreo::NamedShape(box, ctx.tags.nextTag());
+    return oreo::NamedShape(box, ctx.tags().nextTag());
 }
 
 oreo::NamedShape makeTestSphere(oreo::KernelContext& ctx, double r, double cx = 0, double cy = 0, double cz = 0) {
     TopoDS_Shape sphere = BRepPrimAPI_MakeSphere(gp_Pnt(cx, cy, cz), r).Shape();
-    return oreo::NamedShape(sphere, ctx.tags.nextTag());
+    return oreo::NamedShape(sphere, ctx.tags().nextTag());
 }
 
 oreo::NamedShape makeTestCylinder(oreo::KernelContext& ctx, double r, double h) {
     TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(r, h).Shape();
-    return oreo::NamedShape(cyl, ctx.tags.nextTag());
+    return oreo::NamedShape(cyl, ctx.tags().nextTag());
 }
 
 } // anonymous namespace
@@ -43,7 +43,7 @@ TEST(BooleanStress, NearCoincidentFaces) {
     auto result = oreo::booleanUnion(*ctx, a, b);
     // Should either succeed or give a structured error, not crash
     if (!result.ok()) {
-        EXPECT_TRUE(ctx->diag.hasErrors());
+        EXPECT_TRUE(ctx->diag().hasErrors());
     } else {
         EXPECT_GT(result.value().countSubShapes(TopAbs_FACE), 0);
     }
@@ -59,7 +59,7 @@ TEST(BooleanStress, ThinWallSubtract) {
 
     auto result = oreo::booleanSubtract(*ctx, outer, inner);
     if (!result.ok()) {
-        EXPECT_TRUE(ctx->diag.hasErrors());
+        EXPECT_TRUE(ctx->diag().hasErrors());
     } else {
         auto propsR = oreo::massProperties(*ctx, result.value());
         ASSERT_TRUE(propsR.ok());
@@ -80,7 +80,7 @@ TEST(BooleanStress, TangentSphereCylinder) {
 
     auto result = oreo::booleanUnion(*ctx, sphere, cyl);
     if (!result.ok()) {
-        EXPECT_TRUE(ctx->diag.hasErrors());
+        EXPECT_TRUE(ctx->diag().hasErrors());
     } else {
         EXPECT_GT(result.value().countSubShapes(TopAbs_FACE), 0);
     }

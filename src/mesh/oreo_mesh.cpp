@@ -14,6 +14,7 @@
 //   5. Map face/edge indices to element map names
 
 #include "oreo_mesh.h"
+#include "core/diagnostic_scope.h"
 #include "core/validation.h"
 #include "query/oreo_query.h"
 
@@ -42,6 +43,7 @@
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <vector>
@@ -569,33 +571,84 @@ void extractEdges(const NamedShape& shape,
 
 } // anonymous namespace
 
+// ─── Deflection resolution ──────────────────────────────────────────
+
+double resolveLinearDeflection(const NamedShape& shape, const MeshParams& params) {
+    if (params.deflectionMode == DeflectionMode::Absolute) {
+        return params.linearDeflection;
+    }
+
+    // Compute the shape's bounding box diagonal. Used as the reference length
+    // for both Relative (user-specified fraction) and Auto (fixed 0.5%) modes.
+    double diagonal = 0.0;
+    if (!shape.isNull()) {
+        Bnd_Box box;
+        BRepBndLib::Add(shape.shape(), box);
+        if (!box.IsVoid()) {
+            double xmin, ymin, zmin, xmax, ymax, zmax;
+            box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+            double dx = xmax - xmin, dy = ymax - ymin, dz = zmax - zmin;
+            diagonal = std::sqrt(dx * dx + dy * dy + dz * dz);
+        }
+    }
+
+    // If we couldn't get a usable diagonal, fall back to the absolute value.
+    // This also catches degenerate zero-volume shapes.
+    if (!(diagonal > 0.0) || !std::isfinite(diagonal)) {
+        return params.linearDeflection > 0.0 ? params.linearDeflection : 0.1;
+    }
+
+    double fraction = (params.deflectionMode == DeflectionMode::Auto)
+        ? 0.005                       // 0.5% — typical CAD viewer default
+        : params.linearDeflection;    // Relative: user picks the fraction
+
+    double d = diagonal * fraction;
+
+    // Floor at 0.001 mm. Without this, microscopic shapes (e.g., 0.01 mm
+    // bolts) would request sub-micron deflection and the mesher would
+    // explode in triangle count. 1 µm is below any reasonable visual
+    // resolution and prevents pathological over-tessellation.
+    constexpr double kMinDeflection = 0.001;
+    if (d < kMinDeflection) d = kMinDeflection;
+
+    return d;
+}
+
 // ─── Full tessellation ───────────────────────────────────────────────
 
-MeshResult tessellate(KernelContext& ctx,
-                      const NamedShape& shape,
-                      const MeshParams& params)
+OperationResult<MeshResult> tessellate(KernelContext& ctx,
+                                       const NamedShape& shape,
+                                       const MeshParams& params)
 {
+    DiagnosticScope scope(ctx);
     MeshResult result;
 
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot tessellate null shape");
-        return result;
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot tessellate null shape");
+        return scope.makeFailure<MeshResult>();
     }
-    if (params.linearDeflection <= 0) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Linear deflection must be positive");
-        return result;
+    if (params.deflectionMode == DeflectionMode::Absolute && params.linearDeflection <= 0) {
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Linear deflection must be positive");
+        return scope.makeFailure<MeshResult>();
     }
+    if (params.deflectionMode == DeflectionMode::Relative && params.linearDeflection <= 0) {
+        ctx.diag().error(ErrorCode::INVALID_INPUT,
+            "Relative deflection fraction must be positive");
+        return scope.makeFailure<MeshResult>();
+    }
+
+    const double effectiveLinear = resolveLinearDeflection(shape, params);
 
     // ── Step 1: Tessellate ───────────────────────────────────
     double angularRad = params.angularDeflection * M_PI / 180.0;
-    BRepMesh_IncrementalMesh mesher(shape.shape(), params.linearDeflection,
+    BRepMesh_IncrementalMesh mesher(shape.shape(), effectiveLinear,
                                     Standard_False, angularRad,
                                     params.parallel ? Standard_True : Standard_False);
     mesher.Perform();
 
     if (!mesher.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepMesh_IncrementalMesh failed");
-        return result;
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepMesh_IncrementalMesh failed");
+        return scope.makeFailure<MeshResult>();
     }
 
     // ── Step 2: Extract per-face meshes using shared logic ───
@@ -616,35 +669,41 @@ MeshResult tessellate(KernelContext& ctx,
         extractEdges(shape, faceMap, result);
     }
 
-    // Report diagnostics summary
+    // Report diagnostics summary (warnings only — not fatal)
     if (result.failedFaces > 0) {
-        ctx.diag.warning(ErrorCode::OCCT_FAILURE,
+        ctx.diag().warning(ErrorCode::OCCT_FAILURE,
             std::to_string(result.failedFaces) + " face(s) could not be tessellated");
     }
     if (result.degenerateTriangles > 0) {
-        ctx.diag.warning(ErrorCode::SHAPE_INVALID,
+        ctx.diag().warning(ErrorCode::SHAPE_INVALID,
             std::to_string(result.degenerateTriangles) + " degenerate triangle(s) detected");
     }
 
-    return result;
+    return scope.makeResult(std::move(result));
 }
 
 // ─── Incremental tessellation ────────────────────────────────────────
 
-MeshResult tessellateIncremental(KernelContext& ctx,
-                                 const NamedShape& shape,
-                                 MeshCache& cache,
-                                 const MeshParams& params)
+OperationResult<MeshResult> tessellateIncremental(KernelContext& ctx,
+                                                  const NamedShape& shape,
+                                                  MeshCache& cache,
+                                                  const MeshParams& params)
 {
+    DiagnosticScope scope(ctx);
     MeshResult result;
 
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot tessellate null shape");
-        return result;
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot tessellate null shape");
+        return scope.makeFailure<MeshResult>();
     }
-    if (params.linearDeflection <= 0) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Linear deflection must be positive");
-        return result;
+    if (params.deflectionMode == DeflectionMode::Absolute && params.linearDeflection <= 0) {
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Linear deflection must be positive");
+        return scope.makeFailure<MeshResult>();
+    }
+    if (params.deflectionMode == DeflectionMode::Relative && params.linearDeflection <= 0) {
+        ctx.diag().error(ErrorCode::INVALID_INPUT,
+            "Relative deflection fraction must be positive");
+        return scope.makeFailure<MeshResult>();
     }
 
     // If params changed, invalidate entire cache
@@ -653,16 +712,18 @@ MeshResult tessellateIncremental(KernelContext& ctx,
         cache.setCachedParams(params);
     }
 
+    const double effectiveLinear = resolveLinearDeflection(shape, params);
+
     // Tessellate the shape (OCCT's BRepMesh handles incremental internally)
     double angularRad = params.angularDeflection * M_PI / 180.0;
-    BRepMesh_IncrementalMesh mesher(shape.shape(), params.linearDeflection,
+    BRepMesh_IncrementalMesh mesher(shape.shape(), effectiveLinear,
                                     Standard_False, angularRad,
                                     params.parallel ? Standard_True : Standard_False);
     mesher.Perform();
 
     if (!mesher.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepMesh_IncrementalMesh failed");
-        return result;
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepMesh_IncrementalMesh failed");
+        return scope.makeFailure<MeshResult>();
     }
 
     // Extract per-face meshes, using cache where available
@@ -699,22 +760,47 @@ MeshResult tessellateIncremental(KernelContext& ctx,
         extractEdges(shape, faceMap, result);
     }
 
-    // Report diagnostics
+    // Report diagnostics (warnings only — not fatal)
     if (result.failedFaces > 0) {
-        ctx.diag.warning(ErrorCode::OCCT_FAILURE,
+        ctx.diag().warning(ErrorCode::OCCT_FAILURE,
             std::to_string(result.failedFaces) + " face(s) could not be tessellated");
     }
     if (result.degenerateTriangles > 0) {
-        ctx.diag.warning(ErrorCode::SHAPE_INVALID,
+        ctx.diag().warning(ErrorCode::SHAPE_INVALID,
             std::to_string(result.degenerateTriangles) + " degenerate triangle(s) detected");
     }
     if (cacheHits > 0) {
-        ctx.diag.info(ErrorCode::OK,
+        ctx.diag().info(ErrorCode::OK,
             "Incremental mesh: " + std::to_string(cacheHits) + " cached, "
             + std::to_string(cacheMisses) + " retessellated");
     }
 
-    return result;
+    return scope.makeResult(std::move(result));
+}
+
+// ─── Selection helper ────────────────────────────────────────────────
+
+int MeshResult::faceIdForTriangle(uint32_t triangleIndex) const {
+    // Each triangle occupies 3 consecutive entries in `indices`. Face groups
+    // are appended in ascending face-ID order and their [indexStart,
+    // indexStart+indexCount) ranges partition the index array without gaps,
+    // so a std::upper_bound on indexStart locates the owning group.
+    const uint32_t idxPos = triangleIndex * 3u;
+    if (idxPos >= indices.size()) return -1;
+    if (faceGroups.empty()) return -1;
+
+    // Find the first group whose indexStart is strictly greater than idxPos.
+    // The owning group is the one immediately before it.
+    auto it = std::upper_bound(
+        faceGroups.begin(), faceGroups.end(), idxPos,
+        [](uint32_t pos, const FaceGroup& g) { return pos < g.indexStart; });
+    if (it == faceGroups.begin()) return -1; // idxPos before first group
+
+    --it;
+    if (idxPos < it->indexStart + it->indexCount) {
+        return it->faceId;
+    }
+    return -1; // idxPos fell into a gap (shouldn't happen with valid meshes)
 }
 
 } // namespace oreo

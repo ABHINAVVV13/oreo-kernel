@@ -123,7 +123,7 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             auto toolRef = feature.get<ElementRef>("tool");
             auto toolShape = resolveRef(feature, toolRef, resolver);
             if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-            NamedShape tool(toolShape, ctx.tags.nextTag());
+            NamedShape tool(toolShape, ctx.tags().nextTag());
             return extractResult(feature, booleanUnion(ctx, currentShape, tool));
         }
 
@@ -132,7 +132,7 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             auto toolRef = feature.get<ElementRef>("tool");
             auto toolShape = resolveRef(feature, toolRef, resolver);
             if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-            NamedShape tool(toolShape, ctx.tags.nextTag());
+            NamedShape tool(toolShape, ctx.tags().nextTag());
             return extractResult(feature, booleanSubtract(ctx, currentShape, tool));
         }
 
@@ -205,7 +205,7 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             }
             auto profileShape = resolveRef(feature, profileRef, resolver);
             if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-            NamedShape profile(profileShape, ctx.tags.nextTag());
+            NamedShape profile(profileShape, ctx.tags().nextTag());
             return extractResult(feature, pocket(ctx, currentShape, profile, depth));
         }
 
@@ -260,7 +260,7 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             for (auto& ref : shapeRefs) {
                 auto resolved = resolveRef(feature, ref, resolver);
                 if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-                shapes.emplace_back(resolved, ctx.tags.nextTag());
+                shapes.emplace_back(resolved, ctx.tags().nextTag());
             }
             return extractResult(feature, combine(ctx, shapes));
         }
@@ -277,7 +277,7 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             }
             auto profileShape = resolveRef(feature, profileRef, resolver);
             if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-            NamedShape ribProfile(profileShape, ctx.tags.nextTag());
+            NamedShape ribProfile(profileShape, ctx.tags().nextTag());
             return extractResult(feature, rib(ctx, currentShape, ribProfile, dir, thickness));
         }
 

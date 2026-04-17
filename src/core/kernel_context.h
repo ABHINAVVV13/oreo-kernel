@@ -2,8 +2,8 @@
 //
 // KernelContext replaces ALL global state in oreo-kernel:
 //   - Global tolerance → ctx.tolerance()
-//   - Global error thread-local → ctx.diag
-//   - Global nextTag() → ctx.tags
+//   - Global error thread-local → ctx.diag()
+//   - Global nextTag() → ctx.tags()
 //   - Assumed units → ctx.units()
 //   - No schema versioning → ctx.schemas()
 //
@@ -12,6 +12,13 @@
 //
 // Thread safety: CONTEXT_BOUND — one context per thread.
 // Multiple threads can have separate contexts and operate independently.
+//
+// Breaking change (P0 audit): the formerly-public data members `tags`
+// and `diag` have been replaced by accessor functions `tags()` /
+// `diag()`. C++ does not allow a data member and a member function to
+// share a name, so the deprecated-alias approach was not feasible.
+// Callers must migrate `ctx.tags.X` → `ctx.tags().X` and `ctx.diag.X`
+// → `ctx.diag().X`. This is a mechanical rename.
 
 #ifndef OREO_KERNEL_CONTEXT_H
 #define OREO_KERNEL_CONTEXT_H
@@ -21,6 +28,9 @@
 #include "units.h"
 #include "schema.h"
 #include "thread_safety.h"
+#include "cancellation.h"
+#include "progress.h"
+#include "resource_quotas.h"
 
 #include <memory>
 #include <string>
@@ -43,38 +53,123 @@ struct KernelConfig {
     TolerancePolicy tolerance;      // Defaults from TolerancePolicy struct
     UnitSystem units;               // Defaults from UnitSystem struct
     int64_t tagSeed = 0;             // Starting tag counter value (0 = fresh)
-    uint32_t documentId = 0;        // Document ID for cross-document tag uniqueness
+    uint64_t documentId = 0;        // Document ID for cross-document tag uniqueness
                                     // 0 = single-document mode (tags are 1, 2, 3...)
-                                    // nonzero = tags encode (docId << 32) | counter
+                                    // nonzero = multi-document mode (SipHash-derived, uint64)
     std::string documentUUID;       // If set, documentId is auto-computed from this
     bool initOCCT = true;           // Call OSD::SetSignal on first context
+    ResourceQuotas quotas;          // Per-context resource limits (defaults = lightly bounded)
 };
 
 // ─── The context object ──────────────────────────────────────
 
 class OREO_CONTEXT_BOUND KernelContext {
 public:
-    // ── Active subsystems ────────────────────────────────
-    // These are public because geometry operations use them directly:
-    //   ctx.tags.nextTag() in every geometry op
-    //   ctx.diag.error() / ctx.diag.report() in every geometry op
-    // Making them private would add accessor boilerplate with no safety gain,
-    // since both are CONTEXT_BOUND (single-owner, single-thread).
+    // ── Core subsystem accessors ─────────────────────────
+    //
+    // `tags()` and `diag()` replace the previously-public data members
+    // of the same name. Callers must migrate from member access
+    // (`ctx.tags.X`) to function call (`ctx.tags().X`) — the audit
+    // authorized this breaking change because C++ does not allow a
+    // data member and a member function to share a name.
 
-    TagAllocator tags;              // Deterministic tag allocation
-    DiagnosticCollector diag;       // Structured diagnostics
+    TagAllocator&              tags()       noexcept { return tags_; }
+    const TagAllocator&        tags() const noexcept { return tags_; }
+    DiagnosticCollector&       diag()       noexcept { return diag_; }
+    const DiagnosticCollector& diag() const noexcept { return diag_; }
 
     // ── Read-only policy access ──────────────────────────
 
-    const TolerancePolicy& tolerance() const { return tolerance_; }
-    const UnitSystem& units() const { return units_; }
-    const SchemaRegistry& schemas() const { return schemas_; }
-    SchemaRegistry& schemas() { return schemas_; } // Mutable for migration registration
+    const TolerancePolicy& tolerance() const noexcept { return tolerance_; }
+    const UnitSystem&      units()     const noexcept { return units_; }
+    const ResourceQuotas&  quotas()    const noexcept { return quotas_; }
+
+    // ── Schema registry access ───────────────────────────
+    //
+    // schemas() is always available (returns const). mutableSchemas()
+    // is gated on the `schemasFrozen_` flag: after freezeSchemas() has
+    // been called, any attempt to mutate the registry reports a
+    // diagnostic and returns the registry anyway (lenient degrade).
+    // Call freezeSchemas() once migration registration is complete and
+    // the context is ready for serialization work.
+
+    const SchemaRegistry& schemas() const noexcept { return schemas_; }
+
+    // Legacy mutable overload: kept for source compatibility.
+    // Equivalent to mutableSchemas() but without the frozen diagnostic
+    // (pre-freeze workflows relied on this being silent).
+    SchemaRegistry& schemas() noexcept { return schemas_; }
+
+    // Preferred mutable accessor. Reports an Error diagnostic if the
+    // registry has been frozen (schemasFrozen_ == true). Still returns
+    // a reference to preserve callers that assume non-null semantics.
+    SchemaRegistry& mutableSchemas();
+
+    // Lock the schema registry against further mutation. Idempotent.
+    void freezeSchemas() noexcept { schemasFrozen_ = true; }
+
+    // Query the frozen state.
+    bool schemasFrozen() const noexcept { return schemasFrozen_; }
+
+    // ── Cancellation ─────────────────────────────────────
+    //
+    // A context always has an associated cancellation token. It is
+    // lazily created on first access so that contexts that never use
+    // cancellation don't pay the allocation cost.
+
+    CancellationTokenPtr cancellationToken();
+
+    // Replace the current cancellation token (useful for wiring a
+    // single UI-owned token into multiple worker contexts).
+    void setCancellationToken(CancellationTokenPtr token) noexcept {
+        cancellationToken_ = std::move(token);
+    }
+
+    // Return true iff the token is set and cancelled. On cancellation,
+    // reports an Error diagnostic (code CANCELLED) so that surrounding
+    // code paths can observe it through the diagnostic stream in
+    // addition to the boolean return value.
+    bool checkCancellation();
+
+    // ── Progress reporting ───────────────────────────────
+
+    void setProgressCallback(ProgressCallback cb) noexcept {
+        progressCb_ = std::move(cb);
+    }
+    bool hasProgressCallback() const noexcept {
+        return static_cast<bool>(progressCb_);
+    }
+
+    // Invoke the progress callback if set. `fraction` is clamped to
+    // [0, 1] before forwarding. Safe to call even when no callback
+    // has been attached (no-op). Any exception thrown by the callback
+    // is swallowed — progress reporting is best-effort and must never
+    // disrupt a geometry operation.
+    void reportProgress(double fraction, const std::string& phase);
 
     // ── Factory ──────────────────────────────────────────
 
     // Create a new context with the given configuration.
     static std::shared_ptr<KernelContext> create(const KernelConfig& config = {});
+
+    // ── Copy / reset / merge ─────────────────────────────
+
+    // Deep-ish copy: duplicates config/tolerance/units/quotas,
+    // tag allocator state (counter + docId), schema registry, and a
+    // snapshot of the diagnostic buffer. The progress callback and
+    // cancellation token are deliberately NOT copied — each context
+    // owns its own cancellation/progress wiring.
+    std::unique_ptr<KernelContext> clone() const;
+
+    // Append diagnostics from `other` into this context's collector.
+    // Does not touch tolerance, units, tags, schemas, or callbacks.
+    void merge(const KernelContext& other);
+
+    // Clear transient state (diagnostics, cancellation flag) while
+    // preserving the immutable policy (tolerance, units, schemas,
+    // tags). Quotas, progress callback and cancellation-token owner
+    // pointer are preserved; only the cancellation flag is reset.
+    void safeReset();
 
     // ── Lifecycle ────────────────────────────────────────
 
@@ -87,16 +182,61 @@ public:
     // ── Context identity ─────────────────────────────────
 
     // Each context has a unique ID (for debugging/logging).
-    const std::string& id() const { return id_; }
+    const std::string& id() const noexcept { return id_; }
+
+    // Numeric form of the context ID (monotonic within a process).
+    uint64_t numericId() const noexcept { return numericId_; }
+
+    // ── Config validation ────────────────────────────────
+
+    // Validate + clamp a KernelConfig, reporting a Fatal diagnostic
+    // for each field that had to be clamped. Public so that callers
+    // can pre-check a config against a scratch DiagnosticCollector
+    // before handing it to create(). The primary ctor uses this path
+    // internally as well.
+    static KernelConfig sanitizeConfig(const KernelConfig& config,
+                                       DiagnosticCollector& diag);
 
 private:
-    KernelContext() = default;
+    // Primary constructor. Accepts a raw KernelConfig; validates and
+    // clamps it, records diagnostics for any clamping into diag_ once
+    // the member is live.
     explicit KernelContext(const KernelConfig& config);
 
+    // Pure sanitization helper — returns a clamped config without
+    // emitting diagnostics. Used by the initializer list to populate
+    // the const `tolerance_` / `units_` members. Safe to invoke
+    // multiple times on the same input.
+    static KernelConfig sanitizeConfigSilent(const KernelConfig& config) noexcept;
+
+    // Diagnostic-producing sanitization helper — called once from the
+    // ctor body after diag_ is live. Reports a Fatal diagnostic for
+    // each field that would have been clamped.
+    static void reportSanitization(const KernelConfig& raw,
+                                   DiagnosticCollector& diag);
+
+    // Apply the quotas that have a direct runtime effect (currently
+    // just maxDiagnostics, which caps the DiagnosticCollector buffer).
+    void applyQuotas();
+
+    // ── Data ─────────────────────────────────────────────
+    //
+    // Declaration order matters: tags_ and diag_ appear first so that
+    // later members (and the ctor body) can reference them freely.
+
+    TagAllocator          tags_;
+    DiagnosticCollector   diag_;
+    const TolerancePolicy tolerance_;   // Immutable after construction.
+    const UnitSystem      units_;       // Immutable after construction.
+    ResourceQuotas        quotas_;
+    SchemaRegistry        schemas_;
+    bool                  schemasFrozen_ = false;
+
+    CancellationTokenPtr  cancellationToken_;
+    ProgressCallback      progressCb_;
+
     std::string id_;
-    TolerancePolicy tolerance_;     // Per-context tolerance policy
-    UnitSystem units_;              // Per-context unit system
-    SchemaRegistry schemas_;        // Schema versioning + migration
+    uint64_t    numericId_ = 0;
 };
 
 // ─── Free functions ─────────────────────────────────────────
@@ -104,6 +244,13 @@ private:
 // Compute auto-fuzzy tolerance for boolean operations.
 // Formula (from FreeCAD): factor * sqrt(bboxExtent) * Precision::Confusion()
 // Uses ctx.tolerance().booleanFuzzyFactor.
+//
+// Takes non-const ctx so that a warning can be routed to its diagnostic
+// collector when the bbox is non-finite (previously this was silent).
+double computeBooleanFuzzy(KernelContext& ctx, double bboxSquareExtent);
+
+// Backward-compatible const overload: non-finite inputs are still
+// handled, but no diagnostic is emitted (nowhere to route it).
 double computeBooleanFuzzy(const KernelContext& ctx, double bboxSquareExtent);
 
 } // namespace oreo

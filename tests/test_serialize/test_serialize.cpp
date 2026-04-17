@@ -14,7 +14,7 @@ namespace {
 
 oreo::NamedShape makeBoxLocal(oreo::KernelContext& ctx, double x, double y, double z) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, ctx.tags.nextTag());
+    return oreo::NamedShape(box, ctx.tags().nextTag());
 }
 
 } // anonymous namespace
@@ -52,7 +52,7 @@ TEST(Serialize, NullShapeFails) {
     oreo::NamedShape null;
     auto bufR = oreo::serialize(*ctx, null);
     EXPECT_FALSE(bufR.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Serialize, TruncatedDataFails) {
@@ -65,7 +65,7 @@ TEST(Serialize, TruncatedDataFails) {
     auto result = oreo::deserialize(*ctx, buf.data(), 4);
     // Should either fail or produce a meaningful error
     if (!result.ok()) {
-        EXPECT_TRUE(ctx->diag.hasErrors());
+        EXPECT_TRUE(ctx->diag().hasErrors());
     }
 }
 
@@ -79,7 +79,7 @@ TEST(Serialize, ElementMapPreserved) {
 
     // Construct NamedShape with element map in constructor (setElementMap is deleted)
     TopoDS_Shape boxShape = BRepPrimAPI_MakeBox(10, 10, 10).Shape();
-    oreo::NamedShape box(boxShape, map, ctx->tags.nextTag());
+    oreo::NamedShape box(boxShape, map, ctx->tags().nextTag());
 
     auto buf = oreo::serialize(*ctx, box).value();
     ASSERT_FALSE(buf.empty());

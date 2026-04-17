@@ -25,7 +25,7 @@ oreo::NamedShape makeRectWire(oreo::KernelContext& ctx, double w, double h) {
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    return oreo::NamedShape(wireBuilder.Wire(), ctx.tags.nextTag());
+    return oreo::NamedShape(wireBuilder.Wire(), ctx.tags().nextTag());
 }
 
 oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
@@ -36,7 +36,7 @@ oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace faceBuilder(wireBuilder.Wire());
-    return oreo::NamedShape(faceBuilder.Face(), ctx.tags.nextTag());
+    return oreo::NamedShape(faceBuilder.Face(), ctx.tags().nextTag());
 }
 
 } // anonymous namespace
@@ -63,7 +63,7 @@ TEST(Geometry, ExtrudeNullShape) {
     oreo::NamedShape null;
     auto result = oreo::extrude(*ctx, null, gp_Vec(0, 0, 10));
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Geometry, ExtrudeZeroVector) {
@@ -71,7 +71,7 @@ TEST(Geometry, ExtrudeZeroVector) {
     auto face = makeRectFace(*ctx, 10, 20);
     auto result = oreo::extrude(*ctx, face, gp_Vec(0, 0, 0));
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // -- Revolve ----------------------------------------------------------
@@ -96,7 +96,7 @@ TEST(Geometry, BooleanUnionTwoBoxes) {
     auto a = aR.value();
     // Second box offset by 5 in X -- overlapping
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(5, 0, 0), 10, 10, 10).Shape();
-    oreo::NamedShape b(box2, ctx->tags.nextTag());
+    oreo::NamedShape b(box2, ctx->tags().nextTag());
 
     auto resultR = oreo::booleanUnion(*ctx, a, b);
     ASSERT_TRUE(resultR.ok());
@@ -115,7 +115,7 @@ TEST(Geometry, BooleanSubtract) {
     ASSERT_TRUE(aR.ok());
     auto a = aR.value();
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(2, 2, -1), 6, 6, 12).Shape();
-    oreo::NamedShape b(box2, ctx->tags.nextTag());
+    oreo::NamedShape b(box2, ctx->tags().nextTag());
 
     auto resultR = oreo::booleanSubtract(*ctx, a, b);
     ASSERT_TRUE(resultR.ok());
@@ -137,7 +137,7 @@ TEST(Geometry, BooleanIntersect) {
     ASSERT_TRUE(aR.ok());
     auto a = aR.value();
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(5, 5, 5), 10, 10, 10).Shape();
-    oreo::NamedShape b(box2, ctx->tags.nextTag());
+    oreo::NamedShape b(box2, ctx->tags().nextTag());
 
     auto resultR = oreo::booleanIntersect(*ctx, a, b);
     ASSERT_TRUE(resultR.ok());
@@ -268,7 +268,7 @@ TEST(Query, MeasureDistance) {
     auto ctx = oreo::KernelContext::create();
     auto a = oreo::makeBox(*ctx, 10, 10, 10).value();
     TopoDS_Shape box2 = BRepPrimAPI_MakeBox(gp_Pnt(20, 0, 0), 10, 10, 10).Shape();
-    oreo::NamedShape b(box2, ctx->tags.nextTag());
+    oreo::NamedShape b(box2, ctx->tags().nextTag());
 
     auto distR = oreo::measureDistance(*ctx, a, b);
     ASSERT_TRUE(distR.ok());

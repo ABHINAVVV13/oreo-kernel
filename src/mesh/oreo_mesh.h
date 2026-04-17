@@ -14,6 +14,7 @@
 #define OREO_MESH_H
 
 #include "core/kernel_context.h"
+#include "core/operation_result.h"
 #include "naming/named_shape.h"
 
 #include <TopoDS_Face.hxx>
@@ -28,13 +29,49 @@ namespace oreo {
 
 // ─── Mesh quality parameters ─────────────────────────────────
 
+// How to interpret linearDeflection. Angular deflection is always absolute
+// (angles are scale-invariant).
+//
+//   Absolute — linearDeflection is chord tolerance in document units (mm).
+//              A 1 mm part and a 10 m part get the SAME triangle density.
+//              Use when you want pixel-perfect precision or back-compat.
+//
+//   Relative — linearDeflection is a fraction of the shape's bounding-box
+//              diagonal. 0.005 means "chord tolerance = 0.5% of shape size"
+//              which is the FreeCAD / OCCT default for CAD viewers.
+//
+//   Auto     — Implementation picks a sensible relative deflection (0.5% of
+//              bounding-box diagonal, floored at 0.001 mm to avoid degenerate
+//              over-tessellation on tiny shapes). This is the recommended
+//              setting for interactive visualization.
+enum class DeflectionMode {
+    Absolute,
+    Relative,
+    Auto,
+};
+
 struct MeshParams {
-    double linearDeflection = 0.1;    // Chord tolerance (mm) — lower = more triangles
-    double angularDeflection = 20.0;  // Angular tolerance (degrees) — lower = smoother curves
+    double linearDeflection = 0.1;    // Chord tolerance — interpretation depends on deflectionMode
+    double angularDeflection = 20.0;  // Angular tolerance (degrees) — always absolute
+    DeflectionMode deflectionMode = DeflectionMode::Absolute;  // Default: back-compat absolute
     bool computeNormals = true;       // Compute per-vertex normals for smooth shading
     bool extractEdges = true;         // Extract edge wireframe line strips
-    bool parallel = true;             // Use parallel meshing (OCCT InParallel)
+
+    // UNSAFE: enables OCCT's internal parallel meshing (BRepMesh InParallel).
+    // OCCT maintains process-wide static caches that are NOT thread-safe, so
+    // turning this on contradicts the documented thread-safety rule
+    // (see src/core/thread_safety.h rule #2). Only enable in single-worker
+    // processes where no other OCCT work runs concurrently.
+    // Default: false. The previous default (true) was unsafe.
+    bool parallel = false;
 };
+
+// Compute the effective absolute linear deflection for a shape, given the
+// requested MeshParams. Exposed so callers (and tests) can inspect what value
+// will be used. For Relative/Auto modes, the bounding-box diagonal of the
+// shape is computed internally. Returns the same value that tessellate() /
+// tessellateIncremental() will pass to BRepMesh_IncrementalMesh.
+double resolveLinearDeflection(const NamedShape& shape, const MeshParams& params);
 
 // ─── Per-face group in the mesh ──────────────────────────────
 
@@ -101,6 +138,19 @@ struct MeshResult {
 
     // Check if all faces tessellated successfully
     bool allFacesOK() const { return failedFaces == 0; }
+
+    // Map a triangle index (0-based, within `indices`/3 triangle space) back
+    // to the 1-based face ID it belongs to. Returns -1 if triangleIndex is
+    // out of range or no face group covers it.
+    //
+    // Typical use: a renderer records which triangle the user clicked (via
+    // its own picking pipeline) and calls this to resolve the CAD face ID.
+    // The caller can then look up faceGroups[i].faceName for a stable
+    // element-map name suitable for feature-tree references.
+    //
+    // Complexity: O(log n) in face-group count (binary search over
+    // indexStart). Face groups are already stored in face-ID order.
+    int faceIdForTriangle(uint32_t triangleIndex) const;
 };
 
 // ─── Mesh Cache (for incremental meshing) ────────────────────
@@ -161,16 +211,20 @@ uint64_t computeFaceFingerprint(const TopoDS_Face& face);
 // ─── Tessellation API ────────────────────────────────────────
 
 // Full tessellation (no cache).
-MeshResult tessellate(KernelContext& ctx,
-                      const NamedShape& shape,
-                      const MeshParams& params = {});
+// Returns OperationResult<MeshResult> — check .ok() before reading the value.
+// On invalid input or OCCT failure the result is .ok()==false with diagnostics
+// attached to the scope; on success the MeshResult is populated and any
+// per-face tessellation warnings are still attached as diagnostics.
+OperationResult<MeshResult> tessellate(KernelContext& ctx,
+                                       const NamedShape& shape,
+                                       const MeshParams& params = {});
 
 // Incremental tessellation (uses cache, remeshes only changed/invalidated faces).
 // Pass the same cache across calls. If params change, cache is automatically invalidated.
-MeshResult tessellateIncremental(KernelContext& ctx,
-                                 const NamedShape& shape,
-                                 MeshCache& cache,
-                                 const MeshParams& params = {});
+OperationResult<MeshResult> tessellateIncremental(KernelContext& ctx,
+                                                  const NamedShape& shape,
+                                                  MeshCache& cache,
+                                                  const MeshParams& params = {});
 
 } // namespace oreo
 

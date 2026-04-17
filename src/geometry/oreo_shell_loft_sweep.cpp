@@ -2,6 +2,7 @@
 
 #include "oreo_geometry.h"
 #include "core/diagnostic_scope.h"
+#include "core/occt_try.h"
 #include "core/validation.h"
 #include "io/shape_fix.h"
 #include "naming/map_shape_elements.h"
@@ -27,14 +28,15 @@ GeomResult shell(KernelContext& ctx,
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
     if (!validation::requireNonEmpty(ctx, facesToRemove, "facesToRemove")) return scope.makeFailure<NamedShape>();
     if (!std::isfinite(thickness)) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Shell thickness is NaN or Inf");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Shell thickness is NaN or Inf");
         return scope.makeFailure<NamedShape>();
     }
     if (std::abs(thickness) < 1e-10) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Shell thickness is zero");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Shell thickness is zero");
         return scope.makeFailure<NamedShape>();
     }
 
+    OREO_OCCT_TRY
     // Unit conversion: thickness is a length
     const double kThickness = ctx.units().toKernelLength(thickness);
 
@@ -48,13 +50,13 @@ GeomResult shell(KernelContext& ctx,
     maker.Build();
 
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_MakeThickSolid failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_MakeThickSolid failed");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Shell produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Shell produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -66,14 +68,15 @@ GeomResult shell(KernelContext& ctx,
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "Shell result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Shell");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "shell")
 }
 
 GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, bool makeSolid) {
@@ -81,6 +84,7 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
 
     if (!validation::requireMinInt(ctx, static_cast<int>(profiles.size()), 2, "profiles.size")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     BRepOffsetAPI_ThruSections maker(makeSolid ? Standard_True : Standard_False);
     int wireCount = 0;
     for (auto& p : profiles) {
@@ -91,20 +95,20 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
         }
     }
     if (wireCount < 2) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT,
+        ctx.diag().error(ErrorCode::INVALID_INPUT,
                        "Loft requires at least 2 valid wire profiles, got " + std::to_string(wireCount));
         return scope.makeFailure<NamedShape>();
     }
 
     maker.Build();
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_ThruSections failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_ThruSections failed");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Loft produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Loft produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -116,14 +120,15 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "Loft result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, profiles, tag, "Loft");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "loft")
 }
 
 GeomResult sweep(KernelContext& ctx, const NamedShape& profile, const NamedShape& path) {
@@ -133,15 +138,16 @@ GeomResult sweep(KernelContext& ctx, const NamedShape& profile, const NamedShape
     if (!validation::requireNonNull(ctx, path, "path")) return scope.makeFailure<NamedShape>();
     if (!validation::requireShapeType(ctx, path.shape(), TopAbs_WIRE, "path")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     BRepOffsetAPI_MakePipe maker(TopoDS::Wire(path.shape()), profile.shape());
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_MakePipe failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_MakePipe failed");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Sweep produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Sweep produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -153,14 +159,15 @@ GeomResult sweep(KernelContext& ctx, const NamedShape& profile, const NamedShape
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "Sweep result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {profile, path}, tag, "Sweep");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "sweep")
 }
 
 } // namespace oreo

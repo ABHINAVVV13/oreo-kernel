@@ -1399,12 +1399,12 @@ TEST(Pipeline, Pipeline_FailureThenSuccess) {
     double nan = std::numeric_limits<double>::quiet_NaN();
     auto failR = oreo::makeBox(*ctx, nan, 10, 10);
     EXPECT_FALSE(failR.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 
     // Clear diagnostics
-    ctx->diag.clear();
-    EXPECT_FALSE(ctx->diag.hasErrors());
-    EXPECT_EQ(ctx->diag.count(), 0);
+    ctx->diag().clear();
+    EXPECT_FALSE(ctx->diag().hasErrors());
+    EXPECT_EQ(ctx->diag().count(), 0);
 
     // Now succeed
     auto succR = oreo::makeBox(*ctx, 10, 20, 30);
@@ -1501,7 +1501,7 @@ TEST(Pipeline, Pipeline_DiagAccumulationBounded) {
     // Diagnostics count should stay reasonable
     // A well-behaved system shouldn't accumulate thousands of info-level diagnostics
     // for successful operations. The count should be bounded.
-    int diagCount = ctx->diag.count();
+    int diagCount = ctx->diag().count();
     // If the system accumulates a diagnostic per operation, 1000 is the max.
     // But ideally successful operations don't add diagnostics at all.
     // We check it doesn't grow unboundedly (e.g., 10x the operation count)
@@ -1509,7 +1509,7 @@ TEST(Pipeline, Pipeline_DiagAccumulationBounded) {
         << "Diagnostic count grew unreasonably: " << diagCount;
 
     // No errors should be present
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // 144. Pipeline_ContextReuseLongSession

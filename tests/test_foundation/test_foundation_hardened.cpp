@@ -33,9 +33,9 @@ TEST(FailClosed, NaNRejectedByRequirePositive) {
     auto ctx = oreo::KernelContext::create();
     double nan = std::numeric_limits<double>::quiet_NaN();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, nan, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
     // Verify the error message mentions NaN
-    auto* err = ctx->diag.lastError();
+    auto* err = ctx->diag().lastError();
     ASSERT_NE(err, nullptr);
     EXPECT_NE(err->message.find("NaN"), std::string::npos);
 }
@@ -44,21 +44,21 @@ TEST(FailClosed, InfRejectedByRequirePositive) {
     auto ctx = oreo::KernelContext::create();
     double inf = std::numeric_limits<double>::infinity();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, inf, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(FailClosed, NaNRejectedByRequireInRange) {
     auto ctx = oreo::KernelContext::create();
     double nan = std::numeric_limits<double>::quiet_NaN();
     EXPECT_FALSE(oreo::validation::requireInRange(*ctx, nan, 0.0, 10.0, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(FailClosed, NaNRejectedByRequireNonNegative) {
     auto ctx = oreo::KernelContext::create();
     double nan = std::numeric_limits<double>::quiet_NaN();
     EXPECT_FALSE(oreo::validation::requireNonNegative(*ctx, nan, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(FailClosed, NaNRejectedByRequireNonZeroVec) {
@@ -66,14 +66,14 @@ TEST(FailClosed, NaNRejectedByRequireNonZeroVec) {
     double nan = std::numeric_limits<double>::quiet_NaN();
     gp_Vec nanVec(nan, 0, 0);
     EXPECT_FALSE(oreo::validation::requireNonZeroVec(*ctx, nanVec, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(FailClosed, RequireValidDirNotNoOp) {
     auto ctx = oreo::KernelContext::create();
     // Normal direction should pass
     EXPECT_TRUE(oreo::validation::requireValidDir(*ctx, gp_Dir(0, 0, 1), "test"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -160,7 +160,7 @@ TEST(OperationResult, FailureHasNoValue) {
     auto result = oreo::OperationResult<int>::failure({diag});
     EXPECT_FALSE(result.ok());
     EXPECT_TRUE(result.hasErrors());
-    EXPECT_THROW(result.value(), std::runtime_error);
+    EXPECT_THROW(result.valueOrThrow(), std::runtime_error);
     EXPECT_EQ(result.errorMessage(), "Something broke");
 }
 
@@ -192,13 +192,13 @@ TEST(DiagnosticScope, DoesNotClearParentDiagnostics) {
     auto ctx = oreo::KernelContext::create();
 
     // Parent reports a warning
-    ctx->diag.warning(oreo::ErrorCode::SHAPE_INVALID, "Parent warning");
-    EXPECT_EQ(ctx->diag.count(), 1);
+    ctx->diag().warning(oreo::ErrorCode::SHAPE_INVALID, "Parent warning");
+    EXPECT_EQ(ctx->diag().count(), 1);
 
     // Child scope starts — parent warning should still be there
     {
         oreo::DiagnosticScope scope(*ctx);
-        ctx->diag.error(oreo::ErrorCode::OCCT_FAILURE, "Child error");
+        ctx->diag().error(oreo::ErrorCode::OCCT_FAILURE, "Child error");
 
         // Scope sees only the child diagnostic
         EXPECT_TRUE(scope.hasErrors());
@@ -208,17 +208,17 @@ TEST(DiagnosticScope, DoesNotClearParentDiagnostics) {
     }
 
     // After scope, ALL diagnostics still in context (parent + child)
-    EXPECT_EQ(ctx->diag.count(), 2);
-    EXPECT_TRUE(ctx->diag.hasErrors());
-    EXPECT_TRUE(ctx->diag.hasWarnings());
+    EXPECT_EQ(ctx->diag().count(), 2);
+    EXPECT_TRUE(ctx->diag().hasErrors());
+    EXPECT_TRUE(ctx->diag().hasWarnings());
 }
 
 TEST(DiagnosticScope, MakeResultCapturesOnlyScopeDiags) {
     auto ctx = oreo::KernelContext::create();
-    ctx->diag.info(oreo::ErrorCode::OK, "Pre-existing info");
+    ctx->diag().info(oreo::ErrorCode::OK, "Pre-existing info");
 
     oreo::DiagnosticScope scope(*ctx);
-    ctx->diag.warning(oreo::ErrorCode::SHAPE_INVALID, "Scope warning");
+    ctx->diag().warning(oreo::ErrorCode::SHAPE_INVALID, "Scope warning");
 
     auto result = scope.makeResult(42);
     EXPECT_TRUE(result.ok());
@@ -232,11 +232,11 @@ TEST(DiagnosticScope, NestedScopesCompose) {
     auto ctx = oreo::KernelContext::create();
 
     oreo::DiagnosticScope outer(*ctx);
-    ctx->diag.info(oreo::ErrorCode::OK, "Outer info");
+    ctx->diag().info(oreo::ErrorCode::OK, "Outer info");
 
     {
         oreo::DiagnosticScope inner(*ctx);
-        ctx->diag.error(oreo::ErrorCode::OCCT_FAILURE, "Inner error");
+        ctx->diag().error(oreo::ErrorCode::OCCT_FAILURE, "Inner error");
 
         auto innerDiags = inner.extractDiagnostics();
         EXPECT_EQ(innerDiags.size(), 1u);
@@ -341,18 +341,25 @@ TEST(DeterministicIDs, DocumentIdFromUUID) {
     config.documentUUID = "550e8400-e29b-41d4-a716-446655440000";
 
     auto ctx = oreo::KernelContext::create(config);
-    EXPECT_NE(ctx->tags.documentId(), 0u);  // Should have a non-zero doc ID
+    EXPECT_NE(ctx->tags().documentId(), 0u);  // Should have a non-zero doc ID
 
-    auto tag = ctx->tags.nextTag();
-    // Extract matches full document ID (32-bit packing)
-    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), ctx->tags.documentId());
+    auto tag = ctx->tags().nextTag();
+    // documentId() is now 64-bit (SipHash output). The tag encoding only
+    // carries the low 32 bits of it, so the extracted value must be compared
+    // against the low 32 bits of the full documentId.
+    const uint32_t expectedLow32 =
+        static_cast<uint32_t>(ctx->tags().documentId() & 0xFFFFFFFFull);
+    EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), expectedLow32);
 }
 
 TEST(DeterministicIDs, ResetPreservesDocumentId) {
     oreo::TagAllocator alloc(77);
     alloc.nextTag();
     alloc.nextTag();
-    alloc.reset();
+    // resetCounterOnly() preserves documentId; the wider reset() would zero
+    // it. The test's invariant (docId preserved after counter reset) is what
+    // resetCounterOnly was introduced for.
+    alloc.resetCounterOnly();
 
     auto tag = alloc.nextTag();
     EXPECT_EQ(oreo::TagAllocator::extractDocumentId(tag), 77u);
@@ -360,7 +367,11 @@ TEST(DeterministicIDs, ResetPreservesDocumentId) {
 }
 
 TEST(DeterministicIDs, TwoDocumentsReplayIdentically) {
-    // Two independent contexts with same UUID → same tags after reset+replay
+    // Two independent contexts with same UUID → same tags after reset+replay.
+    // Use resetCounterOnly() so the document-id derived from the UUID is
+    // preserved through the reset; otherwise both contexts would fall back
+    // to single-doc mode (docId=0) and the test would no longer exercise
+    // the UUID-derived documentId path.
     oreo::KernelConfig cfg1;
     cfg1.documentUUID = "test-doc";
     auto ctx1 = oreo::KernelContext::create(cfg1);
@@ -368,12 +379,12 @@ TEST(DeterministicIDs, TwoDocumentsReplayIdentically) {
     cfg2.documentUUID = "test-doc";
     auto ctx2 = oreo::KernelContext::create(cfg2);
 
-    ctx1->tags.reset();
-    ctx2->tags.reset();
+    ctx1->tags().resetCounterOnly();
+    ctx2->tags().resetCounterOnly();
 
-    EXPECT_EQ(ctx1->tags.nextTag(), ctx2->tags.nextTag());
-    EXPECT_EQ(ctx1->tags.nextTag(), ctx2->tags.nextTag());
-    EXPECT_EQ(ctx1->tags.nextTag(), ctx2->tags.nextTag());
+    EXPECT_EQ(ctx1->tags().nextTag(), ctx2->tags().nextTag());
+    EXPECT_EQ(ctx1->tags().nextTag(), ctx2->tags().nextTag());
+    EXPECT_EQ(ctx1->tags().nextTag(), ctx2->tags().nextTag());
 }
 
 // ═══════════════════════════════════════════════════════════════

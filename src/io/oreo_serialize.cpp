@@ -4,6 +4,7 @@
 #include "core/oreo_error.h"
 #include "core/operation_result.h"
 #include "core/diagnostic_scope.h"
+#include "core/occt_try.h"
 #include "naming/element_map.h"
 
 #include <BRepTools.hxx>
@@ -56,7 +57,7 @@ OperationResult<std::vector<uint8_t>> serialize(KernelContext& ctx, const NamedS
     std::vector<uint8_t> buf;
 
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::SERIALIZE_FAILED, "Cannot serialize null shape");
+        ctx.diag().error(ErrorCode::SERIALIZE_FAILED, "Cannot serialize null shape");
         return scope.makeFailure<std::vector<uint8_t>>();
     }
 
@@ -85,16 +86,17 @@ OperationResult<NamedShape> deserialize(KernelContext& ctx, const uint8_t* data,
     DiagnosticScope scope(ctx);
 
     if (!data || len < 12) {
-        ctx.diag.error(ErrorCode::DESERIALIZE_FAILED, "Buffer too small for deserialization");
+        ctx.diag().error(ErrorCode::DESERIALIZE_FAILED, "Buffer too small for deserialization");
         return scope.makeFailure<NamedShape>();
     }
 
+    OREO_OCCT_TRY
     size_t pos = 0;
 
     // Read BRep
     uint32_t brepLen = readU32(data, pos, len);
     if (pos + brepLen > len) {
-        ctx.diag.error(ErrorCode::DESERIALIZE_FAILED, "BRep data truncated");
+        ctx.diag().error(ErrorCode::DESERIALIZE_FAILED, "BRep data truncated");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -104,9 +106,11 @@ OperationResult<NamedShape> deserialize(KernelContext& ctx, const uint8_t* data,
     std::istringstream brepStream(brepData);
     BRep_Builder builder;
     TopoDS_Shape shape;
+    // BRepTools::Read can throw Standard_Failure on malformed BRep — caught by
+    // OREO_OCCT_CATCH_NS below.
     BRepTools::Read(shape, brepStream, builder);
     if (shape.IsNull()) {
-        ctx.diag.error(ErrorCode::DESERIALIZE_FAILED, "BRep deserialization produced null shape");
+        ctx.diag().error(ErrorCode::DESERIALIZE_FAILED, "BRep deserialization produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -122,6 +126,7 @@ OperationResult<NamedShape> deserialize(KernelContext& ctx, const uint8_t* data,
     long tag = static_cast<long>(readI64(data, pos, len));
 
     return scope.makeResult(NamedShape(shape, map, tag));
+    OREO_OCCT_CATCH_NS(scope, ctx, "deserialize")
 }
 
 } // namespace oreo

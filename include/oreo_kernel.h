@@ -115,11 +115,23 @@ OREO_API OreoSolid oreo_ctx_boolean_subtract(OreoContext ctx, OreoSolid target, 
 OREO_API OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], int n, double radius);
 
 // ============================================================
-// Lifecycle (legacy — uses an internal default context)
+// Legacy singleton-context C API
 // ============================================================
+//
+// Everything from here until the "Memory management" section at the bottom
+// uses a PROCESS-GLOBAL KernelContext. It is NOT safe for multi-tenant
+// server processes — concurrent requests would share diagnostic state,
+// tolerance config, and the tag allocator.
+//
+// These declarations are only exposed when the build was configured with
+// -DOREO_ENABLE_LEGACY_API=ON (the default). Server builds should set the
+// option OFF; production code should use the oreo_ctx_* functions above
+// with an explicit OreoContext per document/request.
+//
+#ifdef OREO_ENABLE_LEGACY_API
 
-// These functions use an internal default KernelContext managed by the
-// C API layer.  New code should prefer the explicit OreoContext API above.
+// ─── Lifecycle (legacy — uses an internal default context) ─────────
+
 // oreo_init() initializes OCCT and creates the internal context.
 // oreo_shutdown() resets and re-creates the internal context.
 // oreo_last_error() queries the internal context's diagnostic collector.
@@ -127,9 +139,7 @@ OREO_API void oreo_init(void);
 OREO_API void oreo_shutdown(void);
 OREO_API OreoError oreo_last_error(void);
 
-// ============================================================
-// Primitive creation (convenience)
-// ============================================================
+// ─── Primitive creation (convenience) ──────────────────────────────
 
 OREO_API OreoSolid oreo_make_box(double dx, double dy, double dz);
 OREO_API OreoSolid oreo_make_cylinder(double radius, double height);
@@ -286,6 +296,8 @@ OREO_API void oreo_sketch_get_line(OreoSketch sketch, int index,
 // Convert the solved sketch to a wire (lines + circles + arcs)
 OREO_API OreoWire oreo_sketch_to_wire(OreoSketch sketch);
 
+#endif // OREO_ENABLE_LEGACY_API
+
 // ============================================================
 // Tessellation / Meshing
 // ============================================================
@@ -295,9 +307,11 @@ typedef struct OreoMesh_T* OreoMesh;
 // Tessellate a shape into a triangle mesh.
 // linear_deflection: chord tolerance in mm (typical: 0.1)
 // angular_deflection_deg: angular tolerance in degrees (typical: 20)
+#ifdef OREO_ENABLE_LEGACY_API
 OREO_API OreoMesh oreo_tessellate(OreoSolid solid,
                                    double linear_deflection,
                                    double angular_deflection_deg);
+#endif
 OREO_API OreoMesh oreo_ctx_tessellate(OreoContext ctx, OreoSolid solid,
                                        double linear_deflection,
                                        double angular_deflection_deg);

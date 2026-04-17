@@ -10,6 +10,7 @@
 
 #include "oreo_geometry.h"
 #include "core/diagnostic_scope.h"
+#include "core/occt_try.h"
 #include "core/oreo_error.h"
 #include "core/oreo_tolerance.h"
 #include "io/shape_fix.h"
@@ -67,13 +68,13 @@ std::vector<TopoDS_Shape> expandCompound(const TopoDS_Shape& shape) {
 // Validate a shape for boolean operations
 bool validateForBoolean(KernelContext& ctx, const TopoDS_Shape& shape, const char* label) {
     if (shape.IsNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT,
+        ctx.diag().error(ErrorCode::INVALID_INPUT,
                        std::string("Null ") + label + " shape for boolean");
         return false;
     }
     BRepCheck_Analyzer checker(shape);
     if (!checker.IsValid()) {
-        ctx.diag.error(ErrorCode::SHAPE_INVALID,
+        ctx.diag().error(ErrorCode::SHAPE_INVALID,
                        std::string(label) + " shape is invalid for boolean operation",
                        "Run ShapeFix on input before boolean");
         return false;
@@ -95,10 +96,12 @@ GeomResult executeBooleanWithRetry(
     DiagnosticScope scope(ctx);
 
     if (a.isNull() || b.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT,
+        ctx.diag().error(ErrorCode::INVALID_INPUT,
                        std::string("Cannot perform ") + opName + " with null shape");
         return scope.makeFailure<NamedShape>();
     }
+
+    OREO_OCCT_TRY
 
     TopoDS_Shape shapeA = a.shape();
     TopoDS_Shape shapeB = b.shape();
@@ -180,7 +183,7 @@ GeomResult executeBooleanWithRetry(
 
     // -- All attempts failed ----------------------------------------------
     if (!successfulOp) {
-        ctx.diag.error(ErrorCode::BOOLEAN_FAILED,
+        ctx.diag().error(ErrorCode::BOOLEAN_FAILED,
                        std::string(opName) + " failed after multiple retry attempts",
                        "Geometry may be too complex or near-degenerate for boolean. "
                        "Try simplifying inputs or adjusting tolerance.");
@@ -194,7 +197,7 @@ GeomResult executeBooleanWithRetry(
         fixShape(result, ctx.tolerance());
         // If still invalid after fix, warn but still return the result
         if (!isShapeValid(result)) {
-            ctx.diag.warning(ErrorCode::SHAPE_INVALID,
+            ctx.diag().warning(ErrorCode::SHAPE_INVALID,
                              std::string(opName) + " result is invalid after ShapeFix — geometry may be degraded",
                              "Result returned but may have self-intersections or other defects");
         }
@@ -203,10 +206,11 @@ GeomResult executeBooleanWithRetry(
     // -- Build element map ------------------------------------------------
     // Reuse the successful operation object directly — it already has the
     // modification/generation history needed for element mapping.
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(*successfulOp);
     auto mapped = mapShapeElements(ctx, result, mapper, {a, b}, tag, opName);
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, opName)
 }
 
 } // anonymous namespace

@@ -88,12 +88,12 @@ TEST(DiagScope, ClearWhileScopeLive) {
     oreo::DiagnosticScope scope(*ctx);
 
     // Add an error through the context's diagnostic collector
-    ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "test error");
+    ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "test error");
     EXPECT_TRUE(scope.hasErrors());
 
     // Clear the collector — this increments the generation counter.
     // The scope's startIndex_ is now stale because the backing vector was cleared.
-    ctx->diag.clear();
+    ctx->diag().clear();
 
     // After clear, the scope should see an empty vector (generation mismatch
     // means the scope can no longer trust its startIndex_). The scope should
@@ -109,14 +109,14 @@ TEST(DiagScope, NestedScopeClearContext) {
 
     {
         oreo::DiagnosticScope outer(*ctx);
-        ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "outer error");
+        ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "outer error");
 
         {
             oreo::DiagnosticScope inner(*ctx);
-            ctx->diag.warning(oreo::ErrorCode::SHAPE_INVALID, "inner warning");
+            ctx->diag().warning(oreo::ErrorCode::SHAPE_INVALID, "inner warning");
 
             // Clear everything
-            ctx->diag.clear();
+            ctx->diag().clear();
 
             // Both scopes should see empty after clear
             EXPECT_TRUE(inner.extractDiagnostics().empty());
@@ -129,7 +129,7 @@ TEST(DiagScope, NestedScopeClearContext) {
 
     // Fresh scope after clear should work normally
     oreo::DiagnosticScope fresh(*ctx);
-    ctx->diag.error(oreo::ErrorCode::OCCT_FAILURE, "fresh error");
+    ctx->diag().error(oreo::ErrorCode::OCCT_FAILURE, "fresh error");
     auto freshDiags = fresh.extractDiagnostics();
     EXPECT_EQ(freshDiags.size(), 1u);
     EXPECT_EQ(freshDiags[0].code, oreo::ErrorCode::OCCT_FAILURE);
@@ -145,12 +145,12 @@ TEST(DiagScope, InterleavedScopes) {
     oreo::DiagnosticScope scopeA(*ctx);
 
     // Add a diagnostic that belongs to scopeA's window
-    ctx->diag.info(oreo::ErrorCode::OK, "msg in A");
+    ctx->diag().info(oreo::ErrorCode::OK, "msg in A");
 
     oreo::DiagnosticScope scopeB(*ctx);
 
     // Add a diagnostic while scopeB is live — this is in both A and B's window
-    ctx->diag.error(oreo::ErrorCode::BOOLEAN_FAILED, "msg in B");
+    ctx->diag().error(oreo::ErrorCode::BOOLEAN_FAILED, "msg in B");
 
     auto diagsB = scopeB.extractDiagnostics();
     EXPECT_EQ(diagsB.size(), 1u);
@@ -168,7 +168,7 @@ TEST(DiagScope, MakeResultWithErrors) {
     auto ctx = oreo::KernelContext::create();
     oreo::DiagnosticScope scope(*ctx);
 
-    ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "bad dimension");
+    ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "bad dimension");
 
     auto result = scope.makeResult(42);
     EXPECT_FALSE(result.ok());
@@ -183,7 +183,7 @@ TEST(DiagScope, MakeResultClean) {
     oreo::DiagnosticScope scope(*ctx);
 
     // Only info-level diagnostics — no errors
-    ctx->diag.info(oreo::ErrorCode::OK, "operation started");
+    ctx->diag().info(oreo::ErrorCode::OK, "operation started");
 
     auto result = scope.makeResult(std::string("hello"));
     ASSERT_TRUE(result.ok());
@@ -241,14 +241,14 @@ TEST(OperationResult, SuccessCarriesValue) {
     EXPECT_FALSE(r.hasErrors());
 }
 
-// 8. Failure throws on .value()
+// 8. Failure throws on .valueOrThrow() (was .value() prior to OR-1 rename)
 TEST(OperationResult, FailureThrowsOnValue) {
     std::vector<oreo::Diagnostic> diags;
     diags.push_back(oreo::Diagnostic::error(oreo::ErrorCode::OCCT_FAILURE, "operation failed"));
     auto r = oreo::OperationResult<int>::failure(std::move(diags));
 
     EXPECT_FALSE(r.ok());
-    EXPECT_THROW(r.value(), std::runtime_error);
+    EXPECT_THROW(r.valueOrThrow(), std::runtime_error);
 }
 
 // 9. valueOr returns default on failure
@@ -301,12 +301,12 @@ TEST(KernelContext, IsolatedDiagnostics) {
     auto ctx1 = oreo::KernelContext::create();
     auto ctx2 = oreo::KernelContext::create();
 
-    ctx1->diag.error(oreo::ErrorCode::INVALID_INPUT, "error in ctx1");
+    ctx1->diag().error(oreo::ErrorCode::INVALID_INPUT, "error in ctx1");
 
     // ctx2 should not see ctx1's error
-    EXPECT_TRUE(ctx2->diag.empty());
-    EXPECT_TRUE(ctx1->diag.hasErrors());
-    EXPECT_FALSE(ctx2->diag.hasErrors());
+    EXPECT_TRUE(ctx2->diag().empty());
+    EXPECT_TRUE(ctx1->diag().hasErrors());
+    EXPECT_FALSE(ctx2->diag().hasErrors());
 }
 
 // 13. Two contexts have isolated tags
@@ -314,9 +314,9 @@ TEST(KernelContext, IsolatedTags) {
     auto ctx1 = oreo::KernelContext::create();
     auto ctx2 = oreo::KernelContext::create();
 
-    int64_t tag1a = ctx1->tags.nextTag();
-    int64_t tag1b = ctx1->tags.nextTag();
-    int64_t tag2a = ctx2->tags.nextTag();
+    int64_t tag1a = ctx1->tags().nextTag();
+    int64_t tag1b = ctx1->tags().nextTag();
+    int64_t tag2a = ctx2->tags().nextTag();
 
     // Both start from 1 — they are independent
     EXPECT_EQ(tag1a, 1);
@@ -448,7 +448,10 @@ TEST(TagAllocatorBattle, ResetDeterministic) {
     std::vector<int64_t> first_run;
     for (int i = 0; i < 10; ++i) first_run.push_back(alloc.nextTag());
 
-    alloc.reset();
+    // resetCounterOnly() preserves the documentId so the replay produces
+    // byte-identical encoded tags. The wider reset() would zero the docId
+    // and fall back to single-doc mode, making the two runs differ.
+    alloc.resetCounterOnly();
 
     std::vector<int64_t> second_run;
     for (int i = 0; i < 10; ++i) second_run.push_back(alloc.nextTag());
@@ -456,23 +459,36 @@ TEST(TagAllocatorBattle, ResetDeterministic) {
     EXPECT_EQ(first_run, second_run);
 }
 
-// 22. toOcctTag truncation behavior documented
+// 22. toOcctTag mapping behavior documented
 TEST(TagAllocatorBattle, ToOcctTagTruncation) {
+    // toOcctTag is now a non-static member — each allocator owns its own
+    // mapping table. Small tags (<=INT32_MAX) pass through unchanged; large
+    // tags go through a per-allocator map. Non-positive inputs throw.
+    oreo::TagAllocator alloc;
+
     // Small tags pass through unchanged
-    EXPECT_EQ(oreo::TagAllocator::toOcctTag(1), 1);
-    EXPECT_EQ(oreo::TagAllocator::toOcctTag(0), 0);
-    EXPECT_EQ(oreo::TagAllocator::toOcctTag(INT32_MAX), INT32_MAX);
+    EXPECT_EQ(alloc.toOcctTag(1), 1);
+    EXPECT_EQ(alloc.toOcctTag(INT32_MAX), INT32_MAX);
 
-    // Large multi-doc tags get truncated to lower 31 bits (positive)
+    // Non-positive inputs are rejected (prior behavior silently masked; new
+    // behavior fails closed on the invariant that tags must be > 0).
+    EXPECT_THROW(alloc.toOcctTag(0), std::invalid_argument);
+    EXPECT_THROW(alloc.toOcctTag(-1), std::invalid_argument);
+
+    // Large multi-doc tags (>INT32_MAX) map to a per-allocator 32-bit handle
+    // that is positive and stable within this allocator instance.
     int64_t bigTag = (static_cast<int64_t>(1) << 32) | 42;
-    int32_t truncated = oreo::TagAllocator::toOcctTag(bigTag);
-    EXPECT_GT(truncated, 0);  // Must remain positive for OCCT
-    EXPECT_EQ(truncated, 42);  // Lower 31 bits
+    int32_t mapped1 = alloc.toOcctTag(bigTag);
+    EXPECT_GT(mapped1, 0);  // Must remain positive for OCCT
+    // Stability: asking again for the same input returns the same handle.
+    int32_t mapped1_again = alloc.toOcctTag(bigTag);
+    EXPECT_EQ(mapped1, mapped1_again);
 
-    // Negative tags get the mask treatment
-    int64_t negTag = -1;
-    int32_t negResult = oreo::TagAllocator::toOcctTag(negTag);
-    EXPECT_GE(negResult, 0);  // 0x7FFFFFFF mask ensures non-negative
+    // A different large tag gets a different handle.
+    int64_t bigTag2 = (static_cast<int64_t>(2) << 32) | 7;
+    int32_t mapped2 = alloc.toOcctTag(bigTag2);
+    EXPECT_GT(mapped2, 0);
+    EXPECT_NE(mapped1, mapped2);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -483,35 +499,35 @@ TEST(TagAllocatorBattle, ToOcctTagTruncation) {
 TEST(ValidationBattle, RequirePositiveNaN) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, NaN, "val"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 24. requirePositive rejects +Inf
 TEST(ValidationBattle, RequirePositiveInf) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, PosInf, "val"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 25. requirePositive rejects zero
 TEST(ValidationBattle, RequirePositiveZero) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, 0.0, "val"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 26. requireNonNegative rejects NegInf
 TEST(ValidationBattle, RequireNonNegativeNegInf) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requireNonNegative(*ctx, NegInf, "val"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 27. requireInRange rejects NaN in value
 TEST(ValidationBattle, RequireInRangeNaN) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requireInRange(*ctx, NaN, 0.0, 10.0, "val"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 28. requireInRange rejects NaN in bounds
@@ -526,7 +542,7 @@ TEST(ValidationBattle, RequireFinitePointNaN) {
     auto ctx = oreo::KernelContext::create();
     gp_Pnt nanPoint(NaN, 0.0, 0.0);
     EXPECT_FALSE(oreo::validation::requireFinitePoint(*ctx, nanPoint, "pt"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 30. requireFinitePoint accepts valid point
@@ -534,7 +550,7 @@ TEST(ValidationBattle, RequireFinitePointValid) {
     auto ctx = oreo::KernelContext::create();
     gp_Pnt validPoint(1.0, 2.0, 3.0);
     EXPECT_TRUE(oreo::validation::requireFinitePoint(*ctx, validPoint, "pt"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // 31. requireValidAxis rejects NaN location
@@ -557,7 +573,7 @@ TEST(ValidationBattle, RequireValidAxisValid) {
     auto ctx = oreo::KernelContext::create();
     gp_Ax1 axis(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1));
     EXPECT_TRUE(oreo::validation::requireValidAxis(*ctx, axis, "axis"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // 33. requireValidAxis2 accepts valid
@@ -565,7 +581,7 @@ TEST(ValidationBattle, RequireValidAxis2Valid) {
     auto ctx = oreo::KernelContext::create();
     gp_Ax2 axis(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1));
     EXPECT_TRUE(oreo::validation::requireValidAxis2(*ctx, axis, "axis2"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // 34. requireValidLengthUnit accepts valid, rejects bogus
@@ -575,7 +591,7 @@ TEST(ValidationBattle, RequireValidLengthUnitValid) {
         *ctx, oreo::LengthUnit::Millimeter, "unit"));
     EXPECT_TRUE(oreo::validation::requireValidLengthUnit(
         *ctx, oreo::LengthUnit::Inch, "unit"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // 35. requireValidLengthUnit rejects bogus cast value
@@ -583,7 +599,7 @@ TEST(ValidationBattle, RequireValidLengthUnitBogus) {
     auto ctx = oreo::KernelContext::create();
     auto bogus = static_cast<oreo::LengthUnit>(999);
     EXPECT_FALSE(oreo::validation::requireValidLengthUnit(*ctx, bogus, "unit"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // 36. requireValidAngleUnit valid and invalid
@@ -593,13 +609,13 @@ TEST(ValidationBattle, RequireValidAngleUnit) {
         *ctx, oreo::AngleUnit::Degree, "angle"));
     EXPECT_TRUE(oreo::validation::requireValidAngleUnit(
         *ctx, oreo::AngleUnit::Radian, "angle"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 
     // Bogus value
     auto ctx2 = oreo::KernelContext::create();
     auto bogus = static_cast<oreo::AngleUnit>(999);
     EXPECT_FALSE(oreo::validation::requireValidAngleUnit(*ctx2, bogus, "angle"));
-    EXPECT_TRUE(ctx2->diag.hasErrors());
+    EXPECT_TRUE(ctx2->diag().hasErrors());
 }
 
 // 37. requireNonZeroVec rejects NaN components
@@ -607,7 +623,7 @@ TEST(ValidationBattle, RequireNonZeroVecNaN) {
     auto ctx = oreo::KernelContext::create();
     gp_Vec nanVec(NaN, 0.0, 0.0);
     EXPECT_FALSE(oreo::validation::requireNonZeroVec(*ctx, nanVec, "vec"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -673,9 +689,12 @@ TEST(SchemaBattle, FromJsonEmptyObject) {
 }
 
 // 45. fromJSON throws on wrong type
+// Per SCH-5: we now do an is_number_integer() pre-check and throw std::runtime_error
+// instead of relying on nlohmann::json's implicit coercion (which would silently
+// accept floats like 1.5). Accept either exception — both indicate type rejection.
 TEST(SchemaBattle, FromJsonWrongType) {
     nlohmann::json wrongType = {{"major", "one"}, {"minor", 0}, {"patch", 0}};
-    EXPECT_THROW(oreo::SchemaVersion::fromJSON(wrongType), nlohmann::json::type_error);
+    EXPECT_ANY_THROW(oreo::SchemaVersion::fromJSON(wrongType));
 }
 
 // 46. Cyclic migration chain throws
@@ -779,7 +798,7 @@ TEST(ThreadingBattle, FourContextsIndependent) {
             bool allOk = true;
 
             for (int i = 0; i < OPS_PER_THREAD; ++i) {
-                int64_t tag = ctx->tags.nextTag();
+                int64_t tag = ctx->tags().nextTag();
                 if (tag != static_cast<int64_t>(i + 1)) {
                     allOk = false;
                     break;
@@ -787,7 +806,7 @@ TEST(ThreadingBattle, FourContextsIndependent) {
             }
 
             // Each thread's tag allocator should be at OPS_PER_THREAD
-            if (ctx->tags.currentValue() != OPS_PER_THREAD) allOk = false;
+            if (ctx->tags().currentValue() != OPS_PER_THREAD) allOk = false;
 
             results[t] = allOk;
         });
@@ -835,11 +854,11 @@ TEST(ThreadingBattle, DiagnosticsIsolated) {
 
             // Each thread adds exactly (t+1) errors
             for (int i = 0; i <= t; ++i) {
-                ctx->diag.error(oreo::ErrorCode::INVALID_INPUT,
+                ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
                                 "thread " + std::to_string(t) + " error " + std::to_string(i));
             }
 
-            errorCounts[t] = ctx->diag.errorCount();
+            errorCounts[t] = ctx->diag().errorCount();
         });
     }
 

@@ -20,14 +20,14 @@ OperationResult<BBox> aabb(KernelContext& ctx, const NamedShape& shape) {
     BBox box = {0,0,0,0,0,0};
 
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot compute AABB of null shape");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot compute AABB of null shape");
         return scope.makeFailure<BBox>();
     }
 
     Bnd_Box bbox;
     BRepBndLib::Add(shape.shape(), bbox);
     if (bbox.IsVoid()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "AABB computation returned void");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "AABB computation returned void");
         return scope.makeFailure<BBox>();
     }
 
@@ -53,7 +53,7 @@ OperationResult<std::vector<NamedFace>> getFaces(KernelContext& ctx, const Named
     DiagnosticScope scope(ctx);
     std::vector<NamedFace> result;
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot get faces of null shape");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot get faces of null shape");
         return scope.makeFailure<std::vector<NamedFace>>();
     }
 
@@ -74,7 +74,7 @@ OperationResult<std::vector<NamedEdge>> getEdges(KernelContext& ctx, const Named
     DiagnosticScope scope(ctx);
     std::vector<NamedEdge> result;
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot get edges of null shape");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot get edges of null shape");
         return scope.makeFailure<std::vector<NamedEdge>>();
     }
 
@@ -95,13 +95,13 @@ OperationResult<double> measureDistance(KernelContext& ctx, const NamedShape& a,
     DiagnosticScope scope(ctx);
 
     if (a.isNull() || b.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot measure distance with null shape");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot measure distance with null shape");
         return scope.makeFailure<double>();
     }
 
     BRepExtrema_DistShapeShape dist(a.shape(), b.shape());
     if (!dist.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Distance computation failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Distance computation failed");
         return scope.makeFailure<double>();
     }
 
@@ -113,7 +113,7 @@ OperationResult<MassProperties> massProperties(KernelContext& ctx, const NamedSh
     MassProperties props = {};
 
     if (shape.isNull()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Cannot compute mass properties of null shape");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Cannot compute mass properties of null shape");
         return scope.makeFailure<MassProperties>();
     }
 

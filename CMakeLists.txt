@@ -14,6 +14,22 @@ find_package(Boost REQUIRED COMPONENTS graph iostreams)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 
+# ── Build options ─────────────────────────────────────────────────────────────
+#
+# OREO_ENABLE_LEGACY_API (default ON):
+#   When ON, the flat C API exposes singleton-context entry points
+#   (oreo_make_box, oreo_fillet, oreo_init, oreo_last_error, the entire
+#   sketch C API, etc.) which route through a process-global KernelContext.
+#   These are convenient for small clients and CLI tools but are NOT safe
+#   for multi-tenant server processes where contexts must be explicitly
+#   isolated per request.
+#
+#   Turn OFF for server builds (-DOREO_ENABLE_LEGACY_API=OFF). Only the
+#   explicit OreoContext API (oreo_ctx_*) and stateless helpers remain.
+#   The test target test_foundation_battle2 is also omitted when OFF
+#   because its fixtures exercise the legacy surface.
+option(OREO_ENABLE_LEGACY_API "Expose singleton-context C API (not safe for server builds)" ON)
+
 # ── oreo-kernel shared library ────────────────────────────────────────────────
 
 # Collect all source files (will be populated as we build out the kernel)
@@ -84,6 +100,17 @@ target_compile_definitions(oreo-kernel PRIVATE OREO_KERNEL_EXPORTS)
 # Required for M_PI on Windows (OCCT headers need it)
 target_compile_definitions(oreo-kernel PUBLIC _USE_MATH_DEFINES)
 
+# Propagate CMake project version to schema.h so KERNEL_VERSION stays in sync.
+target_compile_definitions(oreo-kernel PUBLIC
+    OREO_KERNEL_VERSION_STRING="${PROJECT_VERSION}"
+)
+
+# Propagate legacy-API flag to compilation units (both library and consumers,
+# since it gates public declarations in include/oreo_kernel.h).
+if(OREO_ENABLE_LEGACY_API)
+    target_compile_definitions(oreo-kernel PUBLIC OREO_ENABLE_LEGACY_API)
+endif()
+
 # Export macro for DLL
 if(WIN32)
     target_compile_definitions(oreo-kernel
@@ -145,11 +172,48 @@ oreo_add_test(test_foundation tests/test_foundation/test_foundation.cpp)
 # Foundation hardened (adversarial tests: NaN, Inf, fail-closed, composable diagnostics)
 oreo_add_test(test_foundation_hardened tests/test_foundation/test_foundation_hardened.cpp)
 
+# Foundation modules (standalone: cancellation, feature flags, localization, RNG, profile, arena, assertion)
+oreo_add_test(test_foundation_modules tests/test_foundation/test_foundation_modules.cpp)
+
+# Foundation observability (config loader, logging sink, resource quotas, diagnostic metadata)
+oreo_add_test(test_foundation_obs tests/test_foundation/test_foundation_obs.cpp)
+
+# Foundation new features (KernelContext clone/merge/safeReset, cancellation, progress, combinators, validators, schema introspection)
+oreo_add_test(test_foundation_new_features tests/test_foundation/test_foundation_new_features.cpp)
+
+# Determinism (tag streams, shape hashes, golden op-sequence, cross-platform-intended)
+oreo_add_test(test_determinism tests/test_determinism/test_determinism.cpp)
+
+# Integration (end-to-end workflows: sketch->extrude->fillet->boolean, STEP round-trip, feature tree replay)
+oreo_add_test(test_integration tests/test_integration/test_integration.cpp)
+
+# Smoke-fuzz (random-input robustness for deserialize / schema migrate / sketch / STEP)
+oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
+
+# Perf regression (generous time budgets — catches 10x regressions, not microbenchmark drift)
+oreo_add_test(test_perf tests/test_perf/test_perf.cpp)
+
 # Tessellation / Meshing
 oreo_add_test(test_mesh tests/test_mesh/test_mesh.cpp)
+oreo_add_test(test_mesh_export tests/test_mesh/test_mesh_export.cpp)
+
+# Manual-run smoke tool: writes a cube to cube.glb. Not registered as a ctest —
+# use it for drag-and-drop validation in three.js, Blender, Windows 3D Viewer,
+# etc. Invoke with:  ./Release/glb_smoke [optional/out/path.glb]
+add_executable(glb_smoke tests/test_mesh/glb_smoke_main.cpp)
+target_link_libraries(glb_smoke PRIVATE oreo-kernel)
+target_include_directories(glb_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${OpenCASCADE_INCLUDE_DIR}
+)
 
 oreo_add_test(test_foundation_production tests/test_foundation/test_foundation_production.cpp)
 
 # Foundation battle tests (adversarial: all 4 layers, threading, overflow, corruption, C API boundary)
 oreo_add_test(test_foundation_battle tests/test_foundation/test_foundation_battle.cpp)
-oreo_add_test(test_foundation_battle2 tests/test_foundation/test_foundation_battle_part2.cpp)
+
+# test_foundation_battle2 exercises the legacy singleton C API directly, so it
+# only builds when that API is enabled.
+if(OREO_ENABLE_LEGACY_API)
+    oreo_add_test(test_foundation_battle2 tests/test_foundation/test_foundation_battle_part2.cpp)
+endif()

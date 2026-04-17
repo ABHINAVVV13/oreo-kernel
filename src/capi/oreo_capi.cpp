@@ -30,15 +30,15 @@
 
 #define OREO_C_CATCH_RETURN(default_val) \
     } catch (const Standard_Failure& e) { \
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::OCCT_FAILURE, \
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OCCT_FAILURE, \
             std::string("OCCT exception: ") + e.GetMessageString()); \
         return default_val; \
     } catch (const std::exception& e) { \
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::INTERNAL_ERROR, \
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INTERNAL_ERROR, \
             std::string("C++ exception: ") + e.what()); \
         return default_val; \
     } catch (...) { \
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::INTERNAL_ERROR, \
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INTERNAL_ERROR, \
             "Unknown exception in C API"); \
         return default_val; \
     }
@@ -46,13 +46,13 @@
 // For void functions:
 #define OREO_C_CATCH_VOID \
     } catch (const Standard_Failure& e) { \
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::OCCT_FAILURE, \
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OCCT_FAILURE, \
             std::string("OCCT exception: ") + e.GetMessageString()); \
     } catch (const std::exception& e) { \
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::INTERNAL_ERROR, \
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INTERNAL_ERROR, \
             std::string("C++ exception: ") + e.what()); \
     } catch (...) { \
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::INTERNAL_ERROR, \
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INTERNAL_ERROR, \
             "Unknown exception in C API"); \
     }
 
@@ -109,7 +109,7 @@ OreoSolid wrapSolid(oreo::GeomResult&& result) {
 OreoError errorFromContext(const oreo::KernelContext& ctx) {
     static thread_local std::string msgBuf, entBuf, sugBuf;
 
-    auto* lastErr = ctx.diag.lastError();
+    auto* lastErr = ctx.diag().lastError();
     if (!lastErr) {
         return {OREO_OK, "", "", ""};
     }
@@ -131,9 +131,10 @@ OreoError errorFromContext(const oreo::KernelContext& ctx) {
 extern "C" {
 
 // ============================================================
-// Lifecycle
+// Lifecycle (legacy — gated by OREO_ENABLE_LEGACY_API)
 // ============================================================
 
+#ifdef OREO_ENABLE_LEGACY_API
 void oreo_init(void) {
     OREO_C_TRY
     oreo::KernelContext::initOCCT();
@@ -153,6 +154,7 @@ OreoError oreo_last_error(void) {
     return errorFromContext(*internalDefaultCtx());
     OREO_C_CATCH_RETURN((OreoError{OREO_INTERNAL_ERROR, "Exception querying error state", "", ""}))
 }
+#endif // OREO_ENABLE_LEGACY_API
 
 // ============================================================
 // Context
@@ -173,29 +175,29 @@ void oreo_context_free(OreoContext ctx) {
 
 int oreo_context_has_errors(OreoContext ctx) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
-    return ctx->ctx->diag.hasErrors() ? 1 : 0;
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    return ctx->ctx->diag().hasErrors() ? 1 : 0;
     OREO_C_CATCH_RETURN(0)
 }
 
 int oreo_context_has_warnings(OreoContext ctx) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
-    return ctx->ctx->diag.hasWarnings() ? 1 : 0;
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    return ctx->ctx->diag().hasWarnings() ? 1 : 0;
     OREO_C_CATCH_RETURN(0)
 }
 
 int oreo_context_error_count(OreoContext ctx) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
-    return ctx->ctx->diag.errorCount();
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    return ctx->ctx->diag().errorCount();
     OREO_C_CATCH_RETURN(0)
 }
 
 const char* oreo_context_last_error_message(OreoContext ctx) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
-    auto* last = ctx->ctx->diag.lastError();
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
+    auto* last = ctx->ctx->diag().lastError();
     if (!last) return "";
     tl_errorMsgBuffer = last->message;
     return tl_errorMsgBuffer.c_str();
@@ -205,21 +207,21 @@ const char* oreo_context_last_error_message(OreoContext ctx) {
 // Context-aware primitives
 OreoSolid oreo_ctx_make_box(OreoContext ctx, double dx, double dy, double dz) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::makeBox(*ctx->ctx, dx, dy, dz));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_ctx_make_cylinder(OreoContext ctx, double radius, double height) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::makeCylinder(*ctx->ctx, radius, height));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_ctx_make_sphere(OreoContext ctx, double radius) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::makeSphere(*ctx->ctx, radius));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -227,32 +229,32 @@ OreoSolid oreo_ctx_make_sphere(OreoContext ctx, double radius) {
 // Context-aware geometry operations
 OreoSolid oreo_ctx_extrude(OreoContext ctx, OreoSolid base, double dx, double dy, double dz) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
-    if (!base) { ctx->ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!base) { ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::extrude(*ctx->ctx, base->ns, gp_Vec(dx, dy, dz)));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_ctx_boolean_union(OreoContext ctx, OreoSolid a, OreoSolid b) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
-    if (!a || !b) { ctx->ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!a || !b) { ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::booleanUnion(*ctx->ctx, a->ns, b->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_ctx_boolean_subtract(OreoContext ctx, OreoSolid target, OreoSolid tool) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
-    if (!target || !tool) { ctx->ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!target || !tool) { ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::booleanSubtract(*ctx->ctx, target->ns, tool->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], int n, double radius) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
-    if (!solid) { ctx->ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedEdge> edgeVec;
     for (int i = 0; i < n; ++i) {
         if (edges[i]) edgeVec.push_back({oreo::IndexedName("Edge", i+1), edges[i]->ns.shape()});
@@ -260,6 +262,12 @@ OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], in
     return wrapSolid(oreo::fillet(*ctx->ctx, solid->ns, edgeVec, radius));
     OREO_C_CATCH_RETURN(nullptr)
 }
+
+// ============================================================
+// Primitives through Sketch are the legacy singleton surface —
+// gated as one block on OREO_ENABLE_LEGACY_API.
+// ============================================================
+#ifdef OREO_ENABLE_LEGACY_API
 
 // ============================================================
 // Primitives (legacy — uses default context)
@@ -307,7 +315,7 @@ OreoSolid oreo_make_wedge(double dx, double dy, double dz, double ltx) {
 
 OreoSolid oreo_extrude(OreoSolid base, double dx, double dy, double dz) {
     OREO_C_TRY
-    if (!base) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!base) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::extrude(*internalDefaultCtx(), base->ns, gp_Vec(dx, dy, dz)));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -317,7 +325,7 @@ OreoSolid oreo_revolve(OreoSolid base,
                        double dx, double dy, double dz,
                        double angle_rad) {
     OREO_C_TRY
-    if (!base) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!base) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     gp_Ax1 axis(gp_Pnt(ax, ay, az), gp_Dir(dx, dy, dz));
     return wrapSolid(oreo::revolve(*internalDefaultCtx(), base->ns, axis, angle_rad));
     OREO_C_CATCH_RETURN(nullptr)
@@ -325,7 +333,7 @@ OreoSolid oreo_revolve(OreoSolid base,
 
 OreoSolid oreo_fillet(OreoSolid solid, OreoEdge edges[], int n, double radius) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedEdge> edgeVec;
     for (int i = 0; i < n; ++i) {
         if (edges[i]) {
@@ -338,7 +346,7 @@ OreoSolid oreo_fillet(OreoSolid solid, OreoEdge edges[], int n, double radius) {
 
 OreoSolid oreo_chamfer(OreoSolid solid, OreoEdge edges[], int n, double distance) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedEdge> edgeVec;
     for (int i = 0; i < n; ++i) {
         if (edges[i]) {
@@ -351,28 +359,28 @@ OreoSolid oreo_chamfer(OreoSolid solid, OreoEdge edges[], int n, double distance
 
 OreoSolid oreo_boolean_union(OreoSolid a, OreoSolid b) {
     OREO_C_TRY
-    if (!a || !b) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!a || !b) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::booleanUnion(*internalDefaultCtx(), a->ns, b->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_boolean_subtract(OreoSolid target, OreoSolid tool) {
     OREO_C_TRY
-    if (!target || !tool) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!target || !tool) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::booleanSubtract(*internalDefaultCtx(), target->ns, tool->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_boolean_intersect(OreoSolid a, OreoSolid b) {
     OREO_C_TRY
-    if (!a || !b) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!a || !b) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::booleanIntersect(*internalDefaultCtx(), a->ns, b->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_shell(OreoSolid solid, OreoFace faces[], int n, double thickness) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedFace> faceVec;
     for (int i = 0; i < n; ++i) {
         if (faces[i]) {
@@ -385,7 +393,7 @@ OreoSolid oreo_shell(OreoSolid solid, OreoFace faces[], int n, double thickness)
 
 OreoSolid oreo_loft(OreoWire profiles[], int n, int make_solid) {
     OREO_C_TRY
-    if (!profiles) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!profiles) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedShape> pVec;
     for (int i = 0; i < n; ++i) {
         if (profiles[i]) pVec.push_back(profiles[i]->ns);
@@ -396,7 +404,7 @@ OreoSolid oreo_loft(OreoWire profiles[], int n, int make_solid) {
 
 OreoSolid oreo_sweep(OreoWire profile, OreoWire path) {
     OREO_C_TRY
-    if (!profile || !path) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!profile || !path) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::sweep(*internalDefaultCtx(), profile->ns, path->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -405,7 +413,7 @@ OreoSolid oreo_mirror(OreoSolid solid,
                       double px, double py, double pz,
                       double nx, double ny, double nz) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     gp_Ax2 plane(gp_Pnt(px, py, pz), gp_Dir(nx, ny, nz));
     return wrapSolid(oreo::mirror(*internalDefaultCtx(), solid->ns, plane));
     OREO_C_CATCH_RETURN(nullptr)
@@ -415,7 +423,7 @@ OreoSolid oreo_pattern_linear(OreoSolid solid,
                               double dx, double dy, double dz,
                               int count, double spacing) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::patternLinear(*internalDefaultCtx(), solid->ns, gp_Vec(dx, dy, dz), count, spacing));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -425,7 +433,7 @@ OreoSolid oreo_pattern_circular(OreoSolid solid,
                                 double dx, double dy, double dz,
                                 int count, double total_angle_rad) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     gp_Ax1 axis(gp_Pnt(ax, ay, az), gp_Dir(dx, dy, dz));
     return wrapSolid(oreo::patternCircular(*internalDefaultCtx(), solid->ns, axis, count, total_angle_rad));
     OREO_C_CATCH_RETURN(nullptr)
@@ -439,7 +447,7 @@ OreoSolid oreo_draft(OreoSolid solid, OreoFace faces[], int n,
                      double angle_deg,
                      double pull_dx, double pull_dy, double pull_dz) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedFace> faceVec;
     for (int i = 0; i < n; ++i) {
         if (faces[i]) faceVec.push_back({oreo::IndexedName("Face", i+1), faces[i]->ns.shape()});
@@ -452,7 +460,7 @@ OreoSolid oreo_hole(OreoSolid solid, OreoFace face,
                     double cx, double cy, double cz,
                     double diameter, double depth) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     oreo::NamedFace nf = {oreo::IndexedName("Face", 1), face ? face->ns.shape() : TopoDS_Shape()};
     return wrapSolid(oreo::hole(*internalDefaultCtx(), solid->ns, nf, gp_Pnt(cx, cy, cz), diameter, depth));
     OREO_C_CATCH_RETURN(nullptr)
@@ -460,7 +468,7 @@ OreoSolid oreo_hole(OreoSolid solid, OreoFace face,
 
 OreoSolid oreo_pocket(OreoSolid solid, OreoSolid profile, double depth) {
     OREO_C_TRY
-    if (!solid || !profile) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid || !profile) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::pocket(*internalDefaultCtx(), solid->ns, profile->ns, depth));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -468,21 +476,21 @@ OreoSolid oreo_pocket(OreoSolid solid, OreoSolid profile, double depth) {
 OreoSolid oreo_rib(OreoSolid solid, OreoSolid profile,
                    double dx, double dy, double dz, double thickness) {
     OREO_C_TRY
-    if (!solid || !profile) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid || !profile) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::rib(*internalDefaultCtx(), solid->ns, profile->ns, gp_Dir(dx, dy, dz), thickness));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_offset(OreoSolid solid, double distance) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::offset(*internalDefaultCtx(), solid->ns, distance));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_thicken(OreoSolid shell, double thickness) {
     OREO_C_TRY
-    if (!shell) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!shell) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::thicken(*internalDefaultCtx(), shell->ns, thickness));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -491,7 +499,7 @@ OreoSolid oreo_split_body(OreoSolid solid,
                           double px, double py, double pz,
                           double nx, double ny, double nz) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::splitBody(*internalDefaultCtx(), solid->ns, gp_Pln(gp_Pnt(px, py, pz), gp_Dir(nx, ny, nz))));
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -499,7 +507,7 @@ OreoSolid oreo_split_body(OreoSolid solid,
 OreoSolid oreo_fillet_variable(OreoSolid solid, OreoEdge edge,
                                double start_radius, double end_radius) {
     OREO_C_TRY
-    if (!solid || !edge) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid || !edge) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     oreo::NamedEdge ne = {oreo::IndexedName("Edge", 1), edge->ns.shape()};
     return wrapSolid(oreo::filletVariable(*internalDefaultCtx(), solid->ns, ne, start_radius, end_radius));
     OREO_C_CATCH_RETURN(nullptr)
@@ -507,14 +515,14 @@ OreoSolid oreo_fillet_variable(OreoSolid solid, OreoEdge edge,
 
 OreoSolid oreo_make_face_from_wire(OreoWire wire) {
     OREO_C_TRY
-    if (!wire) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!wire) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return wrapSolid(oreo::makeFaceFromWire(*internalDefaultCtx(), wire->ns));
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 OreoSolid oreo_combine(OreoSolid shapes[], int n) {
     OREO_C_TRY
-    if (!shapes) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!shapes) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     std::vector<oreo::NamedShape> vec;
     for (int i = 0; i < n; ++i) {
         if (shapes[i]) vec.push_back(shapes[i]->ns);
@@ -529,7 +537,7 @@ OreoSolid oreo_combine(OreoSolid shapes[], int n) {
 
 OreoBBox oreo_aabb(OreoSolid solid) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return {0,0,0,0,0,0}; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return {0,0,0,0,0,0}; }
     auto r = oreo::aabb(*internalDefaultCtx(), solid->ns);
     if (!r.ok()) return {0,0,0,0,0,0};
     auto b = r.value();
@@ -539,7 +547,7 @@ OreoBBox oreo_aabb(OreoSolid solid) {
 
 OreoBBox oreo_footprint(OreoSolid before, OreoSolid after) {
     OREO_C_TRY
-    if (!before || !after) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return {0,0,0,0,0,0}; }
+    if (!before || !after) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return {0,0,0,0,0,0}; }
     auto r = oreo::footprint(*internalDefaultCtx(), before->ns, after->ns);
     if (!r.ok()) return {0,0,0,0,0,0};
     auto b = r.value();
@@ -549,21 +557,21 @@ OreoBBox oreo_footprint(OreoSolid before, OreoSolid after) {
 
 int oreo_face_count(OreoSolid solid) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     return solid->ns.countSubShapes(TopAbs_FACE);
     OREO_C_CATCH_RETURN(0)
 }
 
 int oreo_edge_count(OreoSolid solid) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     return solid->ns.countSubShapes(TopAbs_EDGE);
     OREO_C_CATCH_RETURN(0)
 }
 
 OreoFace oreo_get_face(OreoSolid solid, int index) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     if (index < 1) return nullptr;
     TopoDS_Shape face = solid->ns.getSubShape(TopAbs_FACE, index);
     if (face.IsNull()) return nullptr;
@@ -574,7 +582,7 @@ OreoFace oreo_get_face(OreoSolid solid, int index) {
 
 OreoEdge oreo_get_edge(OreoSolid solid, int index) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     if (index < 1) return nullptr;
     TopoDS_Shape edge = solid->ns.getSubShape(TopAbs_EDGE, index);
     if (edge.IsNull()) return nullptr;
@@ -585,7 +593,7 @@ OreoEdge oreo_get_edge(OreoSolid solid, int index) {
 
 double oreo_measure_distance(OreoSolid a, OreoSolid b) {
     OREO_C_TRY
-    if (!a || !b) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1.0; }
+    if (!a || !b) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1.0; }
     auto r = oreo::measureDistance(*internalDefaultCtx(), a->ns, b->ns);
     if (!r.ok()) return -1.0;
     return r.value();
@@ -594,7 +602,7 @@ double oreo_measure_distance(OreoSolid a, OreoSolid b) {
 
 OreoMassProps oreo_mass_properties(OreoSolid solid) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return {}; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return {}; }
     auto r = oreo::massProperties(*internalDefaultCtx(), solid->ns);
     if (!r.ok()) return {};
     auto m = r.value();
@@ -610,7 +618,7 @@ OreoMassProps oreo_mass_properties(OreoSolid solid) {
 
 const char* oreo_face_name(OreoSolid solid, int index) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
     if (index < 1) return "";
     auto name = solid->ns.getElementName(oreo::IndexedName("Face", index));
     tl_nameBuffer = name.data();
@@ -620,7 +628,7 @@ const char* oreo_face_name(OreoSolid solid, int index) {
 
 const char* oreo_edge_name(OreoSolid solid, int index) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
     if (index < 1) return "";
     auto name = solid->ns.getElementName(oreo::IndexedName("Edge", index));
     tl_nameBuffer = name.data();
@@ -634,7 +642,7 @@ const char* oreo_edge_name(OreoSolid solid, int index) {
 
 OreoSolid oreo_import_step(const uint8_t* data, size_t len) {
     OREO_C_TRY
-    if (!data) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!data) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto r = oreo::importStep(*internalDefaultCtx(), data, len);
     if (!r.ok()) return nullptr;
     return wrapSolid(std::move(r.value().shape));
@@ -643,7 +651,7 @@ OreoSolid oreo_import_step(const uint8_t* data, size_t len) {
 
 OreoSolid oreo_import_step_file(const char* path) {
     OREO_C_TRY
-    if (!path) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!path) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto r = oreo::importStepFile(*internalDefaultCtx(), path);
     if (!r.ok()) return nullptr;
     return wrapSolid(std::move(r.value().shape));
@@ -652,8 +660,8 @@ OreoSolid oreo_import_step_file(const char* path) {
 
 int oreo_export_step_file(OreoSolid solids[], int n, const char* path) {
     OREO_C_TRY
-    if (!solids) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
-    if (!path) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!solids) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!path) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     std::vector<oreo::NamedShape> shapes;
     for (int i = 0; i < n; ++i) {
         if (solids[i]) shapes.push_back(solids[i]->ns);
@@ -670,8 +678,8 @@ int oreo_export_step_file(OreoSolid solids[], int n, const char* path) {
 
 uint8_t* oreo_serialize(OreoSolid solid, size_t* out_len) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
-    if (!out_len) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!out_len) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto r = oreo::serialize(*internalDefaultCtx(), solid->ns);
     if (!r.ok()) { *out_len = 0; return nullptr; }
     auto& buf = r.value();
@@ -685,7 +693,7 @@ uint8_t* oreo_serialize(OreoSolid solid, size_t* out_len) {
 
 OreoSolid oreo_deserialize(const uint8_t* data, size_t len) {
     OREO_C_TRY
-    if (!data) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!data) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto r = oreo::deserialize(*internalDefaultCtx(), data, len);
     if (!r.ok()) return nullptr;
     return wrapSolid(std::move(r).value());
@@ -716,7 +724,7 @@ void oreo_sketch_free(OreoSketch sketch) {
 
 int oreo_sketch_add_point(OreoSketch sketch, double x, double y) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
     sketch->points.push_back({x, y});
     return static_cast<int>(sketch->points.size()) - 1;
     OREO_C_CATCH_RETURN(-1)
@@ -726,7 +734,7 @@ int oreo_sketch_add_line(OreoSketch sketch,
                          double x1, double y1,
                          double x2, double y2) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
     sketch->lines.push_back({{x1, y1}, {x2, y2}});
     return static_cast<int>(sketch->lines.size()) - 1;
     OREO_C_CATCH_RETURN(-1)
@@ -735,7 +743,7 @@ int oreo_sketch_add_line(OreoSketch sketch,
 int oreo_sketch_add_circle(OreoSketch sketch,
                            double cx, double cy, double radius) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
     sketch->circles.push_back({{cx, cy}, radius});
     return static_cast<int>(sketch->circles.size()) - 1;
     OREO_C_CATCH_RETURN(-1)
@@ -747,7 +755,7 @@ int oreo_sketch_add_arc(OreoSketch sketch,
                         double ex, double ey,
                         double radius) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
     sketch->arcs.push_back({{cx, cy}, {sx, sy}, {ex, ey}, radius});
     return static_cast<int>(sketch->arcs.size()) - 1;
     OREO_C_CATCH_RETURN(-1)
@@ -758,10 +766,10 @@ int oreo_sketch_add_constraint(OreoSketch sketch,
                                int entity2, int entity3,
                                double value) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
     // Validate constraint type enum
     if (type < 0 || type > static_cast<int>(oreo::ConstraintType::Concentric)) {
-        internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT,
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
             "Invalid constraint type: " + std::to_string(type));
         return -1;
     }
@@ -778,7 +786,7 @@ int oreo_sketch_add_constraint(OreoSketch sketch,
 
 int oreo_sketch_solve(OreoSketch sketch) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return OREO_INVALID_INPUT; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return OREO_INVALID_INPUT; }
     auto r = oreo::solveSketch(
         *internalDefaultCtx(),
         sketch->points, sketch->lines, sketch->circles,
@@ -803,7 +811,7 @@ int oreo_sketch_solve(OreoSketch sketch) {
 
 int oreo_sketch_dof(OreoSketch sketch) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return -1; }
     return sketch->lastResult.degreesOfFreedom;
     OREO_C_CATCH_RETURN(-1)
 }
@@ -841,7 +849,7 @@ void oreo_sketch_get_line(OreoSketch sketch, int index,
 
 OreoWire oreo_sketch_to_wire(OreoSketch sketch) {
     OREO_C_TRY
-    if (!sketch) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!sketch) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto r = oreo::sketchToWire(*internalDefaultCtx(), sketch->lines, sketch->circles, sketch->arcs);
     if (!r.ok()) return nullptr;
     auto ns = std::move(r).value();
@@ -850,29 +858,37 @@ OreoWire oreo_sketch_to_wire(OreoSketch sketch) {
     OREO_C_CATCH_RETURN(nullptr)
 }
 
+#endif // OREO_ENABLE_LEGACY_API (Primitives through Sketch)
+
 // ============================================================
 // Tessellation / Meshing
 // ============================================================
 
 struct OreoMesh_T { oreo::MeshResult mesh; };
 
+#ifdef OREO_ENABLE_LEGACY_API
 OreoMesh oreo_tessellate(OreoSolid solid, double linear_deflection, double angular_deflection_deg) {
     OREO_C_TRY
-    if (!solid) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto result = oreo::tessellate(*internalDefaultCtx(), solid->ns, {linear_deflection, angular_deflection_deg});
-    if (result.empty()) return nullptr;
-    return new OreoMesh_T{std::move(result)};
+    if (!result.ok()) return nullptr;
+    auto mesh = std::move(result).value();
+    if (mesh.empty()) return nullptr;
+    return new OreoMesh_T{std::move(mesh)};
     OREO_C_CATCH_RETURN(nullptr)
 }
+#endif // OREO_ENABLE_LEGACY_API
 
 OreoMesh oreo_ctx_tessellate(OreoContext ctx, OreoSolid solid,
                              double linear_deflection, double angular_deflection_deg) {
     OREO_C_TRY
-    if (!ctx) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
-    if (!solid) { ctx->ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!solid) { ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     auto result = oreo::tessellate(*ctx->ctx, solid->ns, {linear_deflection, angular_deflection_deg});
-    if (result.empty()) return nullptr;
-    return new OreoMesh_T{std::move(result)};
+    if (!result.ok()) return nullptr;
+    auto mesh = std::move(result).value();
+    if (mesh.empty()) return nullptr;
+    return new OreoMesh_T{std::move(mesh)};
     OREO_C_CATCH_RETURN(nullptr)
 }
 
@@ -884,72 +900,72 @@ void oreo_mesh_free(OreoMesh mesh) {
 
 int oreo_mesh_vertex_count(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     return mesh->mesh.totalVertices;
     OREO_C_CATCH_RETURN(0)
 }
 int oreo_mesh_triangle_count(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     return mesh->mesh.totalTriangles;
     OREO_C_CATCH_RETURN(0)
 }
 int oreo_mesh_face_group_count(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     return static_cast<int>(mesh->mesh.faceGroups.size());
     OREO_C_CATCH_RETURN(0)
 }
 int oreo_mesh_edge_count(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     return mesh->mesh.totalEdges;
     OREO_C_CATCH_RETURN(0)
 }
 
 const float* oreo_mesh_positions(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return mesh->mesh.positions.empty() ? nullptr : mesh->mesh.positions.data();
     OREO_C_CATCH_RETURN(nullptr)
 }
 const float* oreo_mesh_normals(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return mesh->mesh.normals.empty() ? nullptr : mesh->mesh.normals.data();
     OREO_C_CATCH_RETURN(nullptr)
 }
 const uint32_t* oreo_mesh_indices(OreoMesh mesh) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     return mesh->mesh.indices.empty() ? nullptr : mesh->mesh.indices.data();
     OREO_C_CATCH_RETURN(nullptr)
 }
 
 int oreo_mesh_face_group_id(OreoMesh mesh, int group) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     if (group < 0 || group >= (int)mesh->mesh.faceGroups.size()) return 0;
     return mesh->mesh.faceGroups[group].faceId;
     OREO_C_CATCH_RETURN(0)
 }
 const char* oreo_mesh_face_group_name(OreoMesh mesh, int group) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return ""; }
     if (group < 0 || group >= (int)mesh->mesh.faceGroups.size()) return "";
     return mesh->mesh.faceGroups[group].faceName.c_str();
     OREO_C_CATCH_RETURN("")
 }
 int oreo_mesh_face_group_index_start(OreoMesh mesh, int group) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     if (group < 0 || group >= (int)mesh->mesh.faceGroups.size()) return 0;
     return static_cast<int>(mesh->mesh.faceGroups[group].indexStart);
     OREO_C_CATCH_RETURN(0)
 }
 int oreo_mesh_face_group_index_count(OreoMesh mesh, int group) {
     OREO_C_TRY
-    if (!mesh) { internalDefaultCtx()->diag.error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (!mesh) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     if (group < 0 || group >= (int)mesh->mesh.faceGroups.size()) return 0;
     return static_cast<int>(mesh->mesh.faceGroups[group].indexCount);
     OREO_C_CATCH_RETURN(0)

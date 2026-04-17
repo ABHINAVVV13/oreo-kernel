@@ -16,11 +16,24 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstddef>
 #include <functional>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+// SCH-9: Allow CMake to override the kernel version via a
+// target_compile_definitions(-D OREO_KERNEL_VERSION_STRING="...") macro.
+// TODO(integration): wire this macro in CMakeLists.txt via
+//     target_compile_definitions(oreo-kernel PUBLIC
+//         OREO_KERNEL_VERSION_STRING="${PROJECT_VERSION}")
+// so the literal stays in sync with the project version automatically.
+#ifndef OREO_KERNEL_VERSION_STRING
+#define OREO_KERNEL_VERSION_STRING "0.2.0"
+#endif
 
 namespace oreo {
 
@@ -57,9 +70,16 @@ struct OREO_IMMUTABLE SchemaVersion {
         return {{"major", major}, {"minor", minor}, {"patch", patch}};
     }
 
+    // SCH-5: strict integer validation — do not silently coerce floats.
     static SchemaVersion fromJSON(const nlohmann::json& j) {
         if (!j.contains("major") || !j.contains("minor") || !j.contains("patch"))
             throw std::invalid_argument("SchemaVersion missing required fields");
+        if (!j.at("major").is_number_integer())
+            throw std::runtime_error("SchemaVersion: 'major' must be integer");
+        if (!j.at("minor").is_number_integer())
+            throw std::runtime_error("SchemaVersion: 'minor' must be integer");
+        if (!j.at("patch").is_number_integer())
+            throw std::runtime_error("SchemaVersion: 'patch' must be integer");
         return {j.at("major").get<int>(), j.at("minor").get<int>(), j.at("patch").get<int>()};
     }
 };
@@ -67,8 +87,8 @@ struct OREO_IMMUTABLE SchemaVersion {
 // ─── Current schema versions for each type ───────────────────
 
 namespace schema {
-    // Kernel version
-    constexpr const char* KERNEL_VERSION = "0.2.0";
+    // Kernel version (SCH-9: compile-time overridable via OREO_KERNEL_VERSION_STRING).
+    constexpr const char* KERNEL_VERSION = OREO_KERNEL_VERSION_STRING;
 
     // Serializable types
     constexpr SchemaVersion FEATURE_TREE   = {1, 0, 0};
@@ -103,7 +123,10 @@ class OREO_CONTEXT_BOUND SchemaRegistry {
 public:
     SchemaRegistry();
 
-    // Register a migration from one version to another
+    // Register a migration from one version to another.
+    // SCH-3: throws std::logic_error if a migration for (type, from) is
+    // already registered — migration registration happens at ctor time
+    // where throwing is safe and duplicates are always a programming bug.
     void registerMigration(const std::string& type,
                           SchemaVersion from, SchemaVersion to,
                           MigrationFn migrator);
@@ -120,7 +143,26 @@ public:
     // Get current version for a type
     SchemaVersion currentVersion(const std::string& type) const;
 
-    // Add schema version headers to serialized JSON
+    // SCH-2: Configure the maximum number of migration steps walked by
+    // migrate() / canLoad() before aborting with a cycle/depth error.
+    // Default is 256 — bumped up from the legacy hardcoded 100.
+    void setMaxMigrationSteps(size_t steps) noexcept { maxMigrationSteps_ = steps; }
+    size_t maxMigrationSteps() const noexcept { return maxMigrationSteps_; }
+
+    // SCH-8: Introspection helpers for tooling / debugging.
+    // registeredTypes(): every type that has a current version entry.
+    // versionsFor(type): every `from` version registered as a migration
+    //                    source for `type` (order of registration).
+    // unregisterMigration: drop a specific (type, from) migration; returns
+    //                      true if removed, false if no such migration.
+    std::vector<std::string> registeredTypes() const;
+    std::vector<SchemaVersion> versionsFor(const std::string& type) const;
+    bool unregisterMigration(const std::string& type, const SchemaVersion& from);
+
+    // Add schema version headers to serialized JSON.
+    // SCH-6: if `data` already contains `_schema` / `_version` / `_kernelVersion`
+    // fields, they must match the new values or this throws. Silent
+    // overwrites are no longer allowed.
     static nlohmann::json addHeader(const std::string& type,
                                     SchemaVersion version,
                                     nlohmann::json data);
@@ -130,12 +172,58 @@ public:
         std::string type;
         SchemaVersion version;
         bool valid;
+        // SCH-7: populated when `_kernelVersion` is present in the header.
+        // Callers can compare against `schema::KERNEL_VERSION` and warn.
+        std::string kernelVersion;
+        bool kernelVersionPresent = false;
     };
     static HeaderInfo readHeader(const nlohmann::json& data);
 
+    // SCH-7: Records the `_kernelVersion` string read from the most
+    // recent migrate() call. Empty when no header has been inspected
+    // yet or the header omitted the field. (canLoad() only receives a
+    // SchemaVersion, not the full JSON, so it cannot update this.)
+    // Callers can query after load to compare against
+    // schema::KERNEL_VERSION and warn.
+    const std::string& loadedFromKernelVersion() const noexcept {
+        return loadedFromKernelVersion_;
+    }
+
+    // SCH-10: Round-trip test helper. Runs `sampleData` through migrate()
+    // from `from` to `to`, then shape-checks the result:
+    //   - has `_schema` matching `type`
+    //   - has `_version` matching `to`
+    // Returns true on success, false on any validation failure. A
+    // human-readable reason is written to `reasonOut` when non-null.
+    bool testMigration(const std::string& type,
+                       SchemaVersion from,
+                       SchemaVersion to,
+                       const nlohmann::json& sampleData,
+                       std::string* reasonOut = nullptr) const;
+
 private:
     std::map<std::string, SchemaVersion> currentVersions_;
+
+    // SCH-4: Linear scan over migrations_ per step is O(n). Keep the
+    // vector for ordered introspection (registration order matters for
+    // debugging) and mirror into migrationMap_ for O(1) lookup at
+    // migrate() time. Composite key = type + "#" + from.toString()
+    // avoids the need for a std::hash<SchemaVersion> specialization.
     std::vector<Migration> migrations_;
+    std::unordered_map<std::string, MigrationFn> migrationMap_;
+    std::unordered_map<std::string, SchemaVersion> migrationTo_;
+
+    // SCH-2: configurable migration-step cap (was hardcoded 100).
+    size_t maxMigrationSteps_ = 256;
+
+    // SCH-7: most recent `_kernelVersion` seen in a header (mutable so
+    // const migrate() can update it).
+    mutable std::string loadedFromKernelVersion_;
+
+    // SCH-4: build composite key used by migrationMap_ / migrationTo_.
+    static std::string composeKey(const std::string& type, const SchemaVersion& from) {
+        return type + "#" + from.toString();
+    }
 };
 
 } // namespace oreo

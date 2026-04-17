@@ -5,6 +5,7 @@
 
 #include "oreo_geometry.h"
 #include "core/diagnostic_scope.h"
+#include "core/occt_try.h"
 #include "core/oreo_error.h"
 #include "core/oreo_tolerance.h"
 #include "core/validation.h"
@@ -28,25 +29,27 @@ GeomResult mirror(KernelContext& ctx, const NamedShape& solid, const gp_Ax2& pla
 
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     gp_Trsf trsf;
     trsf.SetMirror(plane);
 
     BRepBuilderAPI_Transform maker(solid.shape(), trsf, Standard_True /*copy*/);
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Mirror transform failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Mirror transform failed");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Mirror produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Mirror produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Mirror");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "mirror")
 }
 
 GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_Vec& direction, int count, double spacing) {
@@ -57,6 +60,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     if (!validation::requirePositive(ctx, spacing, "spacing")) return scope.makeFailure<NamedShape>();
     if (!validation::requireNonZeroVec(ctx, direction, "direction")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     // Unit conversion: spacing is a length, direction components are lengths
     const double kSpacing = ctx.units().toKernelLength(spacing);
     const gp_Vec kDirection(ctx.units().toKernelLength(direction.X()),
@@ -75,7 +79,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
 
         BRepBuilderAPI_Transform xform(solid.shape(), trsf, Standard_True);
         if (!xform.IsDone()) {
-            ctx.diag.error(ErrorCode::OCCT_FAILURE,
+            ctx.diag().error(ErrorCode::OCCT_FAILURE,
                            "Linear pattern transform failed at instance " + std::to_string(i));
             return scope.makeFailure<NamedShape>();
         }
@@ -100,7 +104,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
         fuser.Build();
 
         if (!fuser.IsDone()) {
-            ctx.diag.error(ErrorCode::BOOLEAN_FAILED,
+            ctx.diag().error(ErrorCode::BOOLEAN_FAILED,
                            "Linear pattern fuse failed at instance " + std::to_string(i),
                            "Try increasing spacing or simplifying geometry");
             return scope.makeFailure<NamedShape>();
@@ -109,7 +113,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     }
 
     if (accumulated.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Linear pattern produced null result");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Linear pattern produced null result");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -121,14 +125,14 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "LinearPattern result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
     // Element map: pattern has complex multi-instance history.
     // We create a map referencing the base shape's map as a child,
     // and give each output element a pattern-specific name.
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     NullMapper nullMapper;
     auto mapped = mapShapeElements(ctx, accumulated, nullMapper, {solid}, tag, "LinearPattern");
 
@@ -142,6 +146,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     }
 
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "patternLinear")
 }
 
 GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp_Ax1& axis, int count, double totalAngleRad) {
@@ -151,14 +156,15 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
     if (!validation::requireValidAxis(ctx, axis, "axis")) return scope.makeFailure<NamedShape>();
     if (!validation::requireMinInt(ctx, count, 2, "count")) return scope.makeFailure<NamedShape>();
     if (!std::isfinite(totalAngleRad)) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Pattern angle is NaN or Inf");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Pattern angle is NaN or Inf");
         return scope.makeFailure<NamedShape>();
     }
     if (std::abs(totalAngleRad) < Precision::Angular()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Pattern angle is effectively zero");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Pattern angle is effectively zero");
         return scope.makeFailure<NamedShape>();
     }
 
+    OREO_OCCT_TRY
     // Unit conversion: totalAngleRad is an angle
     const double kTotalAngle = ctx.units().toKernelAngle(totalAngleRad);
 
@@ -174,7 +180,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
 
         BRepBuilderAPI_Transform xform(solid.shape(), trsf, Standard_True);
         if (!xform.IsDone()) {
-            ctx.diag.error(ErrorCode::OCCT_FAILURE,
+            ctx.diag().error(ErrorCode::OCCT_FAILURE,
                            "Circular pattern transform failed at instance " + std::to_string(i));
             return scope.makeFailure<NamedShape>();
         }
@@ -198,7 +204,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
         fuser.Build();
 
         if (!fuser.IsDone()) {
-            ctx.diag.error(ErrorCode::BOOLEAN_FAILED,
+            ctx.diag().error(ErrorCode::BOOLEAN_FAILED,
                            "Circular pattern fuse failed at instance " + std::to_string(i),
                            "Try reducing count or simplifying geometry");
             return scope.makeFailure<NamedShape>();
@@ -207,7 +213,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
     }
 
     if (accumulated.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Circular pattern produced null result");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Circular pattern produced null result");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -219,11 +225,11 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "CircularPattern result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     NullMapper nullMapper;
     auto mapped = mapShapeElements(ctx, accumulated, nullMapper, {solid}, tag, "CircularPattern");
 
@@ -236,6 +242,7 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
     }
 
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "patternCircular")
 }
 
 } // namespace oreo

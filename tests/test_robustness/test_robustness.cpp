@@ -20,7 +20,7 @@ TEST(Robustness, ExtrudeNull) {
     oreo::NamedShape null;
     auto result = oreo::extrude(*ctx, null, gp_Vec(0, 0, 10));
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, RevolveNull) {
@@ -29,7 +29,7 @@ TEST(Robustness, RevolveNull) {
     gp_Ax1 axis(gp_Pnt(0,0,0), gp_Dir(0,0,1));
     auto result = oreo::revolve(*ctx, null, axis, 1.0);
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, BooleanWithNull) {
@@ -40,11 +40,11 @@ TEST(Robustness, BooleanWithNull) {
     auto r1 = oreo::booleanUnion(*ctx, null, box);
     EXPECT_FALSE(r1.ok());
 
-    ctx->diag.clear();
+    ctx->diag().clear();
     auto r2 = oreo::booleanSubtract(*ctx, box, null);
     EXPECT_FALSE(r2.ok());
 
-    ctx->diag.clear();
+    ctx->diag().clear();
     auto r3 = oreo::booleanIntersect(*ctx, null, null);
     EXPECT_FALSE(r3.ok());
 }
@@ -55,7 +55,7 @@ TEST(Robustness, FilletEmptyEdges) {
     std::vector<oreo::NamedEdge> empty;
     auto result = oreo::fillet(*ctx, box, empty, 2.0);
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, FilletZeroRadius) {
@@ -69,7 +69,7 @@ TEST(Robustness, FilletZeroRadius) {
     std::vector<oreo::NamedEdge> filletEdges = {edges[0]};
     auto result = oreo::fillet(*ctx, box, filletEdges, 0.0);
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, ChamferNegativeDistance) {
@@ -83,7 +83,7 @@ TEST(Robustness, ChamferNegativeDistance) {
     std::vector<oreo::NamedEdge> chamferEdges = {edges[0]};
     auto result = oreo::chamfer(*ctx, box, chamferEdges, -5.0);
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, PatternCountOne) {
@@ -91,7 +91,7 @@ TEST(Robustness, PatternCountOne) {
     oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
     auto result = oreo::patternLinear(*ctx, box, gp_Vec(1,0,0), 1, 10.0);
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, PatternZeroSpacing) {
@@ -99,7 +99,7 @@ TEST(Robustness, PatternZeroSpacing) {
     oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
     auto result = oreo::patternLinear(*ctx, box, gp_Vec(1,0,0), 3, 0.0);
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // -- Queries on null shapes -------------------------------------------
@@ -109,7 +109,7 @@ TEST(Robustness, AABBNull) {
     oreo::NamedShape null;
     auto bbox = oreo::aabb(*ctx, null);
     EXPECT_FALSE(bbox.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, MassPropertiesNull) {
@@ -117,7 +117,7 @@ TEST(Robustness, MassPropertiesNull) {
     oreo::NamedShape null;
     auto props = oreo::massProperties(*ctx, null);
     EXPECT_FALSE(props.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, MeasureDistanceNull) {
@@ -126,7 +126,7 @@ TEST(Robustness, MeasureDistanceNull) {
     oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
     auto distR = oreo::measureDistance(*ctx, null, box);
     EXPECT_FALSE(distR.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // -- Serialization robustness -----------------------------------------
@@ -160,7 +160,7 @@ TEST(Robustness, ImportStepNonexistentFile) {
     auto ctx = oreo::KernelContext::create();
     auto result = oreo::importStepFile(*ctx, "this_file_does_not_exist.step");
     EXPECT_FALSE(result.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Robustness, ImportStepShapeLegacy) {

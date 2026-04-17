@@ -10,6 +10,7 @@
 #define OREO_NAMED_SHAPE_H
 
 #include "element_map.h"
+#include "core/thread_safety.h"
 
 #include <TopoDS_Shape.hxx>
 #include <TopExp_Explorer.hxx>
@@ -21,7 +22,13 @@
 
 namespace oreo {
 
-class NamedShape {
+// NamedShape is context-bound: the underlying TopoDS_Shape and ElementMap
+// share OCCT's process-global state (BRep allocators, handle tables), which
+// means a NamedShape must not be mutated from multiple threads concurrently,
+// and should not be shared across KernelContexts. Reading concurrently is
+// safe; any mutation (including destruction of the last copy that owns the
+// shared ElementMap) must be serialized. See src/core/thread_safety.h.
+class OREO_CONTEXT_BOUND NamedShape {
 public:
     NamedShape() : tag_(0) {}
 

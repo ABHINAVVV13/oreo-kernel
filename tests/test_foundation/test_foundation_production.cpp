@@ -369,7 +369,7 @@ TEST(OperationResult, FailureNotOK) {
 
 TEST(OperationResult, FailureThrows) {
     auto result = oreo::OperationResult<int>::failure({});
-    EXPECT_THROW(result.value(), std::runtime_error);
+    EXPECT_THROW(result.valueOrThrow(), std::runtime_error);
 }
 
 TEST(OperationResult, ValueOrDefault) {
@@ -401,12 +401,12 @@ TEST(DiagnosticScope, NestedNoLeak) {
 
     // Outer scope: add a warning
     oreo::DiagnosticScope outer(*ctx);
-    ctx->diag.warning(oreo::ErrorCode::SHAPE_INVALID, "Outer warning");
+    ctx->diag().warning(oreo::ErrorCode::SHAPE_INVALID, "Outer warning");
 
     {
         // Inner scope: add an error
         oreo::DiagnosticScope inner(*ctx);
-        ctx->diag.error(oreo::ErrorCode::OCCT_FAILURE, "Inner error");
+        ctx->diag().error(oreo::ErrorCode::OCCT_FAILURE, "Inner error");
 
         // Inner scope sees ONLY its own diagnostics
         auto innerDiags = inner.extractDiagnostics();
@@ -420,7 +420,7 @@ TEST(DiagnosticScope, NestedNoLeak) {
     EXPECT_EQ(outerDiags.size(), 2u);
 
     // Context still holds everything
-    EXPECT_EQ(ctx->diag.count(), 2);
+    EXPECT_EQ(ctx->diag().count(), 2);
 }
 
 TEST(DiagnosticScope, MakeResultSuccess) {
@@ -436,13 +436,13 @@ TEST(DiagnosticScope, MakeResultSuccess) {
 TEST(DiagnosticScope, MakeFailureOnError) {
     auto ctx = oreo::KernelContext::create();
     oreo::DiagnosticScope scope(*ctx);
-    ctx->diag.error(oreo::ErrorCode::INVALID_INPUT, "Bad input");
+    ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Bad input");
 
     // makeResult should detect the error and return failure
     auto result = scope.makeResult(42);
     EXPECT_FALSE(result.ok());
     EXPECT_TRUE(result.hasErrors());
-    EXPECT_THROW(result.value(), std::runtime_error);
+    EXPECT_THROW(result.valueOrThrow(), std::runtime_error);
 }
 
 // ===================================================================
@@ -454,12 +454,12 @@ TEST(ContextIsolation, DiagIndependent) {
     auto ctx2 = oreo::KernelContext::create();
 
     // Report an error in ctx1 only
-    ctx1->diag.error(oreo::ErrorCode::INVALID_INPUT, "ctx1 error");
+    ctx1->diag().error(oreo::ErrorCode::INVALID_INPUT, "ctx1 error");
 
     // ctx2 should have NO errors
-    EXPECT_TRUE(ctx1->diag.hasErrors());
-    EXPECT_FALSE(ctx2->diag.hasErrors());
-    EXPECT_EQ(ctx2->diag.count(), 0);
+    EXPECT_TRUE(ctx1->diag().hasErrors());
+    EXPECT_FALSE(ctx2->diag().hasErrors());
+    EXPECT_EQ(ctx2->diag().count(), 0);
 }
 
 TEST(ContextIsolation, TagsIndependent) {
@@ -467,11 +467,11 @@ TEST(ContextIsolation, TagsIndependent) {
     auto ctx2 = oreo::KernelContext::create();
 
     // Allocate tags from ctx1
-    int64_t t1a = ctx1->tags.nextTag();
-    int64_t t1b = ctx1->tags.nextTag();
+    int64_t t1a = ctx1->tags().nextTag();
+    int64_t t1b = ctx1->tags().nextTag();
 
     // ctx2 tags should start fresh, not affected by ctx1
-    int64_t t2a = ctx2->tags.nextTag();
+    int64_t t2a = ctx2->tags().nextTag();
 
     // Both should produce 1 as their first tag (single-doc default)
     EXPECT_EQ(t1a, 1);
@@ -479,8 +479,8 @@ TEST(ContextIsolation, TagsIndependent) {
     EXPECT_EQ(t1b, 2);
 
     // ctx1 counter is at 2, ctx2 at 1 -- independent
-    EXPECT_EQ(ctx1->tags.currentValue(), 2);
-    EXPECT_EQ(ctx2->tags.currentValue(), 1);
+    EXPECT_EQ(ctx1->tags().currentValue(), 2);
+    EXPECT_EQ(ctx2->tags().currentValue(), 1);
 }
 
 TEST(ContextIsolation, UnitsIndependent) {
@@ -584,32 +584,32 @@ TEST(Schema, CompatibleVersionLoads) {
 TEST(Validation, RejectNaN) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, NaN, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Validation, RejectInf) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, PosInf, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Validation, RejectNegInf) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requireNonNegative(*ctx, NegInf, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Validation, RejectNaNVec) {
     auto ctx = oreo::KernelContext::create();
     gp_Vec nanVec(NaN, 0, 0);
     EXPECT_FALSE(oreo::validation::requireNonZeroVec(*ctx, nanVec, "test"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 TEST(Validation, AcceptValid) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_TRUE(oreo::validation::requirePositive(*ctx, 5.0, "test"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // ===================================================================

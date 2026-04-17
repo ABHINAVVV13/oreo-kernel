@@ -2,6 +2,7 @@
 
 #include "oreo_geometry.h"
 #include "core/diagnostic_scope.h"
+#include "core/occt_try.h"
 #include "core/validation.h"
 #include "io/shape_fix.h"
 #include "naming/map_shape_elements.h"
@@ -24,6 +25,7 @@ GeomResult fillet(KernelContext& ctx,
     if (!validation::requireNonEmpty(ctx, edges, "edges")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, radius, "radius")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     double kernelRadius = ctx.units().toKernelLength(radius);
 
     BRepFilletAPI_MakeFillet maker(solid.shape());
@@ -34,19 +36,19 @@ GeomResult fillet(KernelContext& ctx,
         ++validEdgeCount;
     }
     if (validEdgeCount == 0) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "No valid edges for fillet — all edges were null or wrong type");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "No valid edges for fillet — all edges were null or wrong type");
         return scope.makeFailure<NamedShape>();
     }
 
     maker.Build();
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepFilletAPI_MakeFillet failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepFilletAPI_MakeFillet failed");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Fillet produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Fillet produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -58,14 +60,15 @@ GeomResult fillet(KernelContext& ctx,
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "Fillet result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Fillet");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "fillet")
 }
 
 GeomResult chamfer(KernelContext& ctx,
@@ -79,6 +82,7 @@ GeomResult chamfer(KernelContext& ctx,
     if (!validation::requireNonEmpty(ctx, edges, "edges")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, distance, "distance")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     double kernelDist = ctx.units().toKernelLength(distance);
 
     BRepFilletAPI_MakeChamfer maker(solid.shape());
@@ -89,19 +93,19 @@ GeomResult chamfer(KernelContext& ctx,
         ++validEdgeCount;
     }
     if (validEdgeCount == 0) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "No valid edges for chamfer — all edges were null or wrong type");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "No valid edges for chamfer — all edges were null or wrong type");
         return scope.makeFailure<NamedShape>();
     }
 
     maker.Build();
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepFilletAPI_MakeChamfer failed");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepFilletAPI_MakeChamfer failed");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Chamfer produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Chamfer produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -113,14 +117,15 @@ GeomResult chamfer(KernelContext& ctx,
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "Chamfer result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Chamfer");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "chamfer")
 }
 
 } // namespace oreo

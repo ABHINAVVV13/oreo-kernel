@@ -2,6 +2,7 @@
 
 #include "oreo_geometry.h"
 #include "core/diagnostic_scope.h"
+#include "core/occt_try.h"
 #include "core/oreo_error.h"
 #include "core/oreo_tolerance.h"
 #include "core/validation.h"
@@ -42,14 +43,15 @@ GeomResult draft(KernelContext& ctx,
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
     if (!validation::requireNonEmpty(ctx, faces, "faces")) return scope.makeFailure<NamedShape>();
     if (!std::isfinite(angleDeg)) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Draft angle is NaN or Inf");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Draft angle is NaN or Inf");
         return scope.makeFailure<NamedShape>();
     }
     if (std::abs(angleDeg) < Precision::Angular()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Draft angle is effectively zero");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Draft angle is effectively zero");
         return scope.makeFailure<NamedShape>();
     }
 
+    OREO_OCCT_TRY
     // Unit conversion: angleDeg is an angle
     const double kAngleRad = ctx.units().toKernelAngle(angleDeg);
 
@@ -59,7 +61,7 @@ GeomResult draft(KernelContext& ctx,
         try {
             maker.Add(TopoDS::Face(f.face), pullDirection, kAngleRad, gp_Pln());
         } catch (const Standard_Failure&) {
-            ctx.diag.error(ErrorCode::OCCT_FAILURE, "Failed to add face to draft operation",
+            ctx.diag().error(ErrorCode::OCCT_FAILURE, "Failed to add face to draft operation",
                          f.name.toString(), "Check that the face can be drafted with the given angle");
             return scope.makeFailure<NamedShape>();
         }
@@ -67,14 +69,14 @@ GeomResult draft(KernelContext& ctx,
 
     maker.Build();
     if (!maker.IsDone()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_DraftAngle failed",
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "BRepOffsetAPI_DraftAngle failed",
                      {}, "Try reducing the draft angle or simplifying the geometry");
         return scope.makeFailure<NamedShape>();
     }
 
     TopoDS_Shape result = maker.Shape();
     if (result.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Draft produced null shape");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Draft produced null shape");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -86,14 +88,15 @@ GeomResult draft(KernelContext& ctx,
             d.code = ErrorCode::SHAPE_INVALID;
             d.message = "Draft result invalid after ShapeFix — geometry may be degraded";
             d.geometryDegraded = true;
-            ctx.diag.report(d);
+            ctx.diag().report(d);
         }
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Draft");
     return scope.makeResult(mapped);
+    OREO_OCCT_CATCH_NS(scope, ctx, "draft")
 }
 
 GeomResult hole(KernelContext& ctx,
@@ -112,6 +115,7 @@ GeomResult hole(KernelContext& ctx,
         if (!validation::requirePositive(ctx, depth, "depth")) return scope.makeFailure<NamedShape>();
     }
 
+    OREO_OCCT_TRY
     // Unit conversion: diameter and depth are lengths
     const double kDiameter = ctx.units().toKernelLength(diameter);
     const double kDepth    = ctx.units().toKernelLength(depth);
@@ -135,9 +139,9 @@ GeomResult hole(KernelContext& ctx,
                 }
             }
         } catch (const Standard_Failure&) {
-            ctx.diag.warning(ErrorCode::OCCT_FAILURE, "Could not determine face normal, using default (0,0,-1)");
+            ctx.diag().warning(ErrorCode::OCCT_FAILURE, "Could not determine face normal, using default (0,0,-1)");
         } catch (...) {
-            ctx.diag.warning(ErrorCode::INTERNAL_ERROR, "Unknown exception determining face normal, using default (0,0,-1)");
+            ctx.diag().warning(ErrorCode::INTERNAL_ERROR, "Unknown exception determining face normal, using default (0,0,-1)");
         }
     }
 
@@ -159,10 +163,10 @@ GeomResult hole(KernelContext& ctx,
     gp_Ax2 cylAxis(center, normal);
     TopoDS_Shape cylShape = BRepPrimAPI_MakeCylinder(cylAxis, radius, holeDepth).Shape();
     if (cylShape.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Failed to create hole cylinder");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Failed to create hole cylinder");
         return scope.makeFailure<NamedShape>();
     }
-    auto cylTag = ctx.tags.nextTag();
+    auto cylTag = ctx.tags().nextTag();
     NullMapper nullMapper;
     auto cylinder = mapShapeElements(ctx, cylShape, nullMapper, {}, cylTag, "HoleCylinder");
 
@@ -171,6 +175,7 @@ GeomResult hole(KernelContext& ctx,
     if (!cutResult) return scope.makeFailure<NamedShape>();
 
     return scope.makeResult(cutResult.value());
+    OREO_OCCT_CATCH_NS(scope, ctx, "hole")
 }
 
 GeomResult rib(KernelContext& ctx,
@@ -185,6 +190,7 @@ GeomResult rib(KernelContext& ctx,
     if (!validation::requireNonNull(ctx, ribProfile, "ribProfile")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, thickness, "thickness")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     // Unit conversion: thickness is a length
     const double kThickness = ctx.units().toKernelLength(thickness);
 
@@ -195,7 +201,7 @@ GeomResult rib(KernelContext& ctx,
     // Extrude the profile
     auto extResult = extrude(ctx, ribProfile, gp_Vec(direction).Scaled(kThickness));
     if (!extResult) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE, "Failed to extrude rib profile");
+        ctx.diag().error(ErrorCode::OCCT_FAILURE, "Failed to extrude rib profile");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -204,6 +210,7 @@ GeomResult rib(KernelContext& ctx,
     if (!fuseResult) return scope.makeFailure<NamedShape>();
 
     return scope.makeResult(fuseResult.value());
+    OREO_OCCT_CATCH_NS(scope, ctx, "rib")
 }
 
 GeomResult pocket(KernelContext& ctx,
@@ -217,6 +224,7 @@ GeomResult pocket(KernelContext& ctx,
     if (!validation::requireNonNull(ctx, profile, "profile")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, depth, "depth")) return scope.makeFailure<NamedShape>();
 
+    OREO_OCCT_TRY
     // Unit conversion: depth is a length
     const double kDepth = ctx.units().toKernelLength(depth);
 
@@ -228,7 +236,7 @@ GeomResult pocket(KernelContext& ctx,
         cutVec = gp_Vec(0, 0, kDepth);
         extResult = extrude(ctx, profile, cutVec);
         if (!extResult) {
-            ctx.diag.error(ErrorCode::OCCT_FAILURE, "Failed to extrude pocket profile");
+            ctx.diag().error(ErrorCode::OCCT_FAILURE, "Failed to extrude pocket profile");
             return scope.makeFailure<NamedShape>();
         }
     }
@@ -237,6 +245,7 @@ GeomResult pocket(KernelContext& ctx,
     if (!cutResult) return scope.makeFailure<NamedShape>();
 
     return scope.makeResult(cutResult.value());
+    OREO_OCCT_CATCH_NS(scope, ctx, "pocket")
 }
 
 } // namespace oreo
