@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // Smoke test: verify OCCT links, GTest works, we can create a box.
 
 #include <gtest/gtest.h>

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // planegcs_config.h — Replaces FreeCAD's SketcherGlobal.h and FCGlobal.h
 // for standalone PlaneGCS compilation.
 //
@@ -7,9 +9,13 @@
 #ifndef PLANEGCS_CONFIG_H
 #define PLANEGCS_CONFIG_H
 
-// DLL export/import macro — originally SketcherExport
+// DLL export/import macro — originally SketcherExport. Mirrors the
+// three-mode policy in include/oreo_kernel.h (STATIC = no decoration,
+// EXPORTS = dllexport, default = dllimport).
 #if defined(_WIN32) || defined(__CYGWIN__)
-    #ifdef OREO_KERNEL_EXPORTS
+    #if defined(OREO_KERNEL_STATIC)
+        #define SketcherExport
+    #elif defined(OREO_KERNEL_EXPORTS)
         #define SketcherExport __declspec(dllexport)
     #else
         #define SketcherExport __declspec(dllimport)

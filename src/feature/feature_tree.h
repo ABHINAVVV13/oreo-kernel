@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // feature_tree.h — Parametric feature tree with replay engine.
 //
 // The FeatureTree is an ordered list of Features. When replayed,
@@ -57,6 +59,20 @@ public:
     // Suppress/unsuppress a feature
     void suppressFeature(const std::string& featureId, bool suppress);
 
+    // Move a feature to a different position in the ordered list.
+    // Marks every feature from min(oldIdx, newIdx) onward dirty so the
+    // next replay rebuilds the affected window. Returns false if
+    // featureId is unknown. newIndex is clamped to [0, featureCount).
+    bool moveFeature(const std::string& featureId, int newIndex);
+
+    // Walk every feature's params and rewrite ElementRefs whose
+    // featureId matches `oldFeatureId` to point at `newFeatureId`
+    // instead. Returns the number of refs rewritten. Marks every
+    // feature whose params changed (and everything downstream) as
+    // dirty so the next replay re-resolves the references.
+    int replaceReference(const std::string& oldFeatureId,
+                         const std::string& newFeatureId);
+
     // Get a feature by ID (const)
     const Feature* getFeature(const std::string& id) const;
 
@@ -75,6 +91,13 @@ public:
     // Replay from a specific feature onward (incremental replay).
     // Features before dirtyFrom use cached results.
     NamedShape replayFrom(const std::string& dirtyFromId);
+
+    // Onshape-style rollback marker. -1 means "roll to end"; otherwise
+    // the index is the last feature included in the visible rollback state.
+    void setRollbackIndex(int index);
+    int rollbackIndex() const { return rollbackIndex_; }
+    void rollToEnd() { rollbackIndex_ = -1; }
+    NamedShape replayToRollback();
 
     // ── Shape access ──────────────────────────────────────
 
@@ -100,8 +123,26 @@ public:
     // Serialize the feature tree to a JSON string
     std::string toJSON() const;
 
-    // Deserialize from JSON. Returns empty tree on failure.
-    static FeatureTree fromJSON(const std::string& json);
+    // Deserialize from JSON. Returns a FeatureTreeFromJsonResult so
+    // callers can detect malformed input — the previous silent-fallback
+    // API (returning an empty tree on parse failure) made it impossible
+    // to distinguish "user really wanted an empty tree" from "the
+    // payload was corrupt". Returns ok=true only when:
+    //   - the JSON parses
+    //   - the top-level shape matches the FeatureTree schema
+    //     (object containing a "features" array)
+    //   - every feature has a non-empty id and type
+    //   - feature count fits within ctx.quotas().maxFeatures (when
+    //     a context is supplied via the second overload)
+    // On failure, .tree is empty, .ok is false, and .error names the
+    // first violation (suitable for diagnostics).
+    static struct FeatureTreeFromJsonResult fromJSON(const std::string& json);
+
+    // Ctx-aware overload: same parse, plus quota enforcement against
+    // ctx.quotas().maxFeatures and any failure routed through
+    // ctx.diag() so it surfaces in the caller's diagnostic stream.
+    static struct FeatureTreeFromJsonResult fromJSON(KernelContext& ctx,
+                                                     const std::string& json);
 
 private:
     std::shared_ptr<KernelContext> ctx_;
@@ -113,6 +154,13 @@ private:
     // Dirty set: features that need re-execution
     std::map<std::string, bool> dirty_;
 
+    // Allocator state captured immediately before each feature executes.
+    // Incremental replay restores this snapshot before replaying a dirty
+    // feature so operation identities match full replay.
+    std::map<std::string, TagAllocator::SnapshotV2> allocatorSnapshotsBefore_;
+
+    int rollbackIndex_ = -1;
+
     // Find feature index by ID. Returns -1 if not found.
     int findIndex(const std::string& id) const;
 
@@ -121,6 +169,15 @@ private:
 
     // Reference resolver: looks up element references in cached shapes
     ResolvedRef resolveReference(const ElementRef& ref) const;
+};
+
+// Result from FeatureTree::fromJSON. Lives at namespace scope (not
+// nested in FeatureTree) because a nested struct member of the
+// enclosing-class type would reference an incomplete type.
+struct FeatureTreeFromJsonResult {
+    FeatureTree tree;
+    bool        ok = false;
+    std::string error;
 };
 
 } // namespace oreo

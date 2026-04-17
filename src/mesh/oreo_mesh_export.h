@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_mesh_export.h — GLB (binary glTF 2.0) export for MeshResult.
 //
 // Produces a standards-compliant .glb blob that loads in three.js, Babylon.js,

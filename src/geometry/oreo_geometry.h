@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_geometry.h — All geometry operations for oreo-kernel.
 //
 // Every operation:

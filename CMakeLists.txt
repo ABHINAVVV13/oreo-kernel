@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 3.20)
-project(oreo-kernel VERSION 0.1.0 LANGUAGES CXX)
+
+# Numeric version (CMake's project() requires X.Y.Z). Pre-release suffix
+# is carried separately in OREO_KERNEL_PRE_RELEASE so it can survive the
+# trip into the C++ source via target_compile_definitions without
+# breaking find_package(OreoKernel 0.9.0)-style version checks.
+project(oreo-kernel VERSION 0.9.0 LANGUAGES CXX C)
+set(OREO_KERNEL_PRE_RELEASE "rc1" CACHE STRING
+    "Pre-release suffix appended to OREO_KERNEL_VERSION_FULL (e.g. rc1, beta2). \
+Empty string for a final release.")
+if(OREO_KERNEL_PRE_RELEASE STREQUAL "")
+    set(OREO_KERNEL_VERSION_FULL "${PROJECT_VERSION}")
+else()
+    set(OREO_KERNEL_VERSION_FULL "${PROJECT_VERSION}-${OREO_KERNEL_PRE_RELEASE}")
+endif()
+message(STATUS "oreo-kernel ${OREO_KERNEL_VERSION_FULL}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,88 +44,241 @@ find_package(Qt6 REQUIRED COMPONENTS Core)
 #   because its fixtures exercise the legacy surface.
 option(OREO_ENABLE_LEGACY_API "Expose singleton-context C API (not safe for server builds)" ON)
 
-# ── oreo-kernel shared library ────────────────────────────────────────────────
-
-# Collect all source files (will be populated as we build out the kernel)
-file(GLOB_RECURSE OREO_SOURCES
-    src/core/*.cpp
-    src/naming/*.cpp
-    src/sketch/*.cpp
-    src/geometry/*.cpp
-    src/query/*.cpp
-    src/io/*.cpp
-    src/capi/*.cpp
-    src/feature/*.cpp
-    src/mesh/*.cpp
-)
-
-# Export all symbols from DLL (MSVC) — needed for tests to link C++ internals
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-
-add_library(oreo-kernel SHARED ${OREO_SOURCES})
-
-target_include_directories(oreo-kernel
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/naming/freecad
-        ${OpenCASCADE_INCLUDE_DIR}
-)
-
-target_link_libraries(oreo-kernel
-    PUBLIC
-        # OCCT core
-        TKernel
-        TKMath
-        TKBRep
-        TKGeomBase
-        TKGeomAlgo
-        TKG2d
-        TKG3d
-        TKTopAlgo
-        TKPrim
-        TKBool
-        TKBO
-        TKFillet
-        TKOffset
-        TKShHealing
-        TKMesh
-        # OCCT STEP I/O
-        TKDESTEP
-        TKXSBase
-        TKXCAF
-        TKLCAF
-        TKCAF
-        TKCDF
-        # Eigen + Boost (for PlaneGCS + element-map)
-        Eigen3::Eigen
-        Boost::graph
-        Boost::iostreams
-        # Qt Core (for FreeCAD element-map data structures)
-        Qt6::Core
-        # JSON (for feature tree serialization)
-        nlohmann_json::nlohmann_json
-)
-
-target_compile_definitions(oreo-kernel PRIVATE OREO_KERNEL_EXPORTS)
-
-# Required for M_PI on Windows (OCCT headers need it)
-target_compile_definitions(oreo-kernel PUBLIC _USE_MATH_DEFINES)
-
-# Propagate CMake project version to schema.h so KERNEL_VERSION stays in sync.
-target_compile_definitions(oreo-kernel PUBLIC
-    OREO_KERNEL_VERSION_STRING="${PROJECT_VERSION}"
-)
-
-# Propagate legacy-API flag to compilation units (both library and consumers,
-# since it gates public declarations in include/oreo_kernel.h).
-if(OREO_ENABLE_LEGACY_API)
-    target_compile_definitions(oreo-kernel PUBLIC OREO_ENABLE_LEGACY_API)
+# Deprecated. Internal C++ tests now link against the dedicated static
+# archive `oreo-kernel-internal` instead of forcing every symbol to be
+# exported from the public DLL. The option is preserved for one release
+# so existing build scripts that pass -DOREO_EXPORT_ALL_SYMBOLS_FOR_TESTS=OFF
+# do not break, but it is unused — the DLL never sets
+# CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON anymore. Will be removed in a
+# future release; clean production builds need do nothing.
+option(OREO_EXPORT_ALL_SYMBOLS_FOR_TESTS
+    "[DEPRECATED, no-op] Was used to expose internal symbols for tests" OFF)
+if(OREO_EXPORT_ALL_SYMBOLS_FOR_TESTS)
+    message(WARNING
+        "OREO_EXPORT_ALL_SYMBOLS_FOR_TESTS is deprecated and ignored. "
+        "Tests now link against the oreo-kernel-internal static archive.")
 endif()
 
-# Export macro for DLL
+# ── Sanitizers ───────────────────────────────────────────────────────────────
+#
+# OREO_ENABLE_SANITIZER selects compile/link flags for one or more
+# Clang/GCC sanitizers. Supported values (case-insensitive, plus
+# combinations joined with `+`):
+#   none                — no sanitizer (default)
+#   address             — AddressSanitizer (memory bugs)
+#   undefined           — UndefinedBehaviorSanitizer
+#   address+undefined   — both (recommended for CI)
+#   thread              — ThreadSanitizer (data races, mutually exclusive)
+#   memory              — MemorySanitizer (uninitialised reads, Clang only)
+#
+# MSVC has limited sanitizer support — when targeting MSVC, only
+# `address` is honoured; everything else triggers a warning and is
+# treated as `none`.
+set(OREO_ENABLE_SANITIZER "none" CACHE STRING
+    "Sanitizer flavour: none|address|undefined|address+undefined|thread|memory")
+
+if(NOT OREO_ENABLE_SANITIZER STREQUAL "none")
+    string(TOLOWER "${OREO_ENABLE_SANITIZER}" _oreo_san_lower)
+    set(_oreo_san_flags "")
+    if(MSVC)
+        if(_oreo_san_lower MATCHES "address")
+            list(APPEND _oreo_san_flags "/fsanitize=address")
+        endif()
+        if(NOT _oreo_san_flags AND NOT _oreo_san_lower STREQUAL "none")
+            message(WARNING
+                "OREO_ENABLE_SANITIZER='${OREO_ENABLE_SANITIZER}' has no MSVC "
+                "equivalent; use Clang/GCC for ubsan/tsan/msan.")
+        endif()
+    else()
+        if(_oreo_san_lower MATCHES "address")
+            list(APPEND _oreo_san_flags -fsanitize=address -fno-omit-frame-pointer)
+        endif()
+        if(_oreo_san_lower MATCHES "undefined")
+            list(APPEND _oreo_san_flags -fsanitize=undefined -fno-sanitize-recover=undefined)
+        endif()
+        if(_oreo_san_lower MATCHES "thread")
+            list(APPEND _oreo_san_flags -fsanitize=thread)
+        endif()
+        if(_oreo_san_lower MATCHES "memory")
+            list(APPEND _oreo_san_flags -fsanitize=memory)
+        endif()
+    endif()
+
+    if(_oreo_san_flags)
+        message(STATUS "Enabling sanitizers: ${_oreo_san_flags}")
+        add_compile_options(${_oreo_san_flags})
+        add_link_options(${_oreo_san_flags})
+    endif()
+endif()
+
+# ── Fuzzers (libFuzzer, Linux/macOS Clang only) ──────────────────────────────
+#
+# When ON, builds the libFuzzer harnesses in fuzzers/. Requires Clang
+# with libFuzzer support and the matching sanitizer flags
+# (`-DOREO_ENABLE_SANITIZER=address+undefined` is the standard pairing).
+# Silently disabled on MSVC (which lacks libFuzzer).
+option(OREO_BUILD_FUZZERS "Build libFuzzer harnesses (Clang only)" OFF)
+if(OREO_BUILD_FUZZERS AND MSVC)
+    message(WARNING
+        "OREO_BUILD_FUZZERS=ON has no effect on MSVC — libFuzzer requires Clang.")
+    set(OREO_BUILD_FUZZERS OFF)
+endif()
+
+# ── Source list ───────────────────────────────────────────────────────────────
+#
+# Explicit source list (no GLOB_RECURSE). CMake's docs warn that glob
+# patterns "will not, in general, detect new files added by the user
+# without a re-run of cmake" — but more importantly, in a build that
+# shares its source tree across CI runners and developer machines,
+# enumerating every TU here is the only way to guarantee deterministic
+# build sets and to make code review surface added/removed sources.
+#
+# Adding a new TU: append it to the appropriate sub-list below.
+# Renaming: update the line in place.
+set(OREO_SOURCES
+    # ── core/ — context, diagnostics, units, validation, schema, etc.
+    src/core/config_loader.cpp
+    src/core/diagnostic.cpp
+    src/core/diagnostic_scope.cpp
+    src/core/feature_flags.cpp
+    src/core/kernel_context.cpp
+    src/core/localization.cpp
+    src/core/occt_scope_guard.cpp
+    src/core/oreo_error.cpp
+    src/core/oreo_init.cpp
+    src/core/oreo_tolerance.cpp
+    src/core/schema.cpp
+    src/core/shape_identity_v1.cpp
+    src/core/units.cpp
+    src/core/validation.cpp
+    # ── naming/ — element-map, identity v2, FreeCAD-derived helpers.
+    src/naming/element_map.cpp
+    src/naming/map_shape_elements.cpp
+    src/naming/named_shape.cpp
+    src/naming/topo_shape_adapter.cpp
+    src/naming/freecad/ElementMap.cpp
+    src/naming/freecad/ElementNamingUtils.cpp
+    src/naming/freecad/IndexedName.cpp
+    src/naming/freecad/MappedElement.cpp
+    src/naming/freecad/MappedName.cpp
+    src/naming/freecad/StringHasher.cpp
+    # ── sketch/ — PlaneGCS solver + ctx-aware wrapper.
+    src/sketch/Constraints.cpp
+    src/sketch/GCS.cpp
+    src/sketch/Geo.cpp
+    src/sketch/oreo_sketch.cpp
+    src/sketch/qp_eq.cpp
+    src/sketch/SubSystem.cpp
+    # ── geometry/ — primitive + booleans + fillets + manufacturing.
+    src/geometry/oreo_boolean.cpp
+    src/geometry/oreo_extrude.cpp
+    src/geometry/oreo_fillet_chamfer.cpp
+    src/geometry/oreo_manufacturing.cpp
+    src/geometry/oreo_mirror_pattern.cpp
+    src/geometry/oreo_primitives.cpp
+    src/geometry/oreo_revolve.cpp
+    src/geometry/oreo_shell_loft_sweep.cpp
+    src/geometry/oreo_surface.cpp
+    # ── query/ — measurements + queries.
+    src/query/oreo_query.cpp
+    # ── io/ — STEP / serialize / shape fix.
+    src/io/oreo_serialize.cpp
+    src/io/oreo_step.cpp
+    src/io/shape_fix.cpp
+    # ── capi/ — flat C ABI.
+    src/capi/oreo_capi.cpp
+    # ── feature/ — feature tree + replay + schema + Part Studio.
+    src/feature/feature.cpp
+    src/feature/feature_schema.cpp
+    src/feature/feature_tree.cpp
+    src/feature/part_studio.cpp
+    # ── mesh/ — tessellation + GLB export.
+    src/mesh/oreo_mesh.cpp
+    src/mesh/oreo_mesh_export.cpp
+)
+
+# ── Helper: apply common include paths + third-party deps to a target ─────────
+#
+# Used by both the SHARED public library and the STATIC internal archive.
+# Public include dir is exposed PUBLIC; src/ is PRIVATE because consumers
+# only get the flat C ABI.
+function(_oreo_kernel_configure_common target)
+    target_include_directories(${target}
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/naming/freecad
+            ${OpenCASCADE_INCLUDE_DIR}
+    )
+
+    target_link_libraries(${target}
+        PUBLIC
+            # OCCT core
+            TKernel
+            TKMath
+            TKBRep
+            TKGeomBase
+            TKGeomAlgo
+            TKG2d
+            TKG3d
+            TKTopAlgo
+            TKPrim
+            TKBool
+            TKBO
+            TKFillet
+            TKOffset
+            TKShHealing
+            TKMesh
+            # OCCT STEP I/O
+            TKDESTEP
+            TKXSBase
+            TKXCAF
+            TKLCAF
+            TKCAF
+            TKCDF
+            # Eigen + Boost (for PlaneGCS + element-map)
+            Eigen3::Eigen
+            Boost::graph
+            Boost::iostreams
+            # Qt Core (for FreeCAD element-map data structures)
+            Qt6::Core
+            # JSON (for feature tree serialization)
+            nlohmann_json::nlohmann_json
+    )
+
+    # Required for M_PI on Windows (OCCT headers need it)
+    target_compile_definitions(${target} PUBLIC _USE_MATH_DEFINES)
+
+    # Propagate CMake project version to schema.h so KERNEL_VERSION stays in sync.
+    # OREO_KERNEL_VERSION_STRING is the SemVer numeric ("0.9.0") and is
+    # what gets stamped into serialized document headers — keep it
+    # parser-friendly. OREO_KERNEL_VERSION_FULL adds the pre-release
+    # suffix ("0.9.0-rc1") and is what oreo_kernel_version() returns at
+    # runtime for human-facing displays.
+    target_compile_definitions(${target} PUBLIC
+        OREO_KERNEL_VERSION_STRING="${PROJECT_VERSION}"
+        OREO_KERNEL_VERSION_FULL_STRING="${OREO_KERNEL_VERSION_FULL}"
+    )
+
+    # Propagate legacy-API flag (gates public declarations in include/oreo_kernel.h).
+    if(OREO_ENABLE_LEGACY_API)
+        target_compile_definitions(${target} PUBLIC OREO_ENABLE_LEGACY_API)
+    endif()
+endfunction()
+
+# ── oreo-kernel: production SHARED library ───────────────────────────────────
+#
+# Compiled with OREO_KERNEL_EXPORTS so OREO_API expands to dllexport on
+# Windows (visibility("default") elsewhere). Consumers including
+# oreo_kernel.h see OREO_API as dllimport. CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS
+# is intentionally NOT set — only symbols decorated with OREO_API leave
+# the DLL boundary, which is the production-correct behaviour.
+add_library(oreo-kernel SHARED ${OREO_SOURCES})
+set_target_properties(oreo-kernel PROPERTIES POSITION_INDEPENDENT_CODE ON)
+_oreo_kernel_configure_common(oreo-kernel)
+target_compile_definitions(oreo-kernel PRIVATE OREO_KERNEL_EXPORTS)
 if(WIN32)
     target_compile_definitions(oreo-kernel
         PUBLIC
@@ -119,15 +286,32 @@ if(WIN32)
     )
 endif()
 
+# ── oreo-kernel-internal: STATIC archive for internal C++ tests ──────────────
+#
+# Same source list as the SHARED lib, compiled with OREO_KERNEL_STATIC
+# (PUBLIC) so OREO_API expands to nothing — no dllexport/dllimport on
+# this code path, which is what a static archive needs. Tests link
+# against this target so they can call internal C++ symbols directly
+# without forcing them through the DLL boundary. The archive is never
+# installed or distributed — it exists purely to keep the public DLL
+# surface clean while preserving full test coverage.
+add_library(oreo-kernel-internal STATIC ${OREO_SOURCES})
+set_target_properties(oreo-kernel-internal PROPERTIES POSITION_INDEPENDENT_CODE ON)
+_oreo_kernel_configure_common(oreo-kernel-internal)
+target_compile_definitions(oreo-kernel-internal PUBLIC OREO_KERNEL_STATIC)
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 enable_testing()
 
-# Test helper: creates a test executable linked to oreo-kernel + gtest
+# Test helper: links every test against the STATIC internal archive so
+# tests can call C++ internals directly. This decouples test linkage
+# from the public DLL ABI — the SHARED oreo-kernel.dll only ever exports
+# OREO_API-marked symbols.
 function(oreo_add_test TEST_NAME TEST_SOURCE)
     add_executable(${TEST_NAME} ${TEST_SOURCE})
     target_link_libraries(${TEST_NAME} PRIVATE
-        oreo-kernel
+        oreo-kernel-internal
         GTest::gtest
         GTest::gtest_main
     )
@@ -151,6 +335,10 @@ oreo_add_test(test_topo_naming tests/test_naming/test_topo_naming.cpp)
 # Sketch solver battery
 oreo_add_test(test_sketch_solver tests/test_sketch/test_sketch_solver.cpp)
 
+# Sketch persistence — stable IDs across delete/edit + cascade.
+# Closes the auditor's "persistent sketch IDs" gap (Phase D6).
+oreo_add_test(test_sketch_persistence tests/test_sketch/test_sketch_persistence.cpp)
+
 # Boolean stress tests
 oreo_add_test(test_boolean_stress tests/test_boolean/test_boolean_stress.cpp)
 
@@ -160,11 +348,19 @@ oreo_add_test(test_step_roundtrip tests/test_step/test_step_roundtrip.cpp)
 # Serialize round-trip
 oreo_add_test(test_serialize tests/test_serialize/test_serialize.cpp)
 
+# Serialize migration (v1/v2/v3 wire-format compatibility + adversarial
+# fail-closed corpus). Closes the auditor's "compatibility corpus
+# missing" gap.
+oreo_add_test(test_serialize_migration tests/test_serialize/test_serialize_migration.cpp)
+
 # Robustness (crash/malformed input)
 oreo_add_test(test_robustness tests/test_robustness/test_robustness.cpp)
 
 # Feature tree (parametric replay, parameter changes, broken refs, serialization)
 oreo_add_test(test_feature_tree tests/test_feature/test_feature_tree.cpp)
+
+# Feature parameter schemas + pre-execution validator
+oreo_add_test(test_feature_schema tests/test_feature/test_feature_schema.cpp)
 
 # Foundation (context, diagnostics, units, schema, validation, determinism)
 oreo_add_test(test_foundation tests/test_foundation/test_foundation.cpp)
@@ -226,6 +422,44 @@ endif()
 oreo_add_test(test_doc_identity_nolegacy
               tests/test_integration/test_doc_identity_nolegacy.cpp)
 
+# Acceptance suite for the ctx-aware sketch + feature-edit C APIs.
+# Uses no legacy entry points so it runs in both build configurations.
+oreo_add_test(test_ctx_apis tests/test_integration/test_ctx_apis.cpp)
+
+# STEP-import identity regression — every imported face/edge/vertex
+# must carry a v2 ShapeIdentity bound to the importing context's
+# documentId. Closes the auditor's "imported element names lack v2
+# identity" gap. No legacy gate; runs in both build configurations.
+oreo_add_test(test_step_identity tests/test_integration/test_step_identity.cpp)
+
+# Concurrency: parallel contexts must not share state — Phase D3.
+oreo_add_test(test_concurrency tests/test_integration/test_concurrency.cpp)
+
+# Deterministic golden replay — server/client parity (Phase D4).
+oreo_add_test(test_replay_golden tests/test_integration/test_replay_golden.cpp)
+
+# Transaction API: per-type setters, broken-feature query, move,
+# replace-reference (Phases D2 + D5 + D8).
+oreo_add_test(test_transaction_api tests/test_integration/test_transaction_api.cpp)
+
+# Pure-C consumer smoke test. Builds as C99 against ONLY the public
+# header — proves the C ABI is C-clean (no leaked C++ keywords) and
+# that a downstream C consumer can drive the ctx-aware API end-to-end.
+add_executable(test_capi_consumer tests/test_capi_consumer/test_capi_consumer.c)
+set_target_properties(test_capi_consumer PROPERTIES
+    LINKER_LANGUAGE C
+    C_STANDARD 99
+    C_STANDARD_REQUIRED ON
+)
+# Link against the SHARED public DLL (oreo-kernel), NOT the internal
+# static archive — this is exactly the linkage path a real C consumer
+# would use after install().
+target_link_libraries(test_capi_consumer PRIVATE oreo-kernel)
+target_include_directories(test_capi_consumer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+add_test(NAME test_capi_consumer COMMAND test_capi_consumer)
+
 # Smoke-fuzz (random-input robustness for deserialize / schema migrate / sketch / STEP)
 oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
 
@@ -252,8 +486,12 @@ oreo_add_test(test_mesh_export tests/test_mesh/test_mesh_export.cpp)
 # Manual-run smoke tool: writes a cube to cube.glb. Not registered as a ctest —
 # use it for drag-and-drop validation in three.js, Blender, Windows 3D Viewer,
 # etc. Invoke with:  ./Release/glb_smoke [optional/out/path.glb]
+#
+# Links to the internal static archive because the smoke tool calls
+# C++ internals (oreo::tessellate, oreo::makeBox) rather than the flat
+# C ABI.
 add_executable(glb_smoke tests/test_mesh/glb_smoke_main.cpp)
-target_link_libraries(glb_smoke PRIVATE oreo-kernel)
+target_link_libraries(glb_smoke PRIVATE oreo-kernel-internal)
 target_include_directories(glb_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${OpenCASCADE_INCLUDE_DIR}
@@ -268,4 +506,99 @@ oreo_add_test(test_foundation_battle tests/test_foundation/test_foundation_battl
 # only builds when that API is enabled.
 if(OREO_ENABLE_LEGACY_API)
     oreo_add_test(test_foundation_battle2 tests/test_foundation/test_foundation_battle_part2.cpp)
+endif()
+
+# ── Install / export targets ─────────────────────────────────────────────────
+#
+# Production install layout:
+#   <prefix>/include/oreo_kernel.h
+#   <prefix>/lib/oreo-kernel.lib            (Windows import lib)
+#   <prefix>/bin/oreo-kernel.dll            (Windows runtime)
+#   <prefix>/lib/oreo-kernel.so             (Linux)
+#   <prefix>/lib/cmake/OreoKernel/OreoKernelConfig.cmake
+#   <prefix>/lib/cmake/OreoKernel/OreoKernelConfigVersion.cmake
+#   <prefix>/lib/cmake/OreoKernel/OreoKernelTargets.cmake
+#
+# Downstream consumers (see sample/ for a worked example):
+#   find_package(OreoKernel CONFIG REQUIRED)
+#   target_link_libraries(myapp PRIVATE OreoKernel::oreo-kernel)
+#
+# The internal STATIC archive is intentionally NOT installed — it is a
+# build-time artefact of the test split, not part of the public ABI.
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS oreo-kernel
+    EXPORT  OreoKernelTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES include/oreo_kernel.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(EXPORT OreoKernelTargets
+    FILE        OreoKernelTargets.cmake
+    NAMESPACE   OreoKernel::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OreoKernel
+)
+
+# Versioned config so find_package(OreoKernel 0.1.0 EXACT) works.
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/OreoKernelConfigVersion.cmake"
+    VERSION       ${PROJECT_VERSION}
+    COMPATIBILITY SameMinorVersion
+)
+
+# Resolve consumer-side third-party dependencies. The shared lib's
+# PUBLIC link interface needs OCCT / Boost / etc. visible to the
+# downstream find_package() call.
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OreoKernelConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/OreoKernelConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OreoKernel
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/OreoKernelConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/OreoKernelConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OreoKernel
+)
+
+# ── Fuzzers ──────────────────────────────────────────────────────────────────
+#
+# libFuzzer harnesses for the highest-risk parsers. Compiled only when
+# OREO_BUILD_FUZZERS=ON and a Clang toolchain is selected. Each harness
+# is a single .cc file in fuzzers/ that defines LLVMFuzzerTestOneInput
+# and links the static internal archive directly.
+#
+# Run a harness:
+#   build_fuzz/fuzzers/fuzz_deserialize -max_total_time=60 corpora/fuzz_deserialize/
+#
+# The CI workflow in .github/workflows/ci.yml drives a 60s smoke run for
+# each harness on every push to main.
+if(OREO_BUILD_FUZZERS)
+    set(_oreo_fuzzers
+        fuzz_deserialize
+        fuzz_step_import
+        fuzz_feature_tree_json
+    )
+    foreach(_h IN LISTS _oreo_fuzzers)
+        add_executable(${_h} fuzzers/${_h}.cc)
+        target_link_libraries(${_h} PRIVATE oreo-kernel-internal)
+        target_compile_options(${_h} PRIVATE -fsanitize=fuzzer)
+        target_link_options(${_h} PRIVATE -fsanitize=fuzzer)
+        target_include_directories(${_h} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/naming/freecad
+            ${OpenCASCADE_INCLUDE_DIR}
+        )
+        set_target_properties(${_h} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/fuzzers"
+        )
+    endforeach()
 endif()

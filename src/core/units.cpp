@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // units.cpp — Unit name parsing and string conversion.
 // Fail-closed: unknown unit strings throw, not silently default.
 

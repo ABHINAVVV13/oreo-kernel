@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // shape_identity_v1.cpp — v1 bridge implementation.
 
 #include "shape_identity_v1.h"

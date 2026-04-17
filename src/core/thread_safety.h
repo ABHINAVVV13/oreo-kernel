@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // thread_safety.h — Thread safety contract annotations for oreo-kernel.
 //
 // These macros document and enforce thread safety guarantees.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // element_map.cpp — Production-grade ElementMap implementation.
 
 #include "element_map.h"
@@ -12,7 +14,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 
 namespace oreo {
 
@@ -485,6 +489,9 @@ std::vector<std::uint8_t> ElementMap::serialize() const {
         writeU64(id.counter);
     };
     auto writeStr = [&](const std::string& s) {
+        if (s.size() > (std::numeric_limits<std::uint32_t>::max)()) {
+            throw std::length_error("ElementMap::serialize: string exceeds u32 length");
+        }
         writeU32(static_cast<std::uint32_t>(s.size()));
         buf.insert(buf.end(), s.begin(), s.end());
     };
@@ -493,8 +500,14 @@ std::vector<std::uint8_t> ElementMap::serialize() const {
     writeU32(FORMAT_VERSION);
 
     // Entries
+    if (indexToMapped_.size() > (std::numeric_limits<std::uint32_t>::max)()) {
+        throw std::length_error("ElementMap::serialize: too many entries");
+    }
     writeU32(static_cast<std::uint32_t>(indexToMapped_.size()));
     for (auto& [idx, name] : indexToMapped_) {
+        if (idx.type().size() > (std::numeric_limits<std::uint16_t>::max)()) {
+            throw std::length_error("ElementMap::serialize: type name exceeds u16 length");
+        }
         writeU16(static_cast<std::uint16_t>(idx.type().size()));
         buf.insert(buf.end(), idx.type().begin(), idx.type().end());
         writeU32(static_cast<std::uint32_t>(idx.index()));
@@ -505,12 +518,18 @@ std::vector<std::uint8_t> ElementMap::serialize() const {
     }
 
     // Children
+    if (children_.size() > (std::numeric_limits<std::uint32_t>::max)()) {
+        throw std::length_error("ElementMap::serialize: too many children");
+    }
     writeU32(static_cast<std::uint32_t>(children_.size()));
     for (auto& child : children_) {
         writeIdentity(child.id);
         writeStr(child.postfix);
         if (child.map) {
             auto childData = child.map->serialize();
+            if (childData.size() > (std::numeric_limits<std::uint32_t>::max)()) {
+                throw std::length_error("ElementMap::serialize: child map exceeds u32 length");
+            }
             writeU32(static_cast<std::uint32_t>(childData.size()));
             buf.insert(buf.end(), childData.begin(), childData.end());
         } else {
@@ -527,16 +546,25 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
     if (!data || len < 8) return nullptr;
 
     size_t pos = 0;
+    bool ok = true;
+
+    auto canRead = [&](size_t need) -> bool {
+        if (need > len || pos > len - need) {
+            ok = false;
+            return false;
+        }
+        return true;
+    };
 
     auto readU16 = [&]() -> std::uint16_t {
-        if (pos + 2 > len) return 0;
+        if (!canRead(2)) return 0;
         std::uint16_t v = static_cast<std::uint16_t>(data[pos])
                    | (static_cast<std::uint16_t>(data[pos+1]) << 8);
         pos += 2;
         return v;
     };
     auto readU32 = [&]() -> std::uint32_t {
-        if (pos + 4 > len) return 0;
+        if (!canRead(4)) return 0;
         std::uint32_t v = static_cast<std::uint32_t>(data[pos])
                    | (static_cast<std::uint32_t>(data[pos+1]) << 8)
                    | (static_cast<std::uint32_t>(data[pos+2]) << 16)
@@ -545,7 +573,7 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
         return v;
     };
     auto readU64 = [&]() -> std::uint64_t {
-        if (pos + 8 > len) return 0;
+        if (!canRead(8)) return 0;
         std::uint64_t v = 0;
         for (int i = 0; i < 8; ++i)
             v |= static_cast<std::uint64_t>(data[pos + i]) << (i * 8);
@@ -563,7 +591,7 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
     };
     auto readStr = [&]() -> std::string {
         std::uint32_t slen = readU32();
-        if (pos + slen > len) return {};
+        if (!ok || !canRead(slen)) return {};
         std::string s(reinterpret_cast<const char*>(data + pos), slen);
         pos += slen;
         return s;
@@ -571,6 +599,7 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
 
     // Header
     std::uint32_t version = readU32();
+    if (!ok) return nullptr;
     if (version != FORMAT_VERSION && version != FORMAT_VERSION_V2_LEGACY) {
         // v1 (== 1) and anything else: rejected. v2 stays as a read-only
         // compat path; the writer always produces v3.
@@ -588,19 +617,24 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
 
     // Entries
     std::uint32_t entryCount = readU32();
-    for (std::uint32_t i = 0; i < entryCount && pos < len; ++i) {
+    if (!ok) return nullptr;
+    for (std::uint32_t i = 0; i < entryCount; ++i) {
         std::uint16_t typeLen = readU16();
-        if (pos + typeLen > len) break;
+        if (!ok || !canRead(typeLen)) return nullptr;
         std::string type(reinterpret_cast<const char*>(data + pos), typeLen);
         pos += typeLen;
         int index = static_cast<int>(readU32());
+        if (!ok) return nullptr;
         std::string nameData = readStr();
+        if (!ok) return nullptr;
 
         if (version == FORMAT_VERSION) {
             (void)readIdentity();  // consume 16 bytes; identity lives in the name
+            if (!ok) return nullptr;
         } else {
             // v2: 8-byte int64 scalar. Decode with the root hint.
             std::int64_t scalar = readI64();
+            if (!ok) return nullptr;
             try {
                 (void)oreo::decodeV1Scalar(scalar, rootHint.documentId, v2Diag);
             } catch (const std::invalid_argument&) {
@@ -615,12 +649,15 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
 
     // Children
     std::uint32_t childCount = readU32();
-    for (std::uint32_t i = 0; i < childCount && pos < len; ++i) {
+    if (!ok) return nullptr;
+    for (std::uint32_t i = 0; i < childCount; ++i) {
         ChildElementMap child;
         if (version == FORMAT_VERSION) {
             child.id = readIdentity();
+            if (!ok) return nullptr;
         } else {
             std::int64_t scalar = readI64();
+            if (!ok) return nullptr;
             try {
                 child.id = oreo::decodeV1Scalar(scalar, rootHint.documentId, v2Diag);
             } catch (const std::invalid_argument&) {
@@ -628,14 +665,19 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
             }
         }
         child.postfix = readStr();
+        if (!ok) return nullptr;
         std::uint32_t childDataLen = readU32();
-        if (childDataLen > 0 && pos + childDataLen <= len) {
+        if (!ok || !canRead(childDataLen)) return nullptr;
+        if (childDataLen > 0) {
             child.map = ElementMap::deserialize(data + pos, childDataLen,
                                                 rootHint, v2Diag);
+            if (!child.map) return nullptr;
             pos += childDataLen;
         }
         map->addChild(child);
     }
+
+    if (pos != len) return nullptr;
 
     return map;
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_naming_v2.cpp — Phase 3 acceptance tests.
 //
 // Covers:

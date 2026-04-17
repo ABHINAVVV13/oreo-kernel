@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_hardened.cpp — Adversarial tests proving foundation guarantees.
 //
 // These tests verify fail-closed behavior under adversarial inputs:

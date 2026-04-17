@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_sketch.cpp — Production-grade sketch solver API.
 //
 // Wraps PlaneGCS for constraint solving with:
@@ -22,8 +24,10 @@
 #include <gp_Pnt.hxx>
 #include <TopoDS_Wire.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
+#include <sstream>
 #include <vector>
 
 namespace oreo {
@@ -44,6 +48,59 @@ private:
 
 } // anonymous namespace
 
+// ── Constraint schema source of truth ────────────────────────
+//
+// Defined here (not as a lambda) so the C-API slot layer in
+// src/capi/oreo_capi.cpp can reuse the same family rules when
+// translating public stable entity IDs to live solver indices.
+ConstraintSchemaEntry constraintSchemaFor(ConstraintType t) {
+    using F = ConstraintEntityFamily;
+    switch (t) {
+        // Point–Point
+        case ConstraintType::Coincident:    return {F::Point, F::Point, F::None, false, false};
+        case ConstraintType::Distance:      return {F::Point, F::Point, F::None, true,  false};
+        case ConstraintType::DistanceX:     return {F::Point, F::Point, F::None, true,  false};
+        case ConstraintType::DistanceY:     return {F::Point, F::Point, F::None, true,  false};
+        case ConstraintType::Symmetric:     return {F::Point, F::Point, F::Line, false, false};
+        // Point–Curve / point on entity
+        case ConstraintType::PointOnLine:   return {F::Point, F::Line,   F::None, false, false};
+        case ConstraintType::PointOnCircle: return {F::Point, F::Circle, F::None, false, false};
+        case ConstraintType::PointOnArc:    return {F::Point, F::Arc,    F::None, false, false};
+        // MidpointOnLine: midpoint of line[entity1] lies on line[entity2].
+        case ConstraintType::MidpointOnLine:return {F::Line,  F::Line,   F::None, false, false};
+        case ConstraintType::PointToLineDistance:   return {F::Point, F::Line,   F::None, true, false};
+        case ConstraintType::PointToCircleDistance: return {F::Point, F::Circle, F::None, true, false};
+        case ConstraintType::CircleToLineDistance:  return {F::Circle, F::Line,  F::None, true, false};
+        // Line/curve geometry
+        case ConstraintType::Parallel:      return {F::Line, F::Line, F::None, false, false};
+        case ConstraintType::Perpendicular: return {F::Line, F::Line, F::None, false, false};
+        case ConstraintType::Angle:         return {F::Line, F::Line, F::None, true,  false};
+        case ConstraintType::Equal:         return {F::Line, F::Line, F::None, false, false};
+        case ConstraintType::Collinear:     return {F::Line, F::Line, F::None, false, false};
+        case ConstraintType::Horizontal:    return {F::Line, F::None, F::None, false, false};
+        case ConstraintType::Vertical:      return {F::Line, F::None, F::None, false, false};
+        // Tangencies
+        case ConstraintType::Tangent:               return {F::AnyCurve, F::AnyCurve, F::None, false, false};
+        case ConstraintType::TangentLineArc:        return {F::Line,        F::Arc,         F::None, false, false};
+        case ConstraintType::TangentArcArc:         return {F::Arc,         F::Arc,         F::None, false, false};
+        case ConstraintType::TangentCircleCircle:   return {F::Circle,      F::Circle,      F::None, false, false};
+        case ConstraintType::TangentLineCircle:     return {F::Line,        F::Circle,      F::None, false, false};
+        case ConstraintType::TangentCircleArc:      return {F::Circle,      F::Arc,         F::None, false, false};
+        // Radii / diameters
+        case ConstraintType::Radius:        return {F::CircleOrArc, F::None, F::None, true, true};
+        case ConstraintType::CircleDiameter:return {F::CircleOrArc, F::None, F::None, true, true};
+        case ConstraintType::EqualRadius:   return {F::Circle, F::Circle, F::None, false, false};
+        case ConstraintType::EqualRadiusCircleArc: return {F::Circle, F::Arc, F::None, false, false};
+        case ConstraintType::ArcLength:     return {F::Arc, F::None, F::None, true, true};
+        // Coordinate / fixed
+        case ConstraintType::Fixed:         return {F::Point, F::None, F::None, false, false};
+        case ConstraintType::CoordinateX:   return {F::Point, F::None, F::None, true, false};
+        case ConstraintType::CoordinateY:   return {F::Point, F::None, F::None, true, false};
+        case ConstraintType::Concentric:    return {F::Circle, F::Circle, F::None, false, false};
+    }
+    return {F::None, F::None, F::None, false, false};
+}
+
 OperationResult<SolveResult> solveSketch(
     KernelContext& ctx,
     std::vector<SketchPoint>& points,
@@ -56,6 +113,133 @@ OperationResult<SolveResult> solveSketch(
     SolveResult result;
     result.status = SolveStatus::OK;
     result.degreesOfFreedom = 0;
+
+    // ── Pre-solve sanity sweep ───────────────────────────────
+    //
+    // PlaneGCS expects finite seed values; feeding it NaN/Inf either
+    // hangs the solver or returns silent garbage. Reject hostile
+    // inputs at the boundary with a structured diagnostic.
+    auto isFin = [](double v) { return std::isfinite(v); };
+    auto reportBad = [&](const char* what, std::size_t idx, const char* field) {
+        std::ostringstream oss;
+        oss << what << "[" << idx << "]." << field
+            << " is NaN/Inf — sketch cannot be solved";
+        ctx.diag().error(ErrorCode::INVALID_INPUT, oss.str());
+    };
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        if (!isFin(points[i].x)) { reportBad("point", i, "x"); return scope.makeFailure<SolveResult>(); }
+        if (!isFin(points[i].y)) { reportBad("point", i, "y"); return scope.makeFailure<SolveResult>(); }
+    }
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        if (!isFin(lines[i].p1.x) || !isFin(lines[i].p1.y) ||
+            !isFin(lines[i].p2.x) || !isFin(lines[i].p2.y)) {
+            reportBad("line", i, "endpoint"); return scope.makeFailure<SolveResult>();
+        }
+    }
+    for (std::size_t i = 0; i < circles.size(); ++i) {
+        if (!isFin(circles[i].center.x) || !isFin(circles[i].center.y) ||
+            !isFin(circles[i].radius)) {
+            reportBad("circle", i, "center/radius"); return scope.makeFailure<SolveResult>();
+        }
+        if (circles[i].radius <= 0.0) {
+            std::ostringstream oss;
+            oss << "circle[" << i << "].radius must be positive (got " << circles[i].radius << ")";
+            ctx.diag().error(ErrorCode::OUT_OF_RANGE, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+    }
+    for (std::size_t i = 0; i < arcs.size(); ++i) {
+        const auto& a = arcs[i];
+        if (!isFin(a.center.x) || !isFin(a.center.y) ||
+            !isFin(a.start.x)  || !isFin(a.start.y) ||
+            !isFin(a.end.x)    || !isFin(a.end.y)   ||
+            !isFin(a.radius)) {
+            reportBad("arc", i, "geometry"); return scope.makeFailure<SolveResult>();
+        }
+        if (a.radius <= 0.0) {
+            std::ostringstream oss;
+            oss << "arc[" << i << "].radius must be positive (got " << a.radius << ")";
+            ctx.diag().error(ErrorCode::OUT_OF_RANGE, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+    }
+
+    // ── Constraint schema validation ────────────────────────
+    //
+    // Each constraint type knows up-front which entity family
+    // (Point / Line / Circle / Arc) each entity slot must reference.
+    // Validating up-front means a typo'd index surfaces as a
+    // structured diagnostic instead of being silently dropped by the
+    // dispatch switch below.
+    using F = ConstraintEntityFamily;
+    const int nP = static_cast<int>(points.size());
+    const int nL = static_cast<int>(lines.size());
+    const int nC = static_cast<int>(circles.size());
+    const int nA = static_cast<int>(arcs.size());
+    auto familyOk = [&](F f, int idx) {
+        switch (f) {
+            case F::None:        return idx == -1;
+            case F::Point:       return idx >= 0 && idx < nP;
+            case F::Line:        return idx >= 0 && idx < nL;
+            case F::Circle:      return idx >= 0 && idx < nC;
+            case F::Arc:         return idx >= 0 && idx < nA;
+            case F::AnyCurve:    return idx >= 0 && (idx < nL || idx < nC || idx < nA);
+            case F::CircleOrArc: return idx >= 0 && (idx < nC || idx < nA);
+        }
+        return false;
+    };
+    auto familyName = [](F f) -> const char* {
+        switch (f) {
+            case F::None:        return "<none>";
+            case F::Point:       return "Point";
+            case F::Line:        return "Line";
+            case F::Circle:      return "Circle";
+            case F::Arc:         return "Arc";
+            case F::AnyCurve:    return "Line/Circle/Arc";
+            case F::CircleOrArc: return "Circle/Arc";
+        }
+        return "?";
+    };
+    for (std::size_t ci = 0; ci < constraints.size(); ++ci) {
+        const auto& c = constraints[ci];
+        if (!isFin(c.value)) {
+            std::ostringstream oss;
+            oss << "constraint[" << ci << "].value " << c.value
+                << " is NaN/Inf — refusing to solve";
+            ctx.diag().error(ErrorCode::INVALID_INPUT, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+        const ConstraintSchemaEntry sch = constraintSchemaFor(c.type);
+        if (sch.valueUsed && sch.valueMustBePositive && c.value <= 0.0) {
+            std::ostringstream oss;
+            oss << "constraint[" << ci << "].value must be positive (got "
+                << c.value << ")";
+            ctx.diag().error(ErrorCode::OUT_OF_RANGE, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+        // Slot 1 is always required; slot 2/3 may be F::None.
+        if (sch.e1 != F::None && !familyOk(sch.e1, c.entity1)) {
+            std::ostringstream oss;
+            oss << "constraint[" << ci << "].entity1=" << c.entity1
+                << " does not reference a valid " << familyName(sch.e1);
+            ctx.diag().error(ErrorCode::OUT_OF_RANGE, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+        if (sch.e2 != F::None && !familyOk(sch.e2, c.entity2)) {
+            std::ostringstream oss;
+            oss << "constraint[" << ci << "].entity2=" << c.entity2
+                << " does not reference a valid " << familyName(sch.e2);
+            ctx.diag().error(ErrorCode::OUT_OF_RANGE, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+        if (sch.e3 != F::None && !familyOk(sch.e3, c.entity3)) {
+            std::ostringstream oss;
+            oss << "constraint[" << ci << "].entity3=" << c.entity3
+                << " does not reference a valid " << familyName(sch.e3);
+            ctx.diag().error(ErrorCode::OUT_OF_RANGE, oss.str());
+            return scope.makeFailure<SolveResult>();
+        }
+    }
 
     GCS::System system;
     ParamPool pool;

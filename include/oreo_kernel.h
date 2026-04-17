@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_kernel.h — Public C API for liboreo-kernel.
 // This is the ONLY header a consumer needs. Flat C interface, FFI-friendly.
 //
@@ -23,8 +25,21 @@ extern "C" {
 #endif
 
 // --- DLL export ---
+//
+// Three linkage modes are supported:
+//   OREO_KERNEL_STATIC  — define when consuming oreo-kernel as a static
+//                         archive (e.g. the internal test binaries linking
+//                         against oreo-kernel-internal). OREO_API expands
+//                         to nothing — no dllexport/dllimport mismatch.
+//   OREO_KERNEL_EXPORTS — define when COMPILING the SHARED oreo-kernel.dll.
+//                         OREO_API expands to dllexport.
+//   (neither defined)   — default: consuming the SHARED oreo-kernel.dll
+//                         from a downstream binary. OREO_API expands to
+//                         dllimport.
 #if defined(_WIN32)
-    #ifdef OREO_KERNEL_EXPORTS
+    #if defined(OREO_KERNEL_STATIC)
+        #define OREO_API
+    #elif defined(OREO_KERNEL_EXPORTS)
         #define OREO_API __declspec(dllexport)
     #else
         #define OREO_API __declspec(dllimport)
@@ -46,25 +61,32 @@ typedef struct OreoSketch_T*  OreoSketch;
 // --- Error codes ---
 typedef enum {
     OREO_OK = 0,
-    OREO_INVALID_INPUT,
-    OREO_OCCT_FAILURE,
-    OREO_BOOLEAN_FAILED,
-    OREO_SHAPE_INVALID,
-    OREO_SHAPE_FIX_FAILED,
-    OREO_SKETCH_SOLVE_FAILED,
-    OREO_SKETCH_REDUNDANT,
-    OREO_SKETCH_CONFLICTING,
-    OREO_STEP_IMPORT_FAILED,
-    OREO_STEP_EXPORT_FAILED,
-    OREO_SERIALIZE_FAILED,
-    OREO_DESERIALIZE_FAILED,
+    OREO_INVALID_INPUT = 1,
+    OREO_OCCT_FAILURE = 2,
+    OREO_BOOLEAN_FAILED = 3,
+    OREO_SHAPE_INVALID = 4,
+    OREO_SHAPE_FIX_FAILED = 5,
+    OREO_SKETCH_SOLVE_FAILED = 6,
+    OREO_SKETCH_REDUNDANT = 7,
+    OREO_SKETCH_CONFLICTING = 8,
+    OREO_STEP_IMPORT_FAILED = 10,
+    OREO_STEP_EXPORT_FAILED = 11,
+    OREO_SERIALIZE_FAILED = 12,
+    OREO_DESERIALIZE_FAILED = 13,
     // Identity v2 additions (docs/identity-model.md §8 Q2).
-    OREO_LEGACY_IDENTITY_DOWNGRADE,     // Warning: v1 tag read, high docId bits inferred/lost
-    OREO_V2_IDENTITY_NOT_REPRESENTABLE, // v2 identity can't fit v1 scalar format
-    OREO_MALFORMED_ELEMENT_NAME,        // ;:P / ;:H payload could not be parsed
-    OREO_BUFFER_TOO_SMALL,              // Caller-supplied output buffer too small
-    OREO_NOT_INITIALIZED,
-    OREO_INTERNAL_ERROR,
+    OREO_LEGACY_IDENTITY_DOWNGRADE = 14,     // Warning: v1 tag read, high docId bits inferred/lost
+    OREO_V2_IDENTITY_NOT_REPRESENTABLE = 15, // v2 identity can't fit v1 scalar format
+    OREO_MALFORMED_ELEMENT_NAME = 16,        // ;:P / ;:H payload could not be parsed
+    OREO_BUFFER_TOO_SMALL = 17,              // Caller-supplied output buffer too small
+    OREO_NOT_INITIALIZED = 20,
+    OREO_INTERNAL_ERROR = 21,
+    OREO_NOT_SUPPORTED = 100,
+    OREO_INVALID_STATE = 101,
+    OREO_OUT_OF_RANGE = 102,
+    OREO_TIMEOUT = 103,
+    OREO_CANCELLED = 104,
+    OREO_RESOURCE_EXHAUSTED = 105,
+    OREO_DIAG_TRUNCATED = 200,
 } OreoErrorCode;
 
 // --- Structured error ---
@@ -106,6 +128,20 @@ typedef struct {
 } OreoMassProps;
 
 // ============================================================
+// Library identity
+// ============================================================
+
+// Returns the kernel version string. Format is SemVer with optional
+// pre-release suffix, e.g. "0.9.0-rc1" or "1.2.3". Returned pointer
+// is owned by the kernel — do not free. Always non-null.
+//
+// For programmatic SemVer comparison, prefer parsing into major/minor/
+// patch yourself; the suffix (everything after the first '-') marks
+// pre-release builds and should be treated as "less than" the same
+// X.Y.Z without a suffix.
+OREO_API const char* oreo_kernel_version(void);
+
+// ============================================================
 // Context — the kernel's central authority
 // ============================================================
 
@@ -142,6 +178,10 @@ OREO_API uint64_t oreo_context_document_id(OreoContext ctx);
 OREO_API int        oreo_context_has_errors(OreoContext ctx);
 OREO_API int        oreo_context_has_warnings(OreoContext ctx);
 OREO_API int        oreo_context_error_count(OreoContext ctx);
+OREO_API int        oreo_context_warning_count(OreoContext ctx);
+OREO_API int        oreo_context_diagnostic_count(OreoContext ctx);
+OREO_API int        oreo_context_diagnostic_code(OreoContext ctx, int index);
+OREO_API const char* oreo_context_diagnostic_message(OreoContext ctx, int index);
 OREO_API const char* oreo_context_last_error_message(OreoContext ctx);
 
 // Context-aware primitive creation
@@ -199,6 +239,272 @@ OREO_API int oreo_ctx_serialize(OreoContext ctx, OreoSolid solid,
 // oreo_context_last_error_message for details.
 OREO_API OreoSolid oreo_ctx_deserialize(OreoContext ctx,
                                          const uint8_t* data, size_t len);
+
+// Context-aware query APIs for server/no-legacy builds.
+OREO_API OreoBBox oreo_ctx_aabb(OreoContext ctx, OreoSolid solid);
+OREO_API int      oreo_ctx_face_count(OreoContext ctx, OreoSolid solid);
+OREO_API int      oreo_ctx_edge_count(OreoContext ctx, OreoSolid solid);
+OREO_API OreoMassProps oreo_ctx_mass_properties(OreoContext ctx, OreoSolid solid);
+
+// Context-aware STEP APIs for server/no-legacy builds.
+OREO_API OreoSolid oreo_ctx_import_step(OreoContext ctx, const uint8_t* data, size_t len);
+OREO_API OreoSolid oreo_ctx_import_step_file(OreoContext ctx, const char* path);
+OREO_API int       oreo_ctx_export_step_file(OreoContext ctx, OreoSolid solids[], int n, const char* path);
+
+// ============================================================
+// Context-aware sketch API (always available, no legacy gate)
+// ============================================================
+//
+// A sketch handle created via oreo_ctx_sketch_create is bound to the
+// context passed in, so subsequent solve / to_wire calls route their
+// diagnostics through that context. The handle itself is plain data —
+// add_point / add_line / get_* are pure mutators on the sketch's
+// vectors and never block on the ctx (errors still route via the
+// stored binding).
+//
+// Lifetime: the bound context must outlive the sketch handle.
+OREO_API OreoSketch oreo_ctx_sketch_create(OreoContext ctx);
+OREO_API void       oreo_ctx_sketch_free(OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_add_point(OreoSketch sketch, double x, double y);
+OREO_API int oreo_ctx_sketch_add_line(OreoSketch sketch,
+                                       double x1, double y1,
+                                       double x2, double y2);
+OREO_API int oreo_ctx_sketch_add_circle(OreoSketch sketch,
+                                         double cx, double cy, double radius);
+OREO_API int oreo_ctx_sketch_add_arc(OreoSketch sketch,
+                                      double cx, double cy,
+                                      double sx, double sy,
+                                      double ex, double ey,
+                                      double radius);
+OREO_API int oreo_ctx_sketch_add_constraint(OreoSketch sketch,
+                                             int type, int entity1,
+                                             int entity2, int entity3,
+                                             double value);
+OREO_API int oreo_ctx_sketch_solve(OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_dof(OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_get_point(OreoSketch sketch, int index,
+                                        double* x, double* y);
+OREO_API int oreo_ctx_sketch_get_line(OreoSketch sketch, int index,
+                                       double* x1, double* y1,
+                                       double* x2, double* y2);
+OREO_API OreoWire oreo_ctx_sketch_to_wire(OreoSketch sketch);
+
+// ─── Persistent sketch entity IDs ──────────────────────────────
+//
+// Every oreo_ctx_sketch_add_* function returns a stable, integer
+// entity ID — specifically, the slot index assigned at add time.
+// IDs are NEVER reused, even after the entity is removed. A removed
+// entity becomes a tombstone in its slot so subsequent add_* calls
+// return strictly increasing IDs and existing references in cached
+// constraints, feature trees, or external storage stay valid as
+// "this used to point to a thing that no longer exists".
+//
+// The cloud-collab edit model (see docs/part-studio-model.md and
+// docs/server-safe-api.md) depends on this contract: a server must
+// be able to apply (insert / delete / update) operations to a sketch
+// stored on disk and replay them later in any order without renaming.
+//
+// Removal cascades: when an entity is removed, every constraint that
+// referenced it is automatically removed too. The constraint slot
+// stays alive (as a tombstone) so the user can re-target it.
+
+// Remove an entity by ID. Cascades to dependent constraints.
+// Returns OREO_OK on success, OREO_INVALID_INPUT on null handle /
+// out-of-range / already-removed.
+OREO_API int oreo_ctx_sketch_remove_point(OreoSketch sketch, int pointId);
+OREO_API int oreo_ctx_sketch_remove_line(OreoSketch sketch, int lineId);
+OREO_API int oreo_ctx_sketch_remove_circle(OreoSketch sketch, int circleId);
+OREO_API int oreo_ctx_sketch_remove_arc(OreoSketch sketch, int arcId);
+
+// Remove a constraint by ID (no cascade — constraints don't own
+// entities). Returns OREO_OK / OREO_INVALID_INPUT.
+OREO_API int oreo_ctx_sketch_remove_constraint(OreoSketch sketch,
+                                                int constraintId);
+
+// Per-family liveness probe. Returns 1 if the slot exists and is
+// not a tombstone, 0 otherwise (out-of-range or removed).
+OREO_API int oreo_ctx_sketch_point_alive     (OreoSketch sketch, int id);
+OREO_API int oreo_ctx_sketch_line_alive      (OreoSketch sketch, int id);
+OREO_API int oreo_ctx_sketch_circle_alive    (OreoSketch sketch, int id);
+OREO_API int oreo_ctx_sketch_arc_alive       (OreoSketch sketch, int id);
+OREO_API int oreo_ctx_sketch_constraint_alive(OreoSketch sketch, int id);
+
+// Slot count = number of slots ever allocated (live + tombstone).
+// Use for `for (id = 0; id < slot_count; ++id)` iteration with an
+// _alive() check. The slot count never decreases.
+OREO_API int oreo_ctx_sketch_point_slot_count     (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_line_slot_count      (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_circle_slot_count    (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_arc_slot_count       (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_constraint_slot_count(OreoSketch sketch);
+
+// Live count = slot count minus tombstones. Useful for UI badges
+// and quota checks.
+OREO_API int oreo_ctx_sketch_point_live_count     (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_line_live_count      (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_circle_live_count    (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_arc_live_count       (OreoSketch sketch);
+OREO_API int oreo_ctx_sketch_constraint_live_count(OreoSketch sketch);
+
+// ============================================================
+// Context-aware feature-edit API (always available, no legacy gate)
+// ============================================================
+//
+// Two-handle model:
+//   OreoFeatureBuilder accumulates {id, type, params} in a fluent API,
+//   OreoFeatureTree owns an ordered sequence of features bound to a ctx.
+//
+// To add a feature: build it via the setters, then hand it to
+// oreo_ctx_feature_tree_add. The tree takes ownership of the resulting
+// Feature; the builder remains usable (it can be reset and reused).
+//
+// All param setters return OREO_OK on success or OREO_INVALID_INPUT on
+// a null handle / null name. Schema-level validation runs at replay
+// time (executeFeature) and at the dedicated _validate entry point.
+
+typedef struct OreoFeatureBuilder_T* OreoFeatureBuilder;
+typedef struct OreoFeatureTree_T*    OreoFeatureTree;
+
+OREO_API OreoFeatureBuilder oreo_feature_builder_create(const char* id, const char* type);
+OREO_API void               oreo_feature_builder_free(OreoFeatureBuilder b);
+OREO_API void               oreo_feature_builder_reset(OreoFeatureBuilder b,
+                                                        const char* id, const char* type);
+
+OREO_API int oreo_feature_builder_set_double(OreoFeatureBuilder b, const char* name, double v);
+OREO_API int oreo_feature_builder_set_int   (OreoFeatureBuilder b, const char* name, int v);
+OREO_API int oreo_feature_builder_set_bool  (OreoFeatureBuilder b, const char* name, int v);
+OREO_API int oreo_feature_builder_set_string(OreoFeatureBuilder b, const char* name, const char* v);
+OREO_API int oreo_feature_builder_set_vec   (OreoFeatureBuilder b, const char* name,
+                                              double x, double y, double z);
+OREO_API int oreo_feature_builder_set_pnt   (OreoFeatureBuilder b, const char* name,
+                                              double x, double y, double z);
+OREO_API int oreo_feature_builder_set_dir   (OreoFeatureBuilder b, const char* name,
+                                              double x, double y, double z);
+OREO_API int oreo_feature_builder_set_ax1   (OreoFeatureBuilder b, const char* name,
+                                              double px, double py, double pz,
+                                              double dx, double dy, double dz);
+OREO_API int oreo_feature_builder_set_ax2   (OreoFeatureBuilder b, const char* name,
+                                              double px, double py, double pz,
+                                              double nx, double ny, double nz);
+OREO_API int oreo_feature_builder_set_pln   (OreoFeatureBuilder b, const char* name,
+                                              double px, double py, double pz,
+                                              double nx, double ny, double nz);
+
+// Set a single ElementRef parameter (overwrites). Use for params like
+// "tool" or "edge" / "face" that take a single sub-shape reference.
+OREO_API int oreo_feature_builder_set_ref(OreoFeatureBuilder b, const char* name,
+                                           const char* featureId,
+                                           const char* elementName,
+                                           const char* elementType);
+
+// Append an ElementRef to a list-typed parameter (creates the list on
+// first call). Use for params like "edges" / "faces" / "shapes".
+OREO_API int oreo_feature_builder_add_ref(OreoFeatureBuilder b, const char* name,
+                                           const char* featureId,
+                                           const char* elementName,
+                                           const char* elementType);
+
+// ─── Tree ─────────────────────────────────────────────────────
+
+OREO_API OreoFeatureTree oreo_ctx_feature_tree_create(OreoContext ctx);
+OREO_API void            oreo_ctx_feature_tree_free(OreoFeatureTree t);
+
+// Snapshot the builder's current state into a new feature appended at
+// the end of the tree. The builder is not modified.
+// Returns OREO_OK or an OreoErrorCode on failure (null args, duplicate ID).
+OREO_API int oreo_ctx_feature_tree_add(OreoFeatureTree t, OreoFeatureBuilder b);
+
+// Remove a feature by ID. Returns OREO_OK or OREO_INVALID_INPUT.
+OREO_API int oreo_ctx_feature_tree_remove(OreoFeatureTree t, const char* featureId);
+
+// Suppress / unsuppress a feature by ID. suppress != 0 means suppressed.
+OREO_API int oreo_ctx_feature_tree_suppress(OreoFeatureTree t,
+                                             const char* featureId, int suppress);
+
+// Update a single double parameter on an existing feature. Use for
+// fast parametric edits ("change radius from 2.0 to 2.5").
+OREO_API int oreo_ctx_feature_tree_set_param_double(OreoFeatureTree t,
+                                                     const char* featureId,
+                                                     const char* paramName,
+                                                     double v);
+
+// Per-type parameter updates for the remaining ParamValue alternatives.
+// Mirrors oreo_feature_builder_set_*. All return OREO_OK on success or
+// OreoErrorCode on a missing feature / null arg.
+OREO_API int oreo_ctx_feature_tree_set_param_int   (OreoFeatureTree t,
+                                                     const char* featureId,
+                                                     const char* paramName,
+                                                     int v);
+OREO_API int oreo_ctx_feature_tree_set_param_bool  (OreoFeatureTree t,
+                                                     const char* featureId,
+                                                     const char* paramName,
+                                                     int v);
+OREO_API int oreo_ctx_feature_tree_set_param_string(OreoFeatureTree t,
+                                                     const char* featureId,
+                                                     const char* paramName,
+                                                     const char* v);
+OREO_API int oreo_ctx_feature_tree_set_param_vec   (OreoFeatureTree t,
+                                                     const char* featureId,
+                                                     const char* paramName,
+                                                     double x, double y, double z);
+
+OREO_API int oreo_ctx_feature_tree_count(OreoFeatureTree t);
+
+// ─── Topology-change query ─────────────────────────────────────
+//
+// After replay, callers (especially cloud collaboration servers)
+// often need to know which features failed or whose topology changed
+// — typically because a downstream feature's element references no
+// longer resolve. The "broken" query returns the ordered list of
+// feature IDs with a non-OK status (BrokenReference, ExecutionFailed).
+
+// Number of features whose status is not OK after the most recent
+// replay. Returns 0 if the tree has never been replayed or all
+// features succeeded.
+OREO_API int oreo_ctx_feature_tree_broken_count(OreoFeatureTree t);
+
+// Read the featureId of the i-th broken feature (0-based index).
+// Uses the size-probe protocol: pass (buf=NULL, buflen=0, needed=&n)
+// to measure, then allocate buflen >= *needed + 1 and call again.
+OREO_API int oreo_ctx_feature_tree_broken_id(OreoFeatureTree t, int index,
+                                              char* buf, size_t buflen,
+                                              size_t* needed);
+
+// Read the human-readable error message of the i-th broken feature
+// (the same string available via Feature::errorMessage). Size-probe
+// protocol identical to broken_id.
+OREO_API int oreo_ctx_feature_tree_broken_message(OreoFeatureTree t, int index,
+                                                   char* buf, size_t buflen,
+                                                   size_t* needed);
+
+// ─── Reorder / move ─────────────────────────────────────────────
+//
+// Move a feature to a new position in the ordered list. Negative
+// values clamp to 0; values past the end clamp to the end. Marks the
+// moved feature and everything downstream of EITHER the old or new
+// position as dirty so the next replay rebuilds them.
+OREO_API int oreo_ctx_feature_tree_move(OreoFeatureTree t,
+                                         const char* featureId,
+                                         int newIndex);
+
+// Replace every ElementRef in every feature whose featureId matches
+// `oldFeatureId` with the same ref pointing at `newFeatureId`. Useful
+// for "swap base feature" edits where downstream references should
+// follow the swap. Returns the number of refs updated.
+OREO_API int oreo_ctx_feature_tree_replace_reference(OreoFeatureTree t,
+                                                      const char* oldFeatureId,
+                                                      const char* newFeatureId);
+
+// Run schema-level parameter validation on every feature in the tree
+// without executing geometry. Returns OREO_OK if all features validate,
+// or the first error code encountered. Diagnostics for every failing
+// feature are written to the bound ctx.
+OREO_API int oreo_ctx_feature_tree_validate(OreoFeatureTree t);
+
+// Replay the entire tree and return the final solid (caller owns the
+// returned handle and must oreo_free_solid it). Returns NULL on
+// failure; query the bound ctx for diagnostics.
+OREO_API OreoSolid oreo_ctx_feature_tree_replay(OreoFeatureTree t);
 
 // ============================================================
 // Legacy singleton-context C API

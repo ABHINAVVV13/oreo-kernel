@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // validation.h — Strict input validation for all kernel operations.
 //
 // Every public kernel operation must validate its inputs before execution.

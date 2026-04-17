@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_serialize.h — Binary serialization for NamedShape (BRep + element map).
 //
 // Every operation takes a KernelContext& as its first parameter.

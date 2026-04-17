@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // localization.cpp — implementation of MessageCatalog (see localization.h).
 
 #include "localization.h"

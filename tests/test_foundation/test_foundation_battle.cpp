@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_battle.cpp — Adversarial battle tests for the oreo-kernel foundation.
 //
 // Tests ALL 4 foundation layers:

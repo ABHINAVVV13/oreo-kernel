@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation.cpp — Comprehensive tests for all 7 foundation items.
 
 #include <gtest/gtest.h>

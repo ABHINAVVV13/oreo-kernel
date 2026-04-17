@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // occt_scope_guard.h — RAII guards for OCCT process-global settings.
 //
 // OCCT's Interface_Static stores settings globally per-process. When two

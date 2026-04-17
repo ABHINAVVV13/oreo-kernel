@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // shape_fix.h — Automatic shape healing pipeline.
 // Runs ShapeFix after STEP imports and failed boolean operations.
 

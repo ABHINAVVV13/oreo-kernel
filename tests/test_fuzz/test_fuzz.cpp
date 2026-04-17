@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_fuzz.cpp — Property-based "smoke fuzz" harness for oreo-kernel.
 //
 // True coverage-guided fuzzing (Clang + libFuzzer) is not available under
@@ -242,7 +244,7 @@ TEST(Fuzz, F2_DeserializeTruncated) {
 // F3: Deserializer — bit-flip
 // ═══════════════════════════════════════════════════════════════
 //
-// DISABLED: the first enabled run of this test (2026-04-17, MSVC Release)
+// Previously disabled: the first enabled run of this test (2026-04-17, MSVC Release)
 // produced a genuine access violation (SEH 0xc0000005) at iteration 0 on
 // a single-bit flip of a valid serialized box.
 //
@@ -254,12 +256,12 @@ TEST(Fuzz, F2_DeserializeTruncated) {
 // TODO(serialize-robustness): audit src/io/oreo_serialize.cpp for
 // unchecked length/offset reads; add explicit bounds checks at each
 // fread-equivalent and return a diagnostic-bearing failure on overrun.
-// Once fixed, remove the DISABLED_ prefix to re-enable this test.
+// The serializer now rejects mutated payloads before OCCT sees them.
 //
 // Run this test anyway (to reproduce the crash):
-//   test_fuzz.exe --gtest_also_run_disabled_tests --gtest_filter=Fuzz.DISABLED_F3_DeserializeBitFlip
+//   test_fuzz.exe --gtest_filter=Fuzz.F3_DeserializeBitFlip
 
-TEST(Fuzz, DISABLED_F3_DeserializeBitFlip) {
+TEST(Fuzz, F3_DeserializeBitFlip) {
     auto seedCtx = oreo::KernelContext::create();
     auto validSeed = makeValidSerializedBox(*seedCtx, 10, 20, 30);
     ASSERT_FALSE(validSeed.empty()) << "Failed to build seed serialized buffer";

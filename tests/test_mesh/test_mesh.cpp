@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_mesh.cpp — Comprehensive tessellation tests.
 //
 // tessellate()/tessellateIncremental() return OperationResult<MeshResult>.

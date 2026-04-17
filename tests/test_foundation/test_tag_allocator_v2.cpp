@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_tag_allocator_v2.cpp — Phase 2 acceptance tests for the v2
 // TagAllocator API (nextShapeIdentity, peekShapeIdentity, allocateRangeV2,
 // SnapshotV2, snapshotV2/restoreV2, toOcctTag(ShapeIdentity)).

@@ -1,4 +1,6 @@
-// map_shape_elements.cpp — Bridge between geometry operations and the real
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// map_shape_elements.cpp - Bridge between geometry operations and the real
 // FreeCAD element-mapping algorithm.
 //
 // Context-aware: receives KernelContext& for tag allocation and diagnostics.
@@ -6,8 +8,6 @@
 
 #include "map_shape_elements.h"
 #include "topo_shape_adapter.h"
-
-#include "core/shape_identity_v1.h"
 
 #include <TopExp.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
@@ -18,12 +18,12 @@ namespace oreo {
 namespace {
 
 // Populate default IndexedName-based mapped names for every sub-shape of
-// `result`. Used when there are no input shapes to trace history from —
-// primitive operations (makeBox, makeCylinder, …). Without this, the
+// `result`. Used when there are no input shapes to trace history from -
+// primitive operations (makeBox, makeCylinder, ...). Without this, the
 // legacy FreeCAD buildElementMap path early-returns on empty input and
 // leaves the element map empty, which means element accessors would
 // return "". Each name carries a ;:P<16hex>.<16hex> identity postfix
-// (the v2 canonical carrier). No separate ;:Q postfix is emitted —
+// (the v2 canonical carrier). No separate ;:Q postfix is emitted -
 // ;:P carries the full documentId inline.
 NamedShape buildPrimitiveNames(
     const TopoDS_Shape& result,
@@ -85,23 +85,22 @@ NamedShape mapShapeElements(
     // Convert inputs to adapters.
     auto inputAdapters = TopoShapeAdapter::fromNamedShapes(inputShapes);
 
-    // Run the full FreeCAD algorithm. The FreeCAD extraction's internal
-    // contract still uses int64 for master tags (adapter.Tag), so we
-    // pass encodeV1Scalar(opId) — lossless for identities the allocator
-    // produces (counter ≤ INT64_MAX in single-doc, ≤ UINT32_MAX in
-    // multi-doc). The full documentId goes through documentId_ so any
-    // names the adapter emits can stamp the full 64-bit identity. The
-    // NamedShape we return carries opId NATIVELY — we don't re-decode.
+    // Run the full FreeCAD algorithm with small deterministic synthetic
+    // tags. The adapter maps those local tags back to full v2 identities
+    // at the adapter boundary; normal modeling paths do not squeeze
+    // documentId/counter through the legacy int64 format.
     TopoShapeAdapter adapter;
-    adapter.Tag = (opId.counter == 0) ? 0 : oreo::encodeV1Scalar(opId);
+    const auto resultTag = static_cast<std::int64_t>(inputAdapters.size() + 1);
+    adapter.setMappingIdentity(opId.isValid() ? resultTag : 0, opId);
+    adapter.inheritMappingIdentitiesFrom(inputAdapters);
     adapter.buildElementMap(resultShape, mapper, inputAdapters, opName,
                             opId.documentId);
 
-    // toNamedShape reconstructs a ShapeIdentity from adapter.Tag +
-    // documentId_. Re-wrap with the authoritative opId so callers see
-    // the exact identity the allocator handed out, not a round-trip.
+    // Re-wrap with the authoritative opId so callers see the exact identity
+    // the allocator handed out even if the bridge used synthetic tags.
     NamedShape ns = adapter.toNamedShape();
     return NamedShape(ns.shape(), ns.elementMap(), opId);
 }
 
 } // namespace oreo
+

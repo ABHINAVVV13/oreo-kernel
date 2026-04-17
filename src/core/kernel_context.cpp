@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // kernel_context.cpp — KernelContext implementation.
 //
 // OCCT init uses std::call_once for thread-safe one-time initialization.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // cancellation.h — Cooperative cancellation token for long-running operations.
 //
 // CancellationToken is a thread-safe flag that can be polled by worker

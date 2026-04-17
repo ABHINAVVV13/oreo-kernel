@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // schema.cpp — Fail-closed SchemaRegistry implementation.
 // Unknown types, missing headers, bad versions, and missing migrations
 // all produce structured errors, never silent acceptance.

@@ -33,3 +33,4 @@ vcpkg_installed/
 build.bat
 test.bat
 test_detail.bat
+.claude

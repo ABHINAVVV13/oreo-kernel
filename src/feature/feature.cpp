@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // feature.cpp — Feature execution: dispatches feature type to the appropriate
 // geometry operation, resolving element references along the way.
 
 #include "feature.h"
+#include "feature_schema.h"
 #include "geometry/oreo_geometry.h"
 #include "core/kernel_context.h"
 #include "core/operation_result.h"
@@ -82,6 +85,15 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
     if (feature.suppressed) {
         feature.status = FeatureStatus::Suppressed;
         return scope.makeResult(currentShape);  // Pass through unchanged
+    }
+
+    // Schema-driven parameter validation runs before any dispatch so a
+    // malformed feature is rejected with a structured diagnostic instead
+    // of crashing inside std::variant::get or producing degenerate input
+    // to OCCT. validateFeature sets feature.status / errorMessage and
+    // emits a diagnostic on failure.
+    if (!validateFeature(ctx, feature)) {
+        return scope.makeFailure<NamedShape>();
     }
 
     try {

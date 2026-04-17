@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // config_loader.h — CC-10: overlay runtime config from env / JSON file.
 //
 // ConfigLoader mutates a KernelConfig in place by reading values from

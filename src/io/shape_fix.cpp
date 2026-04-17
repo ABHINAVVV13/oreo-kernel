@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // shape_fix.cpp — Production-grade multi-step ShapeFix pipeline.
 //
 // Runs multiple OCCT ShapeFix classes in sequence:

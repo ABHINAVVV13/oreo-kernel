@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // bench_identity.cpp — Phase 7 benchmark harness for identity hot paths.
 //
 // Measures four workloads on 10k-op shapes:

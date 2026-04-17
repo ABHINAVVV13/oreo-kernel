@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // feature_flags.h — MISSING-12: runtime feature toggle registry.
 //
 // FeatureFlags is a process-wide, mutex-guarded map of flag name -> bool.

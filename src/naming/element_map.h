@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // element_map.h — Production-grade bidirectional element name mapping.
 //
 // This is the core data structure for topological naming in oreo-kernel.

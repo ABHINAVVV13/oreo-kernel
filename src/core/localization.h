@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // localization.h — CC-9: message catalog for localized diagnostics.
 //
 // MessageCatalog is a process-wide singleton that maps a locale + message-ID

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_modules.cpp — Tests for new foundation modules.
 //
 // Covers: CancellationToken, FeatureFlags, MessageCatalog, DeterministicRNG,

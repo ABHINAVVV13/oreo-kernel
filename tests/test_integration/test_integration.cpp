@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_integration.cpp — End-to-end integration tests for oreo-kernel.
 //
 // Each TEST exercises a workflow that CROSSES SUBSYSTEM BOUNDARIES
@@ -535,7 +537,9 @@ TEST(Integration, W7_SketchFeatureTreeStepFullChain) {
     EXPECT_NE(json.find("Fillet"), std::string::npos);
 
     auto ctx2 = oreo::KernelContext::create();
-    auto restoredTree = oreo::FeatureTree::fromJSON(json);
+    auto restoredR = oreo::FeatureTree::fromJSON(json);
+    ASSERT_TRUE(restoredR.ok) << restoredR.error;
+    auto& restoredTree = restoredR.tree;
     // Swap in the fresh context so replay runs in ctx2.
     oreo::FeatureTree replayTree(ctx2);
     for (const auto& f : restoredTree.features()) {

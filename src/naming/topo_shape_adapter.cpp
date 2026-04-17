@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // topo_shape_adapter.cpp — Full makeShapeWithElementMap algorithm from FreeCAD 1.0.
 //
 // This is the battle-tested 566-line algorithm from TopoShapeExpansion.cpp
@@ -27,8 +29,10 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include <cassert>
+#include <cctype>
 #include <climits>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <sstream>
@@ -233,7 +237,9 @@ void TopoShapeAdapter::mapSubElement(const std::vector<TopoShapeAdapter>& shapes
 TopoShapeAdapter TopoShapeAdapter::fromNamedShape(const NamedShape& ns) {
     TopoShapeAdapter adapter;
     adapter.shape_ = ns.shape();
-    adapter.Tag = ns.tag();
+    adapter.Tag = 0;
+    adapter.identity_ = ns.shapeId();
+    adapter.documentId_ = adapter.identity_.documentId;
     adapter.elementMap_ = std::make_shared<Data::ElementMap>();
 
     // Import names from the oreo ElementMap into the Data::ElementMap
@@ -249,7 +255,7 @@ TopoShapeAdapter TopoShapeAdapter::fromNamedShape(const NamedShape& ns) {
             // oreo::MappedName::data() returns the full encoded name as std::string
             Data::MappedName dataName(oreoName.data());
 
-            adapter.elementMap_->setElementName(dataIdx, dataName, ns.tag());
+            adapter.elementMap_->setElementName(dataIdx, dataName, adapter.Tag);
         }
     }
 
@@ -259,10 +265,31 @@ TopoShapeAdapter TopoShapeAdapter::fromNamedShape(const NamedShape& ns) {
 std::vector<TopoShapeAdapter> TopoShapeAdapter::fromNamedShapes(const std::vector<NamedShape>& shapes) {
     std::vector<TopoShapeAdapter> result;
     result.reserve(shapes.size());
+    std::int64_t syntheticTag = 1;
     for (auto& s : shapes) {
-        result.push_back(fromNamedShape(s));
+        auto adapter = fromNamedShape(s);
+        adapter.setMappingIdentity(syntheticTag++, s.shapeId());
+        result.push_back(std::move(adapter));
     }
     return result;
+}
+
+void TopoShapeAdapter::setMappingIdentity(std::int64_t syntheticTag, ShapeIdentity id) {
+    Tag = syntheticTag;
+    identity_ = id;
+    documentId_ = id.documentId;
+    if (syntheticTag != 0 && id.isValid()) {
+        tagIdentities_[std::llabs(static_cast<long long>(syntheticTag))] = id;
+    }
+}
+
+void TopoShapeAdapter::inheritMappingIdentitiesFrom(
+    const std::vector<TopoShapeAdapter>& inputs) {
+    for (const auto& input : inputs) {
+        for (const auto& entry : input.tagIdentities_) {
+            tagIdentities_[entry.first] = entry.second;
+        }
+    }
 }
 
 namespace {
@@ -294,20 +321,27 @@ namespace {
 // hop. Measured on the bench_identity 10k-op workload the difference
 // is <15% on serialize throughput, within the §7 gate.
 std::string canonicalizeToV2(const std::string& src,
-                             std::uint64_t documentId) {
+                             std::uint64_t documentId,
+                             const std::map<std::int64_t, ShapeIdentity>& tagIdentities) {
     std::string out;
     out.reserve(src.size() + 32);
 
     auto rewriteScalar = [&](std::int64_t scalar) -> bool {
         ShapeIdentity id;
-        try {
-            id = oreo::decodeV1Scalar(scalar, documentId, nullptr);
-        } catch (const std::invalid_argument&) {
+        const auto mapped = tagIdentities.find(
+            std::llabs(static_cast<long long>(scalar)));
+        if (mapped != tagIdentities.end()) {
+            id = mapped->second;
+        } else {
+            try {
+                id = oreo::decodeV1Scalar(scalar, documentId, nullptr);
+            } catch (const std::invalid_argument&) {
             // Hint/scalar mismatch — leave the ;:H as-is. Could happen
             // with cross-document history crossings that shouldn't
             // normally reach this point, but if they do we preserve
             // the raw bytes rather than corrupting them.
-            return false;
+                return false;
+            }
         }
         char buf[36];  // 32 hex + NUL + slack
         std::snprintf(buf, sizeof(buf), "%016llx%016llx",
@@ -324,16 +358,24 @@ std::string canonicalizeToV2(const std::string& src,
         if (pos + 3 <= src.size() && src.compare(pos, 3, ";:H") == 0) {
             std::size_t start = pos + 3;
             std::size_t end = start;
+            bool negative = false;
+            if (end < src.size() && src[end] == '-') {
+                negative = true;
+                ++end;
+            }
+            const std::size_t digitsStart = end;
             while (end < src.size()
                    && std::isxdigit(static_cast<unsigned char>(src[end]))) {
                 ++end;
             }
-            if (end > start) {
+            if (end > digitsStart) {
                 // strtoull handles the full 64-bit bit pattern; cast
                 // to int64 preserves the same bits for decodeV1Scalar.
                 const std::uint64_t u = std::strtoull(
-                    src.substr(start, end - start).c_str(), nullptr, 16);
-                if (rewriteScalar(static_cast<std::int64_t>(u))) {
+                    src.substr(digitsStart, end - digitsStart).c_str(), nullptr, 16);
+                auto scalar = static_cast<std::int64_t>(u);
+                if (negative) scalar = -scalar;
+                if (rewriteScalar(scalar)) {
                     pos = end;
                     continue;
                 }
@@ -398,7 +440,7 @@ NamedShape TopoShapeAdapter::toNamedShape() const {
             // postfix portion which contains the operation history
             // chain (;:H tags, ;:M/;:G etc).
             const std::string rawName = elem.name.toString();
-            MappedName name(canonicalizeToV2(rawName, documentId_));
+            MappedName name(canonicalizeToV2(rawName, documentId_, tagIdentities_));
             oreoMap->setElementName(idx, name, Tag);
         }
     }
@@ -406,9 +448,9 @@ NamedShape TopoShapeAdapter::toNamedShape() const {
     // Reconstruct the full ShapeIdentity from Tag + documentId_ — the
     // two fields together describe what nextShapeIdentity() returned.
     // This keeps the deprecated int64 ctor off the hot path.
-    ShapeIdentity id = (Tag == 0)
-        ? ShapeIdentity{}
-        : oreo::decodeV1Scalar(Tag, documentId_, nullptr);
+    ShapeIdentity id = identity_.isValid()
+        ? identity_
+        : ((Tag == 0) ? ShapeIdentity{} : oreo::decodeV1Scalar(Tag, documentId_, nullptr));
     return NamedShape(shape_, oreoMap, id);
 }
 

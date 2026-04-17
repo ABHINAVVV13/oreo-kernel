@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_step_roundtrip.cpp — STEP export -> re-import -> compare.
 
 #include <gtest/gtest.h>

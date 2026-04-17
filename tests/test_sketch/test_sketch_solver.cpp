@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_sketch_solver.cpp — PlaneGCS constraint solver tests.
 // 50+ test cases from simple to complex.
 

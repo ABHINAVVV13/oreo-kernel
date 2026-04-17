@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // glb_smoke_main.cpp — Tiny standalone program that exports a box to
 // `cube.glb` in the current directory. Not linked as a ctest — used only
 // for manual drag-and-drop verification with three.js / Blender / Windows

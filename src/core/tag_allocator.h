@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // tag_allocator.h — Document-derived deterministic tag allocation.
 //
 // Tags uniquely identify geometry operations for topological naming.

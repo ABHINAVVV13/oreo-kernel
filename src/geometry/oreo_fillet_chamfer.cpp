@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_fillet_chamfer.cpp — Fillet and chamfer operations with OperationResult + DiagnosticScope.
 
 #include "oreo_geometry.h"
@@ -24,6 +26,7 @@ GeomResult fillet(KernelContext& ctx,
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
     if (!validation::requireNonEmpty(ctx, edges, "edges")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, radius, "radius")) return scope.makeFailure<NamedShape>();
+    if (ctx.checkCancellation()) return scope.makeFailure<NamedShape>();
 
     OREO_OCCT_TRY
     double kernelRadius = ctx.units().toKernelLength(radius);
@@ -81,6 +84,7 @@ GeomResult chamfer(KernelContext& ctx,
     if (!validation::requireNonNull(ctx, solid, "solid")) return scope.makeFailure<NamedShape>();
     if (!validation::requireNonEmpty(ctx, edges, "edges")) return scope.makeFailure<NamedShape>();
     if (!validation::requirePositive(ctx, distance, "distance")) return scope.makeFailure<NamedShape>();
+    if (ctx.checkCancellation()) return scope.makeFailure<NamedShape>();
 
     OREO_OCCT_TRY
     double kernelDist = ctx.units().toKernelLength(distance);

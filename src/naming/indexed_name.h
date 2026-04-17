@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // indexed_name.h — Stable element identifier: type string + integer index.
 // Inspired by FreeCAD 1.0's IndexedName (LGPL-2.1+), clean reimplementation.
 //

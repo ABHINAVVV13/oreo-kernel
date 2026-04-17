@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_query.cpp — Shape queries implementation.
 
 #include "oreo_query.h"

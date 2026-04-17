@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_serialize.cpp — Serialize -> deserialize -> verify equality.
 
 #include <gtest/gtest.h>

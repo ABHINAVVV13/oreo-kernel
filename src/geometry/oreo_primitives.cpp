@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_primitives.cpp — Primitive shape creation with unit enforcement.
 //
 // All dimension parameters are in DOCUMENT units (from ctx.units).

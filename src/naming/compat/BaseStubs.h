@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // BaseStubs.h — Minimal stubs for Base:: types used by element-map code.
 // Replaces Base/Handle.h, Base/Persistence.h, Base/BaseClass.h, Base/Bitmask.h
 

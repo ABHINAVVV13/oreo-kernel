@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // shape_mapper.h — Abstract interface for tracking element identity through operations.
 // Inspired by FreeCAD 1.0's TopoShapeMapper (LGPL-2.1+), clean reimplementation.
 //

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_feature_tree.cpp — Comprehensive feature tree tests.
 // Validates the core of parametric CAD: build -> replay -> modify -> re-replay.
 
@@ -563,7 +565,9 @@ TEST(ParametricReplay, FeatureTreeSerializeRoundTrip) {
     EXPECT_FALSE(json.empty());
 
     // Deserialize
-    auto restored = oreo::FeatureTree::fromJSON(json);
+    auto restoredR = oreo::FeatureTree::fromJSON(json);
+    ASSERT_TRUE(restoredR.ok) << restoredR.error;
+    auto& restored = restoredR.tree;
     EXPECT_EQ(restored.featureCount(), 2);
 
     // Verify features restored correctly

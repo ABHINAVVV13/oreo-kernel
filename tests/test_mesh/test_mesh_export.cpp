@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_mesh_export.cpp — GLB exporter round-trip tests.
 //
 // These tests exercise the GLB binary format without needing an external

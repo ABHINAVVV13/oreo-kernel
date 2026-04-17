@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_doc_identity_nolegacy.cpp — Phase 6 no-legacy acceptance suite.
 //
 // Mirrors the scenarios in test_doc_identity.cpp but uses ONLY the
@@ -236,6 +238,29 @@ TEST(DocIdentityNoLegacy, TwoThreadsTwoContextsIndependentCounters) {
 }
 
 // ─── 6. Array-bounds guards on the ctx-aware fillet ─────────────────
+
+TEST(DocIdentityNoLegacy, ContextQueryApiWorksWithoutLegacySurface) {
+    oreo::TagAllocator::clearDocumentIdRegistry();
+    CtxGuard ctx(oreo_context_create_with_doc(9, nullptr));
+    ASSERT_NE(ctx.h, nullptr);
+    SolidGuard box(oreo_ctx_make_box(ctx.h, 1, 2, 3));
+    ASSERT_NE(box.h, nullptr);
+
+    EXPECT_EQ(oreo_ctx_face_count(ctx.h, box.h), 6);
+    EXPECT_EQ(oreo_ctx_edge_count(ctx.h, box.h), 12);
+
+    const OreoBBox bbox = oreo_ctx_aabb(ctx.h, box.h);
+    EXPECT_NEAR(bbox.xmin, 0.0, 1e-6);
+    EXPECT_NEAR(bbox.ymin, 0.0, 1e-6);
+    EXPECT_NEAR(bbox.zmin, 0.0, 1e-6);
+    EXPECT_NEAR(bbox.xmax, 1.0, 1e-6);
+    EXPECT_NEAR(bbox.ymax, 2.0, 1e-6);
+    EXPECT_NEAR(bbox.zmax, 3.0, 1e-6);
+
+    const OreoMassProps props = oreo_ctx_mass_properties(ctx.h, box.h);
+    EXPECT_NEAR(props.volume, 6.0, 1e-9);
+    EXPECT_NEAR(props.surface_area, 22.0, 1e-9);
+}
 
 TEST(DocIdentityNoLegacy, ArrayBoundsGuards) {
     oreo::TagAllocator::clearDocumentIdRegistry();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_new_features.cpp — Targeted tests for the newly-landed
 // KernelContext / OperationResult / occtSafeCall / validation / schema /
 // diagnostic-metadata APIs.

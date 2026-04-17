@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // map_shape_elements.h — Build element map for an operation result.
 //
 // Central function for topological naming. After every OCCT geometry

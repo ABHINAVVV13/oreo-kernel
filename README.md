@@ -1,5 +1,9 @@
 # oreo-kernel
 
+**Status: v0.9.0-rc1 — release candidate, API-stable, pre-1.0 field testing.**
+See [CHANGELOG.md](CHANGELOG.md) for what's in this release and what's still
+pending for 1.0.
+
 Standalone C++ CAD geometry kernel built on OpenCASCADE Technology (OCCT), with topological naming stability derived from FreeCAD's element-map implementation and constraint solving via PlaneGCS.
 
 ## What is this?
@@ -103,7 +107,8 @@ Two parallel surfaces are exposed:
 
 | Category      | Functions                                                                                                                                                                                      |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Context       | `oreo_context_create/free`, `oreo_context_has_errors/warnings`, `oreo_context_error_count`, `oreo_context_last_error_message`                                                                  |
+| Context       | `oreo_context_create/free`, diagnostic count/iteration, `oreo_context_last_error_message`                                                                                                      |
+| Context API   | `oreo_ctx_make_box/cylinder/sphere`, `oreo_ctx_extrude`, `oreo_ctx_boolean_union/subtract`, `oreo_ctx_fillet`, `oreo_ctx_aabb`, `oreo_ctx_face_count`, `oreo_ctx_edge_count`, `oreo_ctx_mass_properties`, `oreo_ctx_import_step`, `oreo_ctx_import_step_file`, `oreo_ctx_export_step_file`, `oreo_ctx_serialize/deserialize`, `oreo_ctx_tessellate` |
 | Lifecycle     | `oreo_init`, `oreo_shutdown`, `oreo_last_error`                                                                                                                                                |
 | Primitives    | `oreo_make_box`, `oreo_make_cylinder`, `oreo_make_sphere`, `oreo_make_cone`, `oreo_make_torus`, `oreo_make_wedge`                                                                              |
 | Geometry      | `oreo_extrude`, `oreo_revolve`, `oreo_fillet`, `oreo_chamfer`, `oreo_boolean_union/subtract/intersect`, `oreo_shell`, `oreo_loft`, `oreo_sweep`, `oreo_mirror`, `oreo_pattern_linear/circular` |

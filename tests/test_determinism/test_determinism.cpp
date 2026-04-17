@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_determinism.cpp — Shape-level, cross-context, and golden-value
 // determinism tests for oreo-kernel.
 //
@@ -396,7 +398,9 @@ TEST(DeterminismGolden, CanonicalOpSequenceHash) {
     // A mismatch on another platform/compiler/arch is either a determinism
     // regression or a legitimate expected divergence — investigate before
     // blindly updating this value.
-    constexpr uint64_t kGolden = 0xe637504ebdaffb36ULL;
+    // Updated after adding the v3 integrity marker/checksum and replacing
+    // normal-path v1 scalar tags with synthetic tags mapped back to v2 IDs.
+    constexpr uint64_t kGolden = 0xba22a3755689dd51ULL;
 
     if constexpr (kGolden == 0ULL) {
         ADD_FAILURE() << "Golden not yet recorded. Observed hash = "

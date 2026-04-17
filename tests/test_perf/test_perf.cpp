@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_perf.cpp — Performance regression suite for oreo-kernel.
 //
 // Purpose: catch catastrophic regressions (10x+ slowdown), NOT microbenchmark

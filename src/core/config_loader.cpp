@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // config_loader.cpp — CC-10 implementation.
 //
 // Env lookup uses std::getenv (MSVC emits C4996 on this; silence via

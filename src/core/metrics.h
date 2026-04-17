@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // metrics.h — CC-6: lightweight in-process metrics registry.
 //
 // Header-only so callers pay only for what they include. Designed for

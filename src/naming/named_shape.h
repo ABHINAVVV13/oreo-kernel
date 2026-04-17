@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // named_shape.h — TopoDS_Shape + ElementMap: the core type for oreo-kernel.
 // Every geometry operation returns a NamedShape.
 //

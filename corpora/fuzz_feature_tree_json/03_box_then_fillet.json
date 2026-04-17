@@ -1,0 +1,1 @@
+{"_schema":"oreo.feature_tree","_version":{"major":1,"minor":0,"patch":0},"features":[{"id":"F1","type":"MakeBox","params":{"dimensions":{"type":"Vec","x":10,"y":10,"z":10}},"suppressed":false},{"id":"F2","type":"Fillet","params":{"edges":{"type":"ElementRefList","value":[{"featureId":"F1","elementName":"Edge1","elementType":"Edge"}]},"radius":1.5},"suppressed":false}]}

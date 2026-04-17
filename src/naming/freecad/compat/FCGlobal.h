@@ -1,12 +1,27 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // FCGlobal.h stub — replaces FreeCAD's FCGlobal.h for oreo-kernel.
 // Provides AppExport macro and FREECAD_DECL_EXPORT/IMPORT.
 
 #ifndef OREO_FCGLOBAL_STUB_H
 #define OREO_FCGLOBAL_STUB_H
 
-// DLL export/import macros
+// DLL export/import macros.
+//
+// Three linkage modes mirror those in include/oreo_kernel.h:
+//   OREO_KERNEL_STATIC  — building/consuming the STATIC internal archive.
+//                         No decoration; the symbols just live in .lib.
+//   OREO_KERNEL_EXPORTS — building the SHARED oreo-kernel.dll.
+//                         Decorate as dllexport.
+//   (neither)           — consuming the SHARED oreo-kernel.dll.
+//                         Decorate as dllimport.
 #if defined(_WIN32)
-    #ifdef OREO_KERNEL_EXPORTS
+    #if defined(OREO_KERNEL_STATIC)
+        #define FREECAD_DECL_EXPORT
+        #define FREECAD_DECL_IMPORT
+        #define AppExport
+        #define BaseExport
+    #elif defined(OREO_KERNEL_EXPORTS)
         #define FREECAD_DECL_EXPORT __declspec(dllexport)
         #define FREECAD_DECL_IMPORT __declspec(dllimport)
         #define AppExport __declspec(dllexport)

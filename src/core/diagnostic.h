@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // diagnostic.h — Structured diagnostics system for oreo-kernel.
 //
 // Replaces the old thread-local single-error system with:
@@ -289,6 +291,7 @@ private:
     // Internal helper — updates incremental counters for a diagnostic that
     // is about to be (or has just been) pushed.
     void bumpCounters_(const Diagnostic& d);
+    void recomputeCounters_();
 };
 
 } // namespace oreo

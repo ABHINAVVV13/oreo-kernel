@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_production.cpp -- Comprehensive adversarial test suite
 // verifying ALL foundation guarantees for production readiness.
 //

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // diagnostic.cpp — DiagnosticCollector implementation.
 
 #include "diagnostic.h"
@@ -181,6 +183,17 @@ void DiagnosticCollector::bumpCounters_(const Diagnostic& d) {
     if (d.namingDegraded)   namingDegraded_   = true;
 }
 
+void DiagnosticCollector::recomputeCounters_() {
+    errorCount_ = 0;
+    warningCount_ = 0;
+    fatalCount_ = 0;
+    geometryDegraded_ = false;
+    namingDegraded_ = false;
+    for (const auto& d : diagnostics_) {
+        bumpCounters_(d);
+    }
+}
+
 void DiagnosticCollector::report(Diagnostic diag) {
     stampMetadata_(diag);
 
@@ -217,7 +230,7 @@ void DiagnosticCollector::report(Diagnostic diag) {
                 stampMetadata_(marker);
                 // Replacing an existing slot is non-throwing (no allocation).
                 diagnostics_.back() = std::move(marker);
-                bumpCounters_(diagnostics_.back());
+                recomputeCounters_();
             }
         }
         return;

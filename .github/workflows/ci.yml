@@ -1,0 +1,212 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same branch when a new commit lands.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # Linux GCC release build + full test suite
+  # ────────────────────────────────────────────────────────────
+  linux-gcc-release:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build ripgrep \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libocct-data-exchange-dev libocct-visualization-dev \
+            libgtest-dev libeigen3-dev nlohmann-json3-dev \
+            libboost-all-dev qt6-base-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOREO_ENABLE_LEGACY_API=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Grep gate (identity v1 squeeze)
+        run: ci/grep_gate.sh
+
+      - name: SPDX header gate
+        run: ci/spdx_check.sh --strict
+
+  # ────────────────────────────────────────────────────────────
+  # Linux GCC no-legacy build + tests (acceptance gate for the
+  # server-safe configuration)
+  # ────────────────────────────────────────────────────────────
+  linux-gcc-nolegacy:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libocct-data-exchange-dev libocct-visualization-dev \
+            libgtest-dev libeigen3-dev nlohmann-json3-dev \
+            libboost-all-dev qt6-base-dev
+
+      - name: Configure (no-legacy)
+        run: |
+          cmake -S . -B build_nolegacy \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOREO_ENABLE_LEGACY_API=OFF
+
+      - name: Build
+        run: cmake --build build_nolegacy --parallel
+
+      - name: Test
+        run: ctest --test-dir build_nolegacy --output-on-failure
+
+  # ────────────────────────────────────────────────────────────
+  # Linux Clang + AddressSanitizer + UndefinedBehaviorSanitizer
+  # Catches memory bugs, OOB, use-after-free, integer overflow,
+  # null-pointer deref, etc. Tests run slower under ASan/UBSan
+  # but the suite is small enough to fit in CI budget.
+  # ────────────────────────────────────────────────────────────
+  linux-clang-asan-ubsan:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang lld cmake ninja-build \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libocct-data-exchange-dev libocct-visualization-dev \
+            libgtest-dev libeigen3-dev nlohmann-json3-dev \
+            libboost-all-dev qt6-base-dev
+
+      - name: Configure (ASan + UBSan)
+        run: |
+          cmake -S . -B build_san \
+            -G Ninja \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DOREO_ENABLE_SANITIZER=address+undefined \
+            -DOREO_ENABLE_LEGACY_API=ON
+
+      - name: Build
+        run: cmake --build build_san --parallel
+
+      - name: Test (sanitizers active)
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build_san --output-on-failure
+
+  # ────────────────────────────────────────────────────────────
+  # libFuzzer smoke run (60s per harness). Catches crashes and
+  # divergent corpora; deeper runs are scheduled separately.
+  # ────────────────────────────────────────────────────────────
+  linux-clang-fuzz:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang lld cmake ninja-build \
+            libocct-foundation-dev libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev libocct-ocaf-dev \
+            libocct-data-exchange-dev libocct-visualization-dev \
+            libgtest-dev libeigen3-dev nlohmann-json3-dev \
+            libboost-all-dev qt6-base-dev
+
+      - name: Configure (libFuzzer)
+        run: |
+          cmake -S . -B build_fuzz \
+            -G Ninja \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DOREO_BUILD_FUZZERS=ON \
+            -DOREO_ENABLE_SANITIZER=address+undefined \
+            -DOREO_ENABLE_LEGACY_API=ON
+
+      - name: Build fuzzers
+        run: |
+          cmake --build build_fuzz --parallel \
+            --target fuzz_deserialize fuzz_step_import fuzz_feature_tree_json
+
+      - name: Smoke-run fuzzers (60s each)
+        run: |
+          set -e
+          for h in fuzz_deserialize fuzz_step_import fuzz_feature_tree_json; do
+            echo "=== running $h ==="
+            ./build_fuzz/fuzzers/$h \
+              -max_total_time=60 \
+              -timeout=10 \
+              -rss_limit_mb=2048 \
+              corpora/$h/ || (echo "$h crashed"; exit 1)
+          done
+
+      - name: Upload crash reproducers (if any)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzer-crashes
+          path: |
+            crash-*
+            leak-*
+            timeout-*
+          if-no-files-found: ignore
+
+  # ────────────────────────────────────────────────────────────
+  # Windows MSVC build + tests (matches the developer workflow
+  # documented in README/build commands)
+  # ────────────────────────────────────────────────────────────
+  windows-msvc:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: master
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build_msvc `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DOREO_ENABLE_LEGACY_API=ON
+
+      - name: Build
+        run: cmake --build build_msvc --config Release
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build_msvc -C Release --output-on-failure

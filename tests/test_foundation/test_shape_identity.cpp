@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_shape_identity.cpp — Phase 1 acceptance tests.
 //
 // Covers the ShapeIdentity value type (§2) and the v1 bridge (§§3.1–3.2)

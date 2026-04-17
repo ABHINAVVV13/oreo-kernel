@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_topo_naming.cpp — Topological naming regression tests.
 // Verify that element names are stable across operations and
 // that downstream references resolve correctly after upstream changes.

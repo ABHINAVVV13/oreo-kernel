@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_extrude.cpp — Extrude with OperationResult + DiagnosticScope.
 
 #include "oreo_geometry.h"

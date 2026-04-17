@@ -1,0 +1,1 @@
+{"_schema":"oreo.feature_tree","_version":{"major":1,"minor":0,"patch":0},"features":[{"id":"F1","type":"LinearPattern","params":{"direction":{"type":"Vec","x":1,"y":0,"z":0},"count":2147483647,"spacing":1.0},"suppressed":false}]}

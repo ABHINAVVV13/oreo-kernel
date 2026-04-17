@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_step.cpp — Production-grade STEP I/O with XDE metadata.
 //
 // Import: file path or memory buffer -> XCAF document -> shapes + colors/names/layers
@@ -18,6 +20,9 @@
 #include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
 #include "naming/element_map.h"
+
+#include <filesystem>
+#include <system_error>
 
 // XCAF document framework
 #include <XCAFApp_Application.hxx>
@@ -66,7 +71,7 @@ std::string uniqueTempPath(const std::string& prefix, const std::string& ext) {
 }
 
 // Initialize element map for an imported shape (no history — fresh names).
-ElementMapPtr initImportedElementMap(const TopoDS_Shape& shape) {
+ElementMapPtr initImportedElementMap(KernelContext& ctx, const TopoDS_Shape& shape) {
     auto map = std::make_shared<ElementMap>();
 
     auto mapType = [&](TopAbs_ShapeEnum type, const char* typeName) {
@@ -74,7 +79,9 @@ ElementMapPtr initImportedElementMap(const TopoDS_Shape& shape) {
         TopExp::MapShapes(shape, type, subShapes);
         for (int i = 1; i <= subShapes.Extent(); ++i) {
             IndexedName idx(typeName, i);
-            MappedName name(std::string(typeName) + std::to_string(i) + ";:Nimport");
+            MappedName base(std::string(typeName) + std::to_string(i));
+            MappedName name = ElementMap::encodeElementName(
+                typeName, base, ctx.tags().nextShapeIdentity(), ";:Nimport");
             map->setElementName(idx, name);
         }
     };
@@ -294,6 +301,20 @@ OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* 
         return scope.makeFailure<StepImportResult>();
     }
 
+    // Quota: refuse oversized STEP buffers BEFORE writing to a temp
+    // file. OCCT's STEP reader is unbounded internally, so an
+    // unchecked multi-GB upload could DoS the worker.
+    {
+        const uint64_t maxStep = ctx.quotas().maxStepBytes;
+        if (maxStep > 0 && static_cast<uint64_t>(len) > maxStep) {
+            ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                std::string("STEP buffer is ") + std::to_string(len)
+                + " bytes — exceeds context quota maxStepBytes="
+                + std::to_string(maxStep) + ".");
+            return scope.makeFailure<StepImportResult>();
+        }
+    }
+
     // OCCT's STEP readers require a file path.
     // Write to a temp file, import, then clean up.
     TempFile tmp("oreo_import", ".step");
@@ -318,6 +339,27 @@ OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::
     if (path.empty()) {
         ctx.diag().error(ErrorCode::INVALID_INPUT, "Empty STEP file path");
         return scope.makeFailure<StepImportResult>();
+    }
+
+    if (ctx.checkCancellation()) return scope.makeFailure<StepImportResult>();
+
+    // Quota: file-path import goes through stat() to size-check the
+    // file before handing it to the OCCT STEP reader. A symlink that
+    // resolves to /dev/zero or a 50 GB STEP file would otherwise
+    // happily blow through the worker's memory budget.
+    {
+        const uint64_t maxStep = ctx.quotas().maxStepBytes;
+        if (maxStep > 0) {
+            std::error_code ec;
+            auto sz = std::filesystem::file_size(path, ec);
+            if (!ec && static_cast<uint64_t>(sz) > maxStep) {
+                ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                    std::string("STEP file '") + path + "' is "
+                    + std::to_string(sz) + " bytes — exceeds context quota maxStepBytes="
+                    + std::to_string(maxStep) + ".");
+                return scope.makeFailure<StepImportResult>();
+            }
+        }
     }
 
     // Scoped guard for OCCT global settings during import
@@ -359,7 +401,7 @@ OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::
     }
 
     auto tag = ctx.tags().nextShapeIdentity();
-    auto map = initImportedElementMap(shape);
+    auto map = initImportedElementMap(ctx, shape);
     result.shape = NamedShape(shape, map, tag);
     result.metadata = meta;
     return scope.makeResult(std::move(result));

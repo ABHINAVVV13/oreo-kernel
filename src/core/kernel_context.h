@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // kernel_context.h — The central authority for all kernel operations.
 //
 // KernelContext replaces ALL global state in oreo-kernel:

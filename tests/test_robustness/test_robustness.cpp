@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_robustness.cpp — Crash/malformed input tests.
 // Verify no segfaults, only structured errors.
 

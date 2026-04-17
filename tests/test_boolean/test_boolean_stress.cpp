@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_boolean_stress.cpp — Boolean operation stress tests.
 // Known-difficult geometries: near-coincident faces, thin walls, tangent intersections.
 

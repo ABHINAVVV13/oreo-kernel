@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_sketch.h — Sketch solver API wrapping PlaneGCS.
 // Converts between oreo-kernel types and PlaneGCS types.
 //
@@ -67,11 +69,43 @@ enum class ConstraintType {
 
 struct SketchConstraint {
     ConstraintType type;
-    int entity1;       // Index into entities array
-    int entity2;       // Index into entities array (or -1)
-    int entity3;       // Index into entities array (or -1, for symmetric)
+    int entity1;       // Stable entity ID (slot-based, never reused)
+    int entity2;       // Stable entity ID (or -1 if unused)
+    int entity3;       // Stable entity ID (or -1 if unused)
     double value;      // Dimension value (for distance, angle, radius)
 };
+
+// ── Constraint schema ────────────────────────────────────────
+//
+// A single source of truth for "which entity family does each
+// constraint slot reference, and is `value` required/positive?".
+// Used by:
+//   * solveSketch's pre-dispatch validator (rejects mismatched indices
+//     with a structured diagnostic instead of silently dropping).
+//   * the OreoSketch C-API slot layer, which needs to translate public
+//     stable IDs into compact live indices per entity family.
+enum class ConstraintEntityFamily {
+    None,
+    Point,
+    Line,
+    Circle,
+    Arc,
+    AnyCurve,    // Line | Circle | Arc (Tangent constraint)
+    CircleOrArc, // Circle | Arc (Radius / Diameter)
+};
+
+struct ConstraintSchemaEntry {
+    ConstraintEntityFamily e1;
+    ConstraintEntityFamily e2;
+    ConstraintEntityFamily e3;
+    bool valueUsed;
+    bool valueMustBePositive;
+};
+
+// Look up the schema for a constraint type. Unknown types map to
+// {None, None, None, false, false} so callers can treat the result
+// as a permissive default for forward-compat.
+ConstraintSchemaEntry constraintSchemaFor(ConstraintType type);
 
 // ── Solve result ─────────────────────────────────────────────
 

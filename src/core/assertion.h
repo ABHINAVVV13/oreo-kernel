@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // assertion.h — CC-14: debug assertion framework for oreo-kernel.
 //
 // Provides OREO_ASSERT (debug-only) and OREO_VERIFY (always-on) macros that

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // mapped_name.h — Encoded element name with operation history.
 // Inspired by FreeCAD 1.0's MappedName (LGPL-2.1+), clean reimplementation.
 //

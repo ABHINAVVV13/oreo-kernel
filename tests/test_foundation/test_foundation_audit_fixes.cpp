@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_audit_fixes.cpp — Regression tests for the 5 issues
 // raised by an external contributor review after the initial foundation
 // audit merge. Each TEST corresponds to one fix.

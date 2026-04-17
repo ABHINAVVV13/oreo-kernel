@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // logging_sink.h — Pluggable diagnostic sink interface.
 //
 // A DiagnosticCollector can forward each reported Diagnostic to one or more

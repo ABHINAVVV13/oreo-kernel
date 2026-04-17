@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_mesh_export.cpp — GLB (binary glTF 2.0) writer.
 //
 // Layout of the output file:
@@ -110,6 +112,52 @@ OperationResult<std::vector<uint8_t>> exportGLB(
         ctx.diag().error(ErrorCode::SHAPE_INVALID,
             "Mesh indices are not aligned to 3 indices per triangle");
         return scope.makeFailure<std::vector<uint8_t>>();
+    }
+
+    // ── Quota / overflow guard (pre-emit) ─────────────────────────
+    //
+    // glTF stores buffer/bufferView/accessor offsets and lengths as
+    // uint32 (spec §3.6, §5.1). Once the BIN chunk would exceed
+    // UINT32_MAX bytes the static_cast<uint32_t> at emit time silently
+    // truncates and produces a corrupt GLB. We compute the worst-case
+    // BIN chunk size here and refuse before allocating any buffer.
+    {
+        // Each geometry array contributes its raw byte count + up to 3
+        // padding bytes; we use a conservative constant 16 B of slack
+        // per region (positions, normals, indices, edges) for chunk
+        // headers / pad bytes / nlohmann::json buffer-length entry.
+        const uint64_t binBytes =
+              static_cast<uint64_t>(mesh.positions.size()) * sizeof(float)
+            + static_cast<uint64_t>(mesh.normals.size())   * sizeof(float)
+            + static_cast<uint64_t>(mesh.indices.size())   * sizeof(uint32_t)
+            + 64; // slack for pad bytes between regions
+
+        // Edge segments live in the same BIN chunk.
+        uint64_t edgeBytes = 0;
+        for (const auto& seg : mesh.edges) edgeBytes += seg.vertices.size() * sizeof(float);
+        const uint64_t totalBin = binBytes + edgeBytes;
+
+        // Hard cap: glTF spec uses uint32 byteOffset/byteLength fields.
+        // Always enforced regardless of quotas, because crossing this
+        // would silently truncate at the static_cast site below.
+        constexpr uint64_t kGltfHardLimit = static_cast<uint64_t>(UINT32_MAX) - 1024;
+        if (totalBin > kGltfHardLimit) {
+            ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                std::string("GLB BIN chunk would be ") + std::to_string(totalBin)
+                + " bytes — exceeds the glTF 2.0 uint32 byteLength ceiling ("
+                + std::to_string(kGltfHardLimit) + " bytes). Reduce mesh density.");
+            return scope.makeFailure<std::vector<uint8_t>>();
+        }
+
+        // Soft cap: per-context quota. 0 = unlimited.
+        const uint64_t maxGlb = ctx.quotas().maxGlbBytes;
+        if (maxGlb > 0 && totalBin > maxGlb) {
+            ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                std::string("GLB BIN chunk would be ") + std::to_string(totalBin)
+                + " bytes — exceeds context quota maxGlbBytes="
+                + std::to_string(maxGlb) + ".");
+            return scope.makeFailure<std::vector<uint8_t>>();
+        }
     }
 
     // ── BIN chunk — pack raw geometry ────────────────────────────

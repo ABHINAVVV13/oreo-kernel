@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // memory_pool.h — MISSING-1: header-only bump arena.
 //
 // Arena is a simple growing-block bump allocator intended for short-lived,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // occt_try.h — Exception-boundary macros for C++ geometry functions.
 //
 // Every C++ function that calls OCCT APIs and returns OperationResult<T>

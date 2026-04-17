@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // schema.h — Versioned schemas for all persisted kernel objects.
 //
 // Every serializable type in oreo-kernel has a schema version.
@@ -25,14 +27,21 @@
 #include <unordered_map>
 #include <vector>
 
-// SCH-9: Allow CMake to override the kernel version via a
-// target_compile_definitions(-D OREO_KERNEL_VERSION_STRING="...") macro.
-// TODO(integration): wire this macro in CMakeLists.txt via
-//     target_compile_definitions(oreo-kernel PUBLIC
-//         OREO_KERNEL_VERSION_STRING="${PROJECT_VERSION}")
-// so the literal stays in sync with the project version automatically.
+// SCH-9: kernel version is injected from CMake via two compile defs:
+//   OREO_KERNEL_VERSION_STRING     — SemVer numeric ("0.9.0"). What goes
+//                                    into serialized document headers
+//                                    (parser-friendly).
+//   OREO_KERNEL_VERSION_FULL_STRING — SemVer with optional pre-release
+//                                    suffix ("0.9.0-rc1"). What
+//                                    schema::KERNEL_VERSION_FULL returns
+//                                    for human-facing display.
+// Both are wired in CMakeLists.txt; the fallbacks below let the file
+// compile in tools/IDE indexers that don't run cmake configure.
 #ifndef OREO_KERNEL_VERSION_STRING
-#define OREO_KERNEL_VERSION_STRING "0.2.0"
+#define OREO_KERNEL_VERSION_STRING "0.9.0"
+#endif
+#ifndef OREO_KERNEL_VERSION_FULL_STRING
+#define OREO_KERNEL_VERSION_FULL_STRING "0.9.0-rc1"
 #endif
 
 namespace oreo {
@@ -87,8 +96,13 @@ struct OREO_IMMUTABLE SchemaVersion {
 // ─── Current schema versions for each type ───────────────────
 
 namespace schema {
-    // Kernel version (SCH-9: compile-time overridable via OREO_KERNEL_VERSION_STRING).
+    // Kernel version, SemVer numeric ("0.9.0"). Stamped into serialized
+    // document headers; must remain X.Y.Z so SchemaVersion::parse works.
     constexpr const char* KERNEL_VERSION = OREO_KERNEL_VERSION_STRING;
+
+    // Kernel version with optional pre-release suffix ("0.9.0-rc1").
+    // Returned by oreo_kernel_version() for human-facing displays.
+    constexpr const char* KERNEL_VERSION_FULL = OREO_KERNEL_VERSION_FULL_STRING;
 
     // Serializable types
     constexpr SchemaVersion FEATURE_TREE   = {1, 0, 0};

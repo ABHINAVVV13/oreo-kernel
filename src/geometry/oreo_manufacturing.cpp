@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_manufacturing.cpp — Manufacturing operations: draft, hole, rib, pocket.
 
 #include "oreo_geometry.h"

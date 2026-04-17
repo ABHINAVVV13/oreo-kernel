@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // rng.h — MISSING-11: deterministic, seedable PRNG.
 //
 // DeterministicRNG is an xoshiro256** generator seeded via splitmix64 from

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // units.h — Explicit unit system for oreo-kernel.
 //
 // All dimensions in the kernel have explicit units. The UnitSystem

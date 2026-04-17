@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // shape_identity.h — First-class identity value for the v2 model.
 //
 // See docs/identity-model.md for the full design (§2). In short:

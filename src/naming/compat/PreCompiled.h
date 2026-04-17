@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // PreCompiled.h stub — replaces FreeCAD's PreCompiled.h.
 // Empty — FreeCAD uses this for precompiled header support.
 #ifndef OREO_PRECOMPILED_STUB_H

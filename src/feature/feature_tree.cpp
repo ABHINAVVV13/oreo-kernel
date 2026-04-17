@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // feature_tree.cpp — Parametric feature tree replay engine.
 //
 // The replay algorithm:
@@ -17,6 +19,7 @@
 #include "naming/element_map.h"
 
 #include <TopExp.hxx>
+#include <Standard_Failure.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
 
@@ -47,6 +50,7 @@ bool FeatureTree::removeFeature(const std::string& featureId) {
     features_.erase(features_.begin() + idx);
     cache_.erase(featureId);
     dirty_.erase(featureId);
+    allocatorSnapshotsBefore_.erase(featureId);
     markDirtyFrom(idx);
     return true;
 }
@@ -67,6 +71,56 @@ void FeatureTree::suppressFeature(const std::string& featureId, bool suppress) {
     markDirtyFrom(idx);
 }
 
+bool FeatureTree::moveFeature(const std::string& featureId, int newIndex) {
+    int oldIdx = findIndex(featureId);
+    if (oldIdx < 0) return false;
+    const int n = static_cast<int>(features_.size());
+    if (newIndex < 0)  newIndex = 0;
+    if (newIndex >= n) newIndex = n - 1;
+    if (newIndex == oldIdx) return true;
+
+    Feature moved = std::move(features_[oldIdx]);
+    features_.erase(features_.begin() + oldIdx);
+    features_.insert(features_.begin() + newIndex, std::move(moved));
+
+    // Everything from min(old, new) onward might depend on the new
+    // ordering — mark dirty so replay rebuilds them.
+    markDirtyFrom(std::min(oldIdx, newIndex));
+    return true;
+}
+
+int FeatureTree::replaceReference(const std::string& oldFeatureId,
+                                  const std::string& newFeatureId) {
+    if (oldFeatureId.empty() || newFeatureId.empty()) return 0;
+    int rewrites = 0;
+    int firstChanged = static_cast<int>(features_.size());
+    for (int i = 0; i < static_cast<int>(features_.size()); ++i) {
+        bool changedThis = false;
+        for (auto& kv : features_[i].params) {
+            if (auto* r = std::get_if<ElementRef>(&kv.second)) {
+                if (r->featureId == oldFeatureId) {
+                    r->featureId = newFeatureId;
+                    ++rewrites;
+                    changedThis = true;
+                }
+            } else if (auto* lst = std::get_if<std::vector<ElementRef>>(&kv.second)) {
+                for (auto& er : *lst) {
+                    if (er.featureId == oldFeatureId) {
+                        er.featureId = newFeatureId;
+                        ++rewrites;
+                        changedThis = true;
+                    }
+                }
+            }
+        }
+        if (changedThis && i < firstChanged) firstChanged = i;
+    }
+    if (rewrites > 0 && firstChanged < static_cast<int>(features_.size())) {
+        markDirtyFrom(firstChanged);
+    }
+    return rewrites;
+}
+
 const Feature* FeatureTree::getFeature(const std::string& id) const {
     int idx = findIndex(id);
     if (idx < 0) return nullptr;
@@ -81,6 +135,7 @@ NamedShape FeatureTree::replay() {
         dirty_[f.id] = true;
     }
     cache_.clear();
+    allocatorSnapshotsBefore_.clear();
     // Reset tags for deterministic replay within the same document. Use
     // resetCounterOnly() so the documentId (and therefore the encoded tag
     // prefixes) is preserved across replay — a full reset() would zero the
@@ -97,9 +152,6 @@ NamedShape FeatureTree::replayFrom(const std::string& dirtyFromId) {
         if (startIdx < 0) startIdx = 0;
     }
 
-    // Mark everything from startIdx onward as dirty
-    markDirtyFrom(startIdx);
-
     NamedShape currentShape;
 
     // Use cached shape from just before the dirty start
@@ -115,6 +167,26 @@ NamedShape FeatureTree::replayFrom(const std::string& dirtyFromId) {
         }
     }
 
+    if (startIdx == 0) {
+        ctx_->tags().resetCounterOnly();
+    } else {
+        auto snapIt = allocatorSnapshotsBefore_.find(features_[startIdx].id);
+        if (snapIt != allocatorSnapshotsBefore_.end()) {
+            ctx_->tags().restoreV2(snapIt->second, /*force=*/true);
+        } else {
+            // No trustworthy allocator boundary exists; fall back to a
+            // full replay to preserve deterministic identities.
+            startIdx = 0;
+            currentShape = {};
+            cache_.clear();
+            allocatorSnapshotsBefore_.clear();
+            ctx_->tags().resetCounterOnly();
+        }
+    }
+
+    // Mark everything from startIdx onward as dirty
+    markDirtyFrom(startIdx);
+
     // Create the reference resolver lambda
     auto resolver = [this](const ElementRef& ref) -> ResolvedRef {
         return resolveReference(ref);
@@ -123,6 +195,7 @@ NamedShape FeatureTree::replayFrom(const std::string& dirtyFromId) {
     // Replay each feature from startIdx onward
     for (int i = startIdx; i < static_cast<int>(features_.size()); ++i) {
         auto& feature = features_[i];
+        allocatorSnapshotsBefore_[feature.id] = ctx_->tags().snapshotV2();
 
         if (feature.suppressed) {
             feature.status = FeatureStatus::Suppressed;
@@ -161,6 +234,20 @@ NamedShape FeatureTree::replayFrom(const std::string& dirtyFromId) {
     }
 
     return currentShape;
+}
+
+void FeatureTree::setRollbackIndex(int index) {
+    if (index < -1) index = -1;
+    const int last = static_cast<int>(features_.size()) - 1;
+    if (index > last) index = last;
+    rollbackIndex_ = index;
+}
+
+NamedShape FeatureTree::replayToRollback() {
+    NamedShape result = replay();
+    if (rollbackIndex_ < 0 || features_.empty()) return result;
+    if (rollbackIndex_ >= static_cast<int>(features_.size())) return result;
+    return getShapeAt(features_[rollbackIndex_].id);
 }
 
 // ── Shape access ─────────────────────────────────────────────
@@ -392,6 +479,7 @@ std::string FeatureTree::toJSON() const {
     }
 
     doc["features"] = arr;
+    doc["rollbackIndex"] = rollbackIndex_;
 
     // Schema headers
     doc["_schema"] = schema::TYPE_FEATURE_TREE;
@@ -409,29 +497,94 @@ std::string FeatureTree::toJSON() const {
     return doc.dump();
 }
 
-FeatureTree FeatureTree::fromJSON(const std::string& json) {
-    FeatureTree tree;
+FeatureTreeFromJsonResult FeatureTree::fromJSON(const std::string& json) {
+    FeatureTreeFromJsonResult out;
     try {
         auto doc = nlohmann::json::parse(json);
-        if (!doc.contains("features") || !doc["features"].is_array()) return tree;
+        if (!doc.is_object()) {
+            out.error = "FeatureTree JSON root must be an object";
+            return out;
+        }
+        if (!doc.contains("features") || !doc["features"].is_array()) {
+            out.error = "FeatureTree JSON missing required 'features' array";
+            return out;
+        }
+        out.tree.setRollbackIndex(doc.value("rollbackIndex", -1));
 
         for (auto& jf : doc["features"]) {
+            if (!jf.is_object()) {
+                out.error = "Each entry in 'features' must be an object";
+                out.tree = FeatureTree{};
+                return out;
+            }
             Feature f;
             f.id         = jf.value("id", "");
             f.type       = jf.value("type", "");
             f.suppressed = jf.value("suppressed", false);
 
+            if (f.id.empty()) {
+                out.error = "Feature is missing required 'id' field";
+                out.tree = FeatureTree{};
+                return out;
+            }
+            if (f.type.empty()) {
+                out.error = "Feature '" + f.id + "' is missing required 'type' field";
+                out.tree = FeatureTree{};
+                return out;
+            }
+
             if (jf.contains("params") && jf["params"].is_object()) {
                 for (auto& [key, val] : jf["params"].items()) {
                     f.params[key] = jsonToParam(val);
                 }
+            } else if (jf.contains("params") && !jf["params"].is_null()) {
+                out.error = "Feature '" + f.id + "': 'params' must be an object";
+                out.tree = FeatureTree{};
+                return out;
             }
-            tree.addFeature(f);
+            out.tree.addFeature(f);
         }
-    } catch (const nlohmann::json::exception&) {
-        // Invalid JSON — return empty tree
+        out.ok = true;
+        return out;
+    } catch (const nlohmann::json::exception& e) {
+        out.tree  = FeatureTree{};
+        out.error = std::string("JSON parse failure: ") + e.what();
+        return out;
+    } catch (const Standard_Failure& e) {
+        out.tree  = FeatureTree{};
+        out.error = std::string("OCCT exception during fromJSON: ") + e.GetMessageString();
+        return out;
+    } catch (const std::exception& e) {
+        out.tree  = FeatureTree{};
+        out.error = std::string("Exception during fromJSON: ") + e.what();
+        return out;
+    } catch (...) {
+        out.tree  = FeatureTree{};
+        out.error = "Unknown exception during fromJSON";
+        return out;
     }
-    return tree;
+}
+
+FeatureTreeFromJsonResult FeatureTree::fromJSON(KernelContext& ctx,
+                                                  const std::string& json) {
+    auto out = fromJSON(json);
+    // Quota check on feature count.
+    const std::uint64_t maxF = ctx.quotas().maxFeatures;
+    if (out.ok && maxF > 0
+        && static_cast<std::uint64_t>(out.tree.featureCount()) > maxF) {
+        ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+            std::string("FeatureTree has ") + std::to_string(out.tree.featureCount())
+            + " features — exceeds context quota maxFeatures="
+            + std::to_string(maxF));
+        out.ok    = false;
+        out.error = "Exceeds quota maxFeatures";
+        out.tree  = FeatureTree{};
+    }
+    if (!out.ok) {
+        ctx.diag().error(ErrorCode::DESERIALIZE_FAILED,
+            std::string("FeatureTree::fromJSON failed: ") + out.error);
+    }
+    return out;
 }
 
 // ── Private helpers ──────────────────────────────────────────

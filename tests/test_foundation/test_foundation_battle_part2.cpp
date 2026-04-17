@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_battle_part2.cpp — Sections C, D, E of foundation battle tests.
 // These will be merged into test_foundation_battle.cpp.
 //

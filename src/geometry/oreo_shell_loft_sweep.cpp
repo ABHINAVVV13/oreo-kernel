@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_shell_loft_sweep.cpp — Shell, loft, and sweep operations with OperationResult + DiagnosticScope.
 
 #include "oreo_geometry.h"
@@ -35,6 +37,7 @@ GeomResult shell(KernelContext& ctx,
         ctx.diag().error(ErrorCode::INVALID_INPUT, "Shell thickness is zero");
         return scope.makeFailure<NamedShape>();
     }
+    if (ctx.checkCancellation()) return scope.makeFailure<NamedShape>();
 
     OREO_OCCT_TRY
     // Unit conversion: thickness is a length
@@ -83,6 +86,7 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
     DiagnosticScope scope(ctx);
 
     if (!validation::requireMinInt(ctx, static_cast<int>(profiles.size()), 2, "profiles.size")) return scope.makeFailure<NamedShape>();
+    if (ctx.checkCancellation()) return scope.makeFailure<NamedShape>();
 
     OREO_OCCT_TRY
     BRepOffsetAPI_ThruSections maker(makeSolid ? Standard_True : Standard_False);
@@ -137,6 +141,7 @@ GeomResult sweep(KernelContext& ctx, const NamedShape& profile, const NamedShape
     if (!validation::requireNonNull(ctx, profile, "profile")) return scope.makeFailure<NamedShape>();
     if (!validation::requireNonNull(ctx, path, "path")) return scope.makeFailure<NamedShape>();
     if (!validation::requireShapeType(ctx, path.shape(), TopAbs_WIRE, "path")) return scope.makeFailure<NamedShape>();
+    if (ctx.checkCancellation()) return scope.makeFailure<NamedShape>();
 
     OREO_OCCT_TRY
     BRepOffsetAPI_MakePipe maker(TopoDS::Wire(path.shape()), profile.shape());

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // named_shape.cpp — NamedShape implementation.
 
 #include "named_shape.h"

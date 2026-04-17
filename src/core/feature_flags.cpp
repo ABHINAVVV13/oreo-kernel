@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // feature_flags.cpp — implementation of FeatureFlags (see feature_flags.h).
 
 #include "feature_flags.h"

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // shape_identity_v1.h — The ONLY sanctioned v1 ↔ v2 identity bridge.
 //
 // See docs/identity-model.md §§3.1–3.3. In short:

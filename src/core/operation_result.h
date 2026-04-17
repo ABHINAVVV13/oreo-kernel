@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // operation_result.h — Typed result object for kernel operations.
 //
 // Every kernel operation returns OperationResult<T> instead of a naked T.

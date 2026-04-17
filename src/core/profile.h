@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // profile.h — CC-7: RAII duration sampler paired with Metrics.
 //
 // Drop an OREO_PROFILE(ctx.metrics(), "op.name") at the top of any

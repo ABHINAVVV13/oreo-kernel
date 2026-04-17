@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_foundation_obs.cpp — Comprehensive tests for observability and
 // config-loading modules:
 //

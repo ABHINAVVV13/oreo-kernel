@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // progress.h — Progress reporting callback for long-running kernel operations.
 //
 // ProgressCallback lets the kernel report progress during operations that

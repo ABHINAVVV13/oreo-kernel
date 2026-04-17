@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // feature.h — Feature definition and parameter types for parametric CAD.
 //
 // A Feature represents a single modeling operation in a feature tree.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // topo_shape_adapter.h — Adapter that provides FreeCAD's TopoShape element-mapping
 // interface on top of oreo-kernel's NamedShape + extracted Data::ElementMap.
 //
@@ -70,8 +72,9 @@ public:
 
     explicit TopoShapeAdapter(const NamedShape& ns)
         : shape_(ns.shape())
-        , Tag(ns.tag())
-        , documentId_(0)
+        , Tag(0)
+        , documentId_(ns.shapeId().documentId)
+        , identity_(ns.shapeId())
         , elementMap_(std::make_shared<Data::ElementMap>())
     {}
 
@@ -95,6 +98,14 @@ public:
 
     // Create adapters from a vector of NamedShapes
     static std::vector<TopoShapeAdapter> fromNamedShapes(const std::vector<NamedShape>& shapes);
+
+    // Bind the FreeCAD extraction's small internal tag to oreo's full v2
+    // identity. The tag is process-local to one mapping run; it is not
+    // serialized or exposed.
+    void setMappingIdentity(std::int64_t syntheticTag, ShapeIdentity id);
+
+    // Carry input tag bindings into the result adapter before buildElementMap().
+    void inheritMappingIdentitiesFrom(const std::vector<TopoShapeAdapter>& inputs);
 
     // Access the shape
     const TopoDS_Shape& getShape() const { return shape_; }
@@ -125,6 +136,8 @@ private:
     TopoDS_Shape shape_;
     // Full 64-bit documentId used to stamp ;:Q postfix during naming.
     std::uint64_t documentId_;
+    ShapeIdentity identity_;
+    std::map<std::int64_t, ShapeIdentity> tagIdentities_;
     Data::ElementMapPtr elementMap_;
 
     // Ancestry caches

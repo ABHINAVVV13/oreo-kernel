@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_step.h — STEP import/export with XDE metadata (colors, names, layers).
 //
 // Uses STEPCAFControl_Reader/Writer + XCAF document model to preserve

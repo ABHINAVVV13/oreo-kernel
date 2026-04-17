@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_mesh.cpp — Production-grade tessellation using FreeCAD's extraction patterns.
 //
 // Core extraction functions adapted from FreeCAD 1.0's Part::Tools (LGPL-2.1+):
@@ -636,6 +638,7 @@ OperationResult<MeshResult> tessellate(KernelContext& ctx,
             "Relative deflection fraction must be positive");
         return scope.makeFailure<MeshResult>();
     }
+    if (ctx.checkCancellation()) return scope.makeFailure<MeshResult>();
 
     const double effectiveLinear = resolveLinearDeflection(shape, params);
 
@@ -667,6 +670,41 @@ OperationResult<MeshResult> tessellate(KernelContext& ctx,
     // ── Step 4: Extract edge wireframe ───────────────────────
     if (params.extractEdges) {
         extractEdges(shape, faceMap, result);
+    }
+
+    // ── Step 5: Quota enforcement ────────────────────────────
+    //
+    // Hard-fail on out-of-budget meshes BEFORE returning so callers
+    // never see partially-populated output. The quotas are advisory
+    // (0 = unlimited); the absolute UINT32_MAX index ceiling is always
+    // enforced because glTF / WebGL cannot address beyond it.
+    {
+        const uint64_t maxTri  = ctx.quotas().maxMeshTriangles;
+        const uint64_t maxVert = ctx.quotas().maxMeshVertices;
+        const uint64_t triCount = static_cast<uint64_t>(result.totalTriangles);
+        const uint64_t vertCount = static_cast<uint64_t>(result.totalVertices);
+
+        // Hard ceiling: glTF / WebGL indices are uint32.
+        if (vertCount > static_cast<uint64_t>(UINT32_MAX)) {
+            ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                std::string("Mesh has ") + std::to_string(vertCount)
+                + " vertices — exceeds the uint32 index ceiling.");
+            return scope.makeFailure<MeshResult>();
+        }
+        if (maxTri > 0 && triCount > maxTri) {
+            ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                std::string("Mesh triangle count ") + std::to_string(triCount)
+                + " exceeds context quota maxMeshTriangles="
+                + std::to_string(maxTri) + ". Loosen deflection or raise the quota.");
+            return scope.makeFailure<MeshResult>();
+        }
+        if (maxVert > 0 && vertCount > maxVert) {
+            ctx.diag().error(ErrorCode::RESOURCE_EXHAUSTED,
+                std::string("Mesh vertex count ") + std::to_string(vertCount)
+                + " exceeds context quota maxMeshVertices="
+                + std::to_string(maxVert) + ".");
+            return scope.makeFailure<MeshResult>();
+        }
     }
 
     // Report diagnostics summary (warnings only — not fatal)

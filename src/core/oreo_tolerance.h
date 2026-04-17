@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_tolerance.h — LEGACY REDIRECT. TolerancePolicy is now in kernel_context.h.
 #ifndef OREO_TOLERANCE_H
 #define OREO_TOLERANCE_H

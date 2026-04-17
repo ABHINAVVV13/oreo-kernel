@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // diagnostic_scope.h — Composable diagnostic scoping.
 //
 // Every kernel operation opens a DiagnosticScope. The scope captures

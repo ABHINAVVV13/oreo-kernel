@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_boolean.cpp — Production-grade boolean operations.
 //
 // Features:
@@ -98,6 +100,13 @@ GeomResult executeBooleanWithRetry(
     if (a.isNull() || b.isNull()) {
         ctx.diag().error(ErrorCode::INVALID_INPUT,
                        std::string("Cannot perform ") + opName + " with null shape");
+        return scope.makeFailure<NamedShape>();
+    }
+
+    // Cancellation poll before kicking off OCCT — booleans are the
+    // single most expensive op family in the kernel; aborting here
+    // can save tens of seconds on adversarial geometry.
+    if (ctx.checkCancellation()) {
         return scope.makeFailure<NamedShape>();
     }
 

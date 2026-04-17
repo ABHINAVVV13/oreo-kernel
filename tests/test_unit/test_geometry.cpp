@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_geometry.cpp — Unit tests for every geometry API function.
 
 #include <gtest/gtest.h>

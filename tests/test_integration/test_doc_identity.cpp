@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // test_doc_identity.cpp — End-to-end regression for Part 1 of the
 // document-identity plumbing audit.
 //

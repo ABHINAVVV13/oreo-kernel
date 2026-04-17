@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // resource_quotas.h — Per-context resource limits.
 //
 // ResourceQuotas lets callers bound the worst-case resource consumption of
@@ -39,6 +41,46 @@ struct ResourceQuotas {
     // that accept a cancellation token can also consult this budget
     // and self-abort.
     uint64_t cpuTimeBudgetMs = 0;
+
+    // ── Subsystem hard limits (enforced at the kernel boundary) ────
+    //
+    // Each of these is checked before the corresponding subsystem
+    // allocates a large buffer or accepts a large input. A value of 0
+    // means "no limit" — defaults below are sized for a 64 GB cloud
+    // worker handling commercial-CAD-size models. Override per request
+    // for stricter sandbox tenants.
+
+    // Maximum total triangles a tessellated mesh may contain. Above
+    // this, exportGLB / tessellate fail with RESOURCE_EXHAUSTED before
+    // allocating output buffers. Default 50M triangles ≈ 600 MB for
+    // POSITION+NORMAL+indices. 0 = unlimited.
+    uint64_t maxMeshTriangles = 50ULL * 1000 * 1000;
+
+    // Maximum total vertices a tessellated mesh may contain. glTF uses
+    // 32-bit indices so the absolute hard ceiling is 2^32-1; the
+    // default leaves headroom for face-group splits. 0 = unlimited.
+    uint64_t maxMeshVertices  = 100ULL * 1000 * 1000;
+
+    // Maximum size of an exported GLB byte buffer. Capped at slightly
+    // under UINT32_MAX so the spec-mandated uint32 byteOffset fields
+    // cannot silently truncate. 0 = unlimited (subject to the
+    // hard UINT32_MAX limit which is always enforced).
+    uint64_t maxGlbBytes      = 3ULL * 1024 * 1024 * 1024; // 3 GiB
+
+    // Maximum size of a STEP file accepted by importStep. Above this,
+    // the import fails with RESOURCE_EXHAUSTED before invoking OCCT's
+    // STEP reader (which is unbounded). 0 = unlimited.
+    uint64_t maxStepBytes     = 512ULL * 1024 * 1024;     // 512 MiB
+
+    // Maximum size of a buffer produced by serialize(). Computed before
+    // emit; 0 = unlimited. Bounded so a pathological feature tree
+    // cannot OOM the host.
+    uint64_t maxSerializeBytes = 1ULL * 1024 * 1024 * 1024; // 1 GiB
+
+    // Maximum number of features allowed in a single FeatureTree.
+    // addFeature / insertFeature / fromJSON refuse to grow beyond this.
+    // 0 = unlimited.
+    uint64_t maxFeatures      = 10000;
 };
 
 } // namespace oreo

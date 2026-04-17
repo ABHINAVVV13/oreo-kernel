@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // oreo_mirror_pattern.cpp — Production-grade mirror and pattern operations.
 //
 // Mirror uses BRepBuilderAPI_Transform with proper element mapping.

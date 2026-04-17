@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 // diagnostic_scope.cpp — DiagnosticScope implementation.
 
 #include "diagnostic_scope.h"
