@@ -2,8 +2,6 @@
 
 Standalone C++ CAD geometry kernel built on OpenCASCADE Technology (OCCT), with topological naming stability derived from FreeCAD's element-map implementation and constraint solving via PlaneGCS.
 
-**Current version:** 0.2.0 — context-aware API plus a hardened foundation layer. 19/19 test binaries green on MSVC Release; ~402 gtest cases across the foundation suites.
-
 ## What is this?
 
 oreo-kernel is the core geometry engine for oreoCAD. It is **not** a fork of FreeCAD — it is a greenfield C++ library that:
