@@ -26,7 +26,7 @@ oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace faceBuilder(wireBuilder.Wire());
-    return oreo::NamedShape(faceBuilder.Face(), ctx.tags.nextTag());
+    return oreo::NamedShape(faceBuilder.Face(), ctx.tags().nextTag());
 }
 
 } // anonymous namespace

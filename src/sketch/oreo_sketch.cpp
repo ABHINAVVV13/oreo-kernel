@@ -402,9 +402,12 @@ OperationResult<SolveResult> solveSketch(
     }
 
     // ── Declare unknown parameters ────────────────────────────
-    // PlaneGCS requires all unknowns declared before solving.
+    // PlaneGCS requires all unknowns declared before solving. We also keep a
+    // parallel snapshot of the pre-solve values so we can restore them if the
+    // solve fails or is conflicting — see "Fail-closed" section below.
+    GCS::VEC_pD params;
+    std::vector<double> preSolveSnapshot;
     {
-        GCS::VEC_pD params;
         for (auto& p : points) {
             params.push_back(&p.x);
             params.push_back(&p.y);
@@ -423,63 +426,96 @@ OperationResult<SolveResult> solveSketch(
             params.push_back(&a.end.x); params.push_back(&a.end.y);
             params.push_back(&a.radius);
         }
+        preSolveSnapshot.reserve(params.size());
+        for (double* p : params) preSolveSnapshot.push_back(*p);
+    }
+
+    // Helper: restore every parameter to its pre-solve value. Used on both
+    // explicit Failed/Conflicting exits AND on any thrown exception from
+    // PlaneGCS/Eigen (solve() / initSolution() can throw on NaN input or
+    // ill-conditioned systems).
+    auto restoreSnapshot = [&]() noexcept {
+        for (size_t i = 0; i < params.size() && i < preSolveSnapshot.size(); ++i) {
+            *params[i] = preSolveSnapshot[i];
+        }
+    };
+
+    try {
         system.declareUnknowns(params);
         system.initSolution();
+
+        // ── Solve ────────────────────────────────────────────────
+        // Try DogLeg first (fastest), then LevenbergMarquardt (more robust).
+        // Note: solve(bool isFine, Algorithm alg) — must pass isFine explicitly.
+        int solveStatus = system.solve(true, GCS::DogLeg);
+
+        if (solveStatus != GCS::Success && solveStatus != GCS::Converged) {
+            // Retry with Levenberg-Marquardt (more robust for ill-conditioned systems)
+            solveStatus = system.solve(true, GCS::LevenbergMarquardt);
+        }
+
+        if (solveStatus != GCS::Success && solveStatus != GCS::Converged) {
+            // Last resort: BFGS
+            solveStatus = system.solve(true, GCS::BFGS);
+        }
+
+        switch (solveStatus) {
+            case GCS::Success:
+            case GCS::Converged:
+                result.status = SolveStatus::OK;
+                break;
+            case GCS::Failed:
+                result.status = SolveStatus::Failed;
+                ctx.diag().error(ErrorCode::SKETCH_SOLVE_FAILED,
+                             "Constraint solver did not converge after 3 algorithm attempts",
+                             {}, "Check for conflicting constraints or try simplifying the sketch");
+                break;
+            default:
+                result.status = SolveStatus::Failed;
+                break;
+        }
+
+        // ── Diagnose ─────────────────────────────────────────────
+        // Must call diagnose() before getRedundant/getConflicting/dofsNumber
+        system.diagnose();
+        result.degreesOfFreedom = system.dofsNumber();
+
+        // Check for redundant constraints
+        system.getRedundant(result.redundantConstraints);
+        if (!result.redundantConstraints.empty() && result.status == SolveStatus::OK) {
+            result.status = SolveStatus::Redundant;
+        }
+
+        // Check for conflicting constraints
+        system.getConflicting(result.conflictingConstraints);
+        if (!result.conflictingConstraints.empty()) {
+            result.status = SolveStatus::Conflicting;
+            ctx.diag().error(ErrorCode::SKETCH_CONFLICTING,
+                         "Sketch has " + std::to_string(result.conflictingConstraints.size())
+                         + " conflicting constraint(s)");
+        }
+
+        // Fail-closed: commit solved values only when the solver produced a
+        // valid solution. On Failed or Conflicting, restore from the snapshot.
+        if (result.status == SolveStatus::OK || result.status == SolveStatus::Redundant) {
+            system.applySolution();
+        } else {
+            restoreSnapshot();
+        }
+    } catch (const std::exception& e) {
+        // PlaneGCS / Eigen can throw on NaN / ill-conditioned systems. Restore
+        // the snapshot so sketch state is unchanged, then report.
+        restoreSnapshot();
+        result.status = SolveStatus::Failed;
+        ctx.diag().error(ErrorCode::SKETCH_SOLVE_FAILED,
+                     std::string("Sketch solver threw an exception: ") + e.what(),
+                     {}, "Check for NaN inputs or extremely ill-conditioned geometry");
+    } catch (...) {
+        restoreSnapshot();
+        result.status = SolveStatus::Failed;
+        ctx.diag().error(ErrorCode::SKETCH_SOLVE_FAILED,
+                     "Sketch solver threw an unknown exception");
     }
-
-    // ── Solve ────────────────────────────────────────────────
-    // Try DogLeg first (fastest), then LevenbergMarquardt (more robust).
-    // Note: solve(bool isFine, Algorithm alg) — must pass isFine explicitly.
-    int solveStatus = system.solve(true, GCS::DogLeg);
-
-    if (solveStatus != GCS::Success && solveStatus != GCS::Converged) {
-        // Retry with Levenberg-Marquardt (more robust for ill-conditioned systems)
-        solveStatus = system.solve(true, GCS::LevenbergMarquardt);
-    }
-
-    if (solveStatus != GCS::Success && solveStatus != GCS::Converged) {
-        // Last resort: BFGS
-        solveStatus = system.solve(true, GCS::BFGS);
-    }
-
-    switch (solveStatus) {
-        case GCS::Success:
-        case GCS::Converged:
-            result.status = SolveStatus::OK;
-            break;
-        case GCS::Failed:
-            result.status = SolveStatus::Failed;
-            ctx.diag.error(ErrorCode::SKETCH_SOLVE_FAILED,
-                         "Constraint solver did not converge after 3 algorithm attempts",
-                         {}, "Check for conflicting constraints or try simplifying the sketch");
-            break;
-        default:
-            result.status = SolveStatus::Failed;
-            break;
-    }
-
-    // ── Diagnose ─────────────────────────────────────────────
-    // Must call diagnose() before getRedundant/getConflicting/dofsNumber
-    system.diagnose();
-    result.degreesOfFreedom = system.dofsNumber();
-
-    // Check for redundant constraints
-    system.getRedundant(result.redundantConstraints);
-    if (!result.redundantConstraints.empty() && result.status == SolveStatus::OK) {
-        result.status = SolveStatus::Redundant;
-    }
-
-    // Check for conflicting constraints
-    system.getConflicting(result.conflictingConstraints);
-    if (!result.conflictingConstraints.empty()) {
-        result.status = SolveStatus::Conflicting;
-        ctx.diag.error(ErrorCode::SKETCH_CONFLICTING,
-                     "Sketch has " + std::to_string(result.conflictingConstraints.size())
-                     + " conflicting constraint(s)");
-    }
-
-    // Apply solved values
-    system.applySolution();
 
     return scope.makeResult(std::move(result));
 }
@@ -493,7 +529,7 @@ OperationResult<NamedShape> sketchToWire(
     DiagnosticScope scope(ctx);
 
     if (lines.empty() && circles.empty() && arcs.empty()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "No sketch entities to convert to wire");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "No sketch entities to convert to wire");
         return scope.makeFailure<NamedShape>();
     }
 
@@ -554,7 +590,7 @@ OperationResult<NamedShape> sketchToWire(
     }
 
     if (!hasEdges) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE,
+        ctx.diag().error(ErrorCode::OCCT_FAILURE,
                      "No valid edges could be created from sketch entities");
         return scope.makeFailure<NamedShape>();
     }
@@ -566,13 +602,13 @@ OperationResult<NamedShape> sketchToWire(
 
     TopoDS_Wire wire = wireBuilder.Wire();
     if (wire.IsNull()) {
-        ctx.diag.error(ErrorCode::OCCT_FAILURE,
+        ctx.diag().error(ErrorCode::OCCT_FAILURE,
                      "Failed to build wire from sketch entities",
                      {}, "Edges may not connect. Check that sketch entities form a closed or connected path.");
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     return scope.makeResult(NamedShape(wire, tag));
 }
 

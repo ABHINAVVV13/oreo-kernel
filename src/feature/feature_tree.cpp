@@ -81,9 +81,12 @@ NamedShape FeatureTree::replay() {
         dirty_[f.id] = true;
     }
     cache_.clear();
-    // Reset tags for deterministic replay
-    ctx_->tags.reset();
-    ctx_->diag.clear();
+    // Reset tags for deterministic replay within the same document. Use
+    // resetCounterOnly() so the documentId (and therefore the encoded tag
+    // prefixes) is preserved across replay — a full reset() would zero the
+    // documentId and flip subsequent tags back to single-doc mode.
+    ctx_->tags().resetCounterOnly();
+    ctx_->diag().clear();
     return replayFrom(features_.empty() ? "" : features_[0].id);
 }
 

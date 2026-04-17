@@ -184,7 +184,7 @@ TEST(SketchSolver, EmptySketchToWire) {
 
     auto wireR = oreo::sketchToWire(*ctx, lines, circles, arcs);
     EXPECT_FALSE(wireR.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }
 
 // ── Degrees of Freedom ───────────────────────────────────────
@@ -687,4 +687,64 @@ TEST(SketchSolver, TangentArcArcConstraint) {
     ASSERT_TRUE(resultR.ok());
     auto result = resultR.value();
     EXPECT_EQ(result.status, oreo::SolveStatus::OK);
+}
+
+// ── Fail-closed: conflicting/failed solves must not mutate sketch state ──
+
+TEST(SketchSolver, ConflictingConstraintsDoNotMutateState) {
+    auto ctx = oreo::KernelContext::create();
+    // Two points fixed in place at distance 5, then a Distance=10 constraint
+    // between them. The system is over-determined and conflicting.
+    std::vector<oreo::SketchPoint> points = {{0.0, 0.0}, {5.0, 0.0}};
+    std::vector<oreo::SketchLine> lines;
+    std::vector<oreo::SketchCircle> circles;
+    std::vector<oreo::SketchArc> arcs;
+
+    std::vector<oreo::SketchConstraint> constraints = {
+        {oreo::ConstraintType::Fixed,    0, -1, -1, 0.0},
+        {oreo::ConstraintType::Fixed,    1, -1, -1, 0.0},
+        {oreo::ConstraintType::Distance, 0,  1, -1, 10.0},
+    };
+
+    const auto before = points;
+    auto resultR = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
+
+    // The scope records a SKETCH_CONFLICTING error, so resultR.ok() is false.
+    EXPECT_FALSE(resultR.ok());
+
+    // Fail-closed: positions must be exactly the pre-solve values.
+    EXPECT_EQ(points[0].x, before[0].x);
+    EXPECT_EQ(points[0].y, before[0].y);
+    EXPECT_EQ(points[1].x, before[1].x);
+    EXPECT_EQ(points[1].y, before[1].y);
+}
+
+TEST(SketchSolver, FailedSolveDoesNotMutateState) {
+    auto ctx = oreo::KernelContext::create();
+    // Three-point triangle with mutually-inconsistent distances — impossible
+    // under the triangle inequality.
+    std::vector<oreo::SketchPoint> points = {{0.0, 0.0}, {5.0, 0.0}, {2.5, 4.3}};
+    std::vector<oreo::SketchLine> lines;
+    std::vector<oreo::SketchCircle> circles;
+    std::vector<oreo::SketchArc> arcs;
+
+    std::vector<oreo::SketchConstraint> constraints = {
+        {oreo::ConstraintType::Fixed,    0, -1, -1, 0.0},
+        {oreo::ConstraintType::Distance, 0,  1, -1, 10.0},
+        {oreo::ConstraintType::Distance, 1,  2, -1, 1.0},
+        {oreo::ConstraintType::Distance, 0,  2, -1, 100.0},
+    };
+
+    const auto before = points;
+    auto resultR = oreo::solveSketch(*ctx, points, lines, circles, arcs, constraints);
+
+    if (!resultR.ok()) {
+        // On failure, positions must be unchanged.
+        EXPECT_EQ(points[0].x, before[0].x);
+        EXPECT_EQ(points[0].y, before[0].y);
+        EXPECT_EQ(points[1].x, before[1].x);
+        EXPECT_EQ(points[1].y, before[1].y);
+        EXPECT_EQ(points[2].x, before[2].x);
+        EXPECT_EQ(points[2].y, before[2].y);
+    }
 }

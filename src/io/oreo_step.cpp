@@ -290,7 +290,7 @@ OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* 
     DiagnosticScope scope(ctx);
 
     if (!data || len == 0) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Empty STEP data buffer");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Empty STEP data buffer");
         return scope.makeFailure<StepImportResult>();
     }
 
@@ -300,7 +300,7 @@ OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* 
     {
         std::ofstream ofs(tmp.path, std::ios::binary);
         if (!ofs) {
-            ctx.diag.error(ErrorCode::STEP_IMPORT_FAILED,
+            ctx.diag().error(ErrorCode::STEP_IMPORT_FAILED,
                          "Failed to create temp file for STEP import");
             return scope.makeFailure<StepImportResult>();
         }
@@ -316,7 +316,7 @@ OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::
     DiagnosticScope scope(ctx);
 
     if (path.empty()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Empty STEP file path");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Empty STEP file path");
         return scope.makeFailure<StepImportResult>();
     }
 
@@ -335,20 +335,20 @@ OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::
     if (!xcafOk) {
         bool basicOk = importBasicFallback(path, shape);
         if (!basicOk) {
-            ctx.diag.error(ErrorCode::STEP_IMPORT_FAILED,
+            ctx.diag().error(ErrorCode::STEP_IMPORT_FAILED,
                          "STEP import failed (both XCAF and basic readers): " + path,
                          {}, "Check file exists and is a valid STEP/AP214 file");
             return scope.makeFailure<StepImportResult>();
         }
         // Warn that metadata was lost
-        ctx.diag.warning(ErrorCode::SHAPE_INVALID,
+        ctx.diag().warning(ErrorCode::SHAPE_INVALID,
                      "STEP import fell back to basic reader — colors, names, and layers not imported",
                      "File geometry is intact but XDE metadata could not be extracted");
         meta = {};
     }
 
     if (shape.IsNull()) {
-        ctx.diag.error(ErrorCode::STEP_IMPORT_FAILED,
+        ctx.diag().error(ErrorCode::STEP_IMPORT_FAILED,
                      "STEP import produced null shape from: " + path);
         return scope.makeFailure<StepImportResult>();
     }
@@ -358,7 +358,7 @@ OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::
         fixShape(shape);
     }
 
-    auto tag = ctx.tags.nextTag();
+    auto tag = ctx.tags().nextTag();
     auto map = initImportedElementMap(shape);
     result.shape = NamedShape(shape, map, tag);
     result.metadata = meta;
@@ -390,7 +390,7 @@ OperationResult<std::vector<uint8_t>> exportStep(KernelContext& ctx, const std::
     DiagnosticScope scope(ctx);
 
     if (shapes.empty()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "No shapes to export");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "No shapes to export");
         return scope.makeFailure<std::vector<uint8_t>>();
     }
 
@@ -403,13 +403,13 @@ OperationResult<std::vector<uint8_t>> exportStep(KernelContext& ctx, const std::
     // Read the file back into memory
     std::ifstream ifs(tmp.path, std::ios::binary | std::ios::ate);
     if (!ifs) {
-        ctx.diag.error(ErrorCode::STEP_EXPORT_FAILED, "Failed to read back exported STEP file");
+        ctx.diag().error(ErrorCode::STEP_EXPORT_FAILED, "Failed to read back exported STEP file");
         return scope.makeFailure<std::vector<uint8_t>>();
     }
 
     auto fileSize = ifs.tellg();
     if (fileSize <= 0) {
-        ctx.diag.error(ErrorCode::STEP_EXPORT_FAILED, "Exported STEP file is empty");
+        ctx.diag().error(ErrorCode::STEP_EXPORT_FAILED, "Exported STEP file is empty");
         return scope.makeFailure<std::vector<uint8_t>>();
     }
 
@@ -427,11 +427,11 @@ OperationResult<bool> exportStepFile(KernelContext& ctx, const std::vector<Named
     DiagnosticScope scope(ctx);
 
     if (shapes.empty()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "No shapes to export");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "No shapes to export");
         return scope.makeFailure<bool>();
     }
     if (path.empty()) {
-        ctx.diag.error(ErrorCode::INVALID_INPUT, "Empty export file path");
+        ctx.diag().error(ErrorCode::INVALID_INPUT, "Empty export file path");
         return scope.makeFailure<bool>();
     }
 
@@ -449,7 +449,7 @@ OperationResult<bool> exportStepFile(KernelContext& ctx, const std::vector<Named
     // ── Attempt 2: Basic writer fallback ────────────────────────────
     bool basicOk = exportBasicFallback(shapes, path);
     if (!basicOk) {
-        ctx.diag.error(ErrorCode::STEP_EXPORT_FAILED,
+        ctx.diag().error(ErrorCode::STEP_EXPORT_FAILED,
                      "STEP export failed (both XCAF and basic writers): " + path,
                      {}, "Shape may be invalid — try running ShapeFix first. "
                          "Check write permissions for the target path.");
@@ -457,7 +457,7 @@ OperationResult<bool> exportStepFile(KernelContext& ctx, const std::vector<Named
     }
 
     // Warn that metadata was lost
-    ctx.diag.warning(ErrorCode::SHAPE_INVALID,
+    ctx.diag().warning(ErrorCode::SHAPE_INVALID,
                  "STEP export fell back to basic writer — colors, names, and layers not written",
                  "File geometry is intact but XDE metadata could not be serialized");
     return scope.makeResult(true);

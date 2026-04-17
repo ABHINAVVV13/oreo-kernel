@@ -15,7 +15,7 @@ namespace {
 
 oreo::NamedShape makeBoxLocal(oreo::KernelContext& ctx, double x, double y, double z) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, ctx.tags.nextTag());
+    return oreo::NamedShape(box, ctx.tags().nextTag());
 }
 
 } // anonymous namespace
@@ -73,5 +73,5 @@ TEST(StepIO, ImportInvalidData) {
     uint8_t garbage[] = {0, 1, 2, 3, 4};
     auto importResult = oreo::importStep(*ctx, garbage, sizeof(garbage));
     EXPECT_FALSE(importResult.ok());
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 }

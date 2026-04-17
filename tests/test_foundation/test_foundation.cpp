@@ -263,27 +263,27 @@ TEST(Validation, RequireNonNull) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
     EXPECT_FALSE(oreo::validation::requireNonNull(*ctx, null, "shape"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 
-    ctx->diag.clear();
+    ctx->diag().clear();
     TopoDS_Shape box = BRepPrimAPI_MakeBox(10, 10, 10).Shape();
     oreo::NamedShape valid(box, 1);
     EXPECT_TRUE(oreo::validation::requireNonNull(*ctx, valid, "shape"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 TEST(Validation, RequirePositive) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, -5.0, "radius"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 
-    ctx->diag.clear();
+    ctx->diag().clear();
     EXPECT_FALSE(oreo::validation::requirePositive(*ctx, 0.0, "radius"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 
-    ctx->diag.clear();
+    ctx->diag().clear();
     EXPECT_TRUE(oreo::validation::requirePositive(*ctx, 5.0, "radius"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 TEST(Validation, RequireInRange) {
@@ -295,11 +295,11 @@ TEST(Validation, RequireInRange) {
 TEST(Validation, RequireNonZeroVec) {
     auto ctx = oreo::KernelContext::create();
     EXPECT_FALSE(oreo::validation::requireNonZeroVec(*ctx, gp_Vec(0, 0, 0), "direction"));
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    EXPECT_TRUE(ctx->diag().hasErrors());
 
-    ctx->diag.clear();
+    ctx->diag().clear();
     EXPECT_TRUE(oreo::validation::requireNonZeroVec(*ctx, gp_Vec(1, 0, 0), "direction"));
-    EXPECT_FALSE(ctx->diag.hasErrors());
+    EXPECT_FALSE(ctx->diag().hasErrors());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -310,8 +310,8 @@ TEST(KernelContext, CreateWithDefaults) {
     auto ctx = oreo::KernelContext::create();
     ASSERT_NE(ctx, nullptr);
     EXPECT_FALSE(ctx->id().empty());
-    EXPECT_TRUE(ctx->tags.empty());
-    EXPECT_TRUE(ctx->diag.empty());
+    EXPECT_TRUE(ctx->tags().empty());
+    EXPECT_TRUE(ctx->diag().empty());
 }
 
 TEST(KernelContext, CreateWithConfig) {
@@ -323,30 +323,30 @@ TEST(KernelContext, CreateWithConfig) {
     auto ctx = oreo::KernelContext::create(config);
     EXPECT_NEAR(ctx->tolerance().linearPrecision, 1e-6, 1e-12);
     EXPECT_EQ(ctx->units().documentLength, oreo::LengthUnit::Inch);
-    EXPECT_EQ(ctx->tags.nextTag(), 501);
+    EXPECT_EQ(ctx->tags().nextTag(), 501);
 }
 
 TEST(KernelContext, TwoContextsIndependent) {
     auto ctx1 = oreo::KernelContext::create();
     auto ctx2 = oreo::KernelContext::create();
 
-    ctx1->tags.nextTag();
-    ctx1->tags.nextTag();
-    ctx1->diag.error(oreo::ErrorCode::OCCT_FAILURE, "Error in ctx1");
+    ctx1->tags().nextTag();
+    ctx1->tags().nextTag();
+    ctx1->diag().error(oreo::ErrorCode::OCCT_FAILURE, "Error in ctx1");
 
     // ctx2 is completely independent
-    EXPECT_TRUE(ctx2->tags.empty());
-    EXPECT_TRUE(ctx2->diag.empty());
+    EXPECT_TRUE(ctx2->tags().empty());
+    EXPECT_TRUE(ctx2->diag().empty());
 }
 
 TEST(KernelContext, DiagClearAndCheck) {
     auto ctx = oreo::KernelContext::create();
-    ctx->diag.error(oreo::ErrorCode::OCCT_FAILURE, "Some old error");
-    EXPECT_TRUE(ctx->diag.hasErrors());
+    ctx->diag().error(oreo::ErrorCode::OCCT_FAILURE, "Some old error");
+    EXPECT_TRUE(ctx->diag().hasErrors());
 
-    ctx->diag.clear();
-    EXPECT_TRUE(ctx->diag.empty());
-    EXPECT_TRUE(!ctx->diag.hasErrors());
+    ctx->diag().clear();
+    EXPECT_TRUE(ctx->diag().empty());
+    EXPECT_TRUE(!ctx->diag().hasErrors());
 }
 
 TEST(KernelContext, CreateContextHasId) {
@@ -362,9 +362,9 @@ TEST(Determinism, SameOperationsSameTags) {
     // Two contexts with same config → same tag sequences
     for (int iter = 0; iter < 5; ++iter) {
         auto ctx = oreo::KernelContext::create();
-        EXPECT_EQ(ctx->tags.nextTag(), 1);
-        EXPECT_EQ(ctx->tags.nextTag(), 2);
-        EXPECT_EQ(ctx->tags.nextTag(), 3);
+        EXPECT_EQ(ctx->tags().nextTag(), 1);
+        EXPECT_EQ(ctx->tags().nextTag(), 2);
+        EXPECT_EQ(ctx->tags().nextTag(), 3);
     }
 }
 
@@ -372,15 +372,15 @@ TEST(Determinism, ResetAndReplayIdentical) {
     auto ctx = oreo::KernelContext::create();
 
     // First run
-    long t1 = ctx->tags.nextTag();
-    long t2 = ctx->tags.nextTag();
-    long t3 = ctx->tags.nextTag();
+    long t1 = ctx->tags().nextTag();
+    long t2 = ctx->tags().nextTag();
+    long t3 = ctx->tags().nextTag();
 
     // Reset and replay
-    ctx->tags.reset();
-    EXPECT_EQ(ctx->tags.nextTag(), t1);
-    EXPECT_EQ(ctx->tags.nextTag(), t2);
-    EXPECT_EQ(ctx->tags.nextTag(), t3);
+    ctx->tags().reset();
+    EXPECT_EQ(ctx->tags().nextTag(), t1);
+    EXPECT_EQ(ctx->tags().nextTag(), t2);
+    EXPECT_EQ(ctx->tags().nextTag(), t3);
 }
 
 TEST(Determinism, TwoDocumentsNeverCollide) {
@@ -388,10 +388,10 @@ TEST(Determinism, TwoDocumentsNeverCollide) {
     auto doc2 = oreo::KernelContext::create();
 
     // Both get tag 1, 2, 3 — independent spaces, no collision
-    EXPECT_EQ(doc1->tags.nextTag(), 1);
-    EXPECT_EQ(doc2->tags.nextTag(), 1);
+    EXPECT_EQ(doc1->tags().nextTag(), 1);
+    EXPECT_EQ(doc2->tags().nextTag(), 1);
 
     // Each context's tags are isolated
-    EXPECT_EQ(doc1->tags.currentValue(), 1);
-    EXPECT_EQ(doc2->tags.currentValue(), 1);
+    EXPECT_EQ(doc1->tags().currentValue(), 1);
+    EXPECT_EQ(doc2->tags().currentValue(), 1);
 }

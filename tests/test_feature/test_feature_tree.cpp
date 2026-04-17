@@ -25,7 +25,7 @@ oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace fm(wm.Wire());
-    return oreo::NamedShape(fm.Face(), ctx.tags.nextTag());
+    return oreo::NamedShape(fm.Face(), ctx.tags().nextTag());
 }
 
 } // anonymous namespace
@@ -308,7 +308,7 @@ TEST(FeatureTree, MakeFaceFromWire) {
     wm.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    oreo::NamedShape wire(wm.Wire(), ctx->tags.nextTag());
+    oreo::NamedShape wire(wm.Wire(), ctx->tags().nextTag());
 
     auto faceR = oreo::makeFaceFromWire(*ctx, wire);
     ASSERT_TRUE(faceR.ok());
@@ -426,7 +426,7 @@ TEST(Operations, Pocket) {
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace fm(wm.Wire());
-    oreo::NamedShape profile(fm.Face(), ctx->tags.nextTag());
+    oreo::NamedShape profile(fm.Face(), ctx->tags().nextTag());
 
     auto pocketedR = oreo::pocket(*ctx, box, profile, 20.0);
     if (pocketedR.ok()) {
@@ -485,7 +485,7 @@ TEST(Operations, WireOffset) {
     wm.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    oreo::NamedShape wire(wm.Wire(), ctx->tags.nextTag());
+    oreo::NamedShape wire(wm.Wire(), ctx->tags().nextTag());
 
     auto resultR = oreo::wireOffset(*ctx, wire, 2.0);
     // Wire offset may succeed or fail depending on OCCT version

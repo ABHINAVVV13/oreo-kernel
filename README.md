@@ -2,7 +2,7 @@
 
 Standalone C++ CAD geometry kernel built on OpenCASCADE Technology (OCCT), with topological naming stability derived from FreeCAD's element-map implementation and constraint solving via PlaneGCS.
 
-**Current version:** 0.2.0 — production-grade foundation layer with context-aware API, adversarial test coverage, and 15/15 green test executables.
+**Current version:** 0.2.0 — context-aware API plus a hardened foundation layer. 19/19 test binaries green on MSVC Release; ~402 gtest cases across the foundation suites.
 
 ## What is this?
 
@@ -13,7 +13,7 @@ oreo-kernel is the core geometry engine for oreoCAD. It is **not** a fork of Fre
 - Embeds the PlaneGCS 2D constraint solver for sketch solving
 - Exposes everything through a flat C API (`oreo_kernel.h`) suitable for FFI bindings
 - Implements a parametric feature tree with replay, undo, and serialization
-- Provides a hardened foundation layer: per-context error state, composable diagnostics, unit handling, schema versioning, fail-closed validation
+- Provides a foundation layer for error handling, diagnostics, units, schema migration, and validation (see [Foundation layer](#foundation-layer))
 
 ## Build requirements
 
@@ -61,12 +61,12 @@ ctest --output-on-failure
 
 Build directories (`build/`, `build_vs/`, `build_msvc/`) are gitignored.
 
-## Test suite (15 executables)
+## Test suite (19 executables, ~580 gtest cases)
 
 **Unit / geometry**
 - `test_smoke` — basic lifecycle and primitive creation
 - `test_geometry` — extrude, revolve, fillet, chamfer, booleans, patterns
-- `test_mesh` — tessellation / meshing
+- `test_mesh`, `test_mesh_export` — tessellation / meshing (incl. GLB export)
 
 **Subsystems**
 - `test_topo_naming` — topological naming stability across edits
@@ -77,11 +77,15 @@ Build directories (`build/`, `build_vs/`, `build_msvc/`) are gitignored.
 - `test_robustness` — crash resistance with malformed inputs
 - `test_feature_tree` — parametric replay, parameter edits, broken refs
 
-**Foundation (adversarial)**
+**Foundation (8 binaries, ~402 cases)**
 - `test_foundation` — context, diagnostics, units, schema, validation, determinism
 - `test_foundation_hardened` — NaN/Inf, fail-closed paths, composable diagnostics
-- `test_foundation_production` — production-grade invariants
-- `test_foundation_battle` / `test_foundation_battle2` — 147 adversarial tests across threading, overflow, corruption, and C API boundary
+- `test_foundation_production` — production-path invariants
+- `test_foundation_battle` — adversarial threading, overflow, corruption, C API boundary
+- `test_foundation_battle2` — singleton-context C API coverage (only built when `OREO_ENABLE_LEGACY_API=ON`)
+- `test_foundation_modules` — standalone modules: cancellation, feature flags, localization, RNG, profile/metrics, arena, assertion framework
+- `test_foundation_obs` — config loader (env + JSON overlay), logging sink interface, resource-quota enforcement, diagnostic metadata
+- `test_foundation_new_features` — KernelContext clone/merge/safeReset, progress callback, OperationResult combinators, `occtSafeCall`, validation helpers, schema introspection
 
 ## API overview
 
@@ -109,6 +113,23 @@ Two parallel surfaces are exposed:
 
 41 constraint types are supported in the sketch solver (distances, angles, coincidence, tangency, symmetry, equal, perpendicular, parallel, etc.).
 
+## Foundation layer
+
+The `src/core/` layer provides the primitives every other subsystem relies on:
+
+- **`KernelContext`** — per-call container for tolerance, units, tag allocator, diagnostics, cancellation, progress, resource quotas, schema registry. `tags()` and `diag()` are accessor methods (not public data members); construction validates `KernelConfig` and clamps NaN/Inf/negative values with a Fatal diagnostic.
+- **`DiagnosticCollector`** — structured errors with `Severity { Debug, Trace, Info, Warning, Error, Fatal }`, O(1) cached error/warning/degraded flags, JSON `toJSON`/`fromJSON`, pluggable `IDiagnosticSink` observers, bounded size (`maxDiagnostics`) with a single `DIAG_TRUNCATED` marker on overflow, and a `thread_local` ring buffer as last-resort fallback under `bad_alloc`.
+- **`TagAllocator`** — deterministic 64-bit tag allocation; `std::atomic<int64_t>` counter; SipHash-2-4 for `documentIdFromString`; per-allocator OCCT 32-bit map for stable `toOcctTag` without cross-document collisions; `peek`/`allocateRange`/`snapshot`/`restore` for introspection and rollback.
+- **`OperationResult<T>`** — success/failure type with cached flag queries, `map`/`flatMap`/`andThen` combinators, `valueOrThrow()` for exception mode, `tryValue()` for pointer mode, `operator==` comparing (ok, severity, code) pairs.
+- **`occt_try.h`** — `occtSafeCall<F>(ctx, scope, op, f)` wraps OCCT calls, mapping `std::bad_alloc → RESOURCE_EXHAUSTED/Fatal`, `Standard_Failure → OCCT_FAILURE`, `std::system_error`/`bad_cast`/`bad_typeid → INTERNAL_ERROR`. Legacy macros `OREO_OCCT_TRY/CATCH` still work.
+- **`OcctStaticGuard`** — per-context mutex for OCCT's global `Interface_Static`; supports string, int, and real settings; exception-safe restore; reports originally-unset keys via `unsetKeys()`.
+- **`UnitSystem`** — length, angle, mass, volume, density, stress, torque enums with `safeMultiply` overflow detection and locale-independent ASCII parsing.
+- **`SchemaRegistry`** — versioned JSON migrations; O(1) lookup via composite-key map; duplicate registration throws; `testMigration` round-trip helper; `freezeSchemas()` + `mutableSchemas()` lifecycle.
+- **`ConfigLoader`** — overlay `KernelConfig` from environment variables (`OREO_LINEAR_PRECISION`, `OREO_TAG_SEED`, …) or a JSON file.
+- **Optional scaffolding** (present in the tree, not yet consumed by geometry code): `Metrics`/`ProfileScope`, `MessageCatalog`, `FeatureFlags`, `DeterministicRNG`, `Arena` bump allocator, `OREO_ASSERT`/`OREO_VERIFY` framework.
+
+Thread-safety contract: a `KernelContext` is single-owner by default. `ContextThreadGuard` (debug builds) aborts on cross-thread access; `ContextSharedMutex` offers opt-in reader/writer locking for callers that need it.
+
 ## Architecture
 
 ```
@@ -117,7 +138,10 @@ oreo-kernel/
     oreo_kernel.h          # Public C API (the only header consumers need)
   src/
     core/                  # Foundation: context, diagnostics, units, schema,
-                           #   validation, tolerance, tag allocator, thread safety
+                           #   validation, tolerance, tag allocator, thread
+                           #   safety, cancellation, progress, quotas, metrics,
+                           #   profile, config loader, sinks, assertion,
+                           #   localization, feature flags, RNG, memory arena
     naming/                # Topological naming adapter + FreeCAD element-map
       freecad/             # Extracted FreeCAD TNaming code (LGPL)
     sketch/                # PlaneGCS constraint solver integration
@@ -127,8 +151,8 @@ oreo-kernel/
     feature/               # Parametric feature tree (replay, undo, serialize)
     mesh/                  # Tessellation / meshing
     capi/                  # C API implementation (bridges C calls to C++ internals)
-    worker/                # (reserved)
-  tests/                   # GTest suite (15 test executables)
+    worker/                # (reserved, not yet implemented)
+  tests/                   # GTest suite (19 test executables, ~580 cases total)
 ```
 
 ### Layer dependencies
