@@ -57,6 +57,28 @@ cmake -B build -G Ninja \
 cmake --build build --config Release
 ```
 
+### Docker (Linux dev + CI)
+
+For a reproducible build environment that matches what CI uses:
+
+```bash
+# Build the dev image (one-time, ~10 min on a fresh machine).
+docker build -t oreo-kernel-dev -f docker/Dockerfile .
+
+# Mount the source and build inside the container.
+docker run --rm -it -v "$PWD":/workspace -w /workspace oreo-kernel-dev \
+    sh -c 'cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              && cmake --build build --parallel \
+              && ctest --test-dir build --output-on-failure'
+```
+
+The image ships Ubuntu 24.04 + OCCT 7.7 + Boost + Qt6 + Eigen +
+nlohmann-json + GTest + Clang/GCC, with `CMAKE_PREFIX_PATH` and
+`OpenCASCADE_DIR` pre-exported so a bare `cmake -S . -B build` Just
+Works. CI pulls the published image from
+`ghcr.io/<owner>/oreo-kernel-dev:latest` (rebuild via the `dev-image`
+GitHub workflow).
+
 ### Running tests
 
 ```bash

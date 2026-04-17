@@ -14,21 +14,25 @@ concurrency:
 
 # ── Shared configuration ──────────────────────────────────────────────
 #
-# Linux jobs use Ubuntu's apt-packaged OCCT (`libocct-*-dev`). The
-# package installs its CMake config at
-# `/usr/lib/x86_64-linux-gnu/cmake/opencascade/`, which is on the
-# multiarch path that CMake does NOT search by default. We add it
-# (along with the Boost / Qt6 / Eigen / nlohmann-json multiarch
-# config dirs) via CMAKE_PREFIX_PATH on every configure step.
+# All Linux jobs run inside the prebuilt oreo-kernel-dev container
+# (Ubuntu 24.04 + OCCT 7.7 + Boost + Qt6 + Eigen + nlohmann-json + GTest
+# + Clang/GCC, see docker/Dockerfile). The container exports
+# CMAKE_PREFIX_PATH and OpenCASCADE_DIR so a bare `cmake -S . -B build`
+# Just Works — no per-job apt install, no flakey OCCT discovery.
 #
-# Windows jobs use the runner's preinstalled vcpkg at
-# `C:/vcpkg` (env var $VCPKG_INSTALLATION_ROOT) plus this repo's
-# vcpkg.json manifest. Manifest mode picks up the dependency list
-# automatically when CMAKE_TOOLCHAIN_FILE points at vcpkg.cmake.
+# Bootstrap: the image must exist at ghcr.io/<owner>/oreo-kernel-dev
+# before this workflow can pull it. Run `.github/workflows/dev-image.yml`
+# manually once after cloning, then it auto-rebuilds whenever the
+# Dockerfile changes.
+#
+# Windows MSVC: vcpkg-from-source OCCT compile is 3-4 hours on a fresh
+# GitHub runner — too slow to gate every PR. The job runs with
+# `continue-on-error: true` so it primes the cache opportunistically
+# without blocking CI green. Proper Windows CI (Windows containers
+# with OCCT preinstalled) is post-RC1 work.
 
 env:
-  LINUX_CMAKE_PREFIX: /usr/lib/x86_64-linux-gnu/cmake
-  LINUX_OCCT_DIR: /usr/lib/x86_64-linux-gnu/cmake/opencascade
+  DEV_IMAGE: ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:latest
 
 jobs:
   # ────────────────────────────────────────────────────────────
@@ -36,38 +40,19 @@ jobs:
   # ────────────────────────────────────────────────────────────
   linux-gcc-release:
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build ripgrep \
-            libocct-foundation-dev libocct-modeling-algorithms-dev \
-            libocct-modeling-data-dev libocct-ocaf-dev \
-            libocct-data-exchange-dev libocct-visualization-dev \
-            libgtest-dev libeigen3-dev nlohmann-json3-dev \
-            libboost-all-dev qt6-base-dev
-
-      - name: Show OCCT install layout (debug)
-        run: |
-          echo "── apt OCCT version ──"
-          dpkg -l | grep libocct || true
-          echo "── CMake config search paths ──"
-          ls -la /usr/lib/x86_64-linux-gnu/cmake/ 2>/dev/null | head -30 || true
-          ls -la /usr/lib/cmake/ 2>/dev/null | head -30 || true
-          echo "── OCCT cmake config locations ──"
-          find /usr -name 'OpenCASCADEConfig.cmake' -o -name 'opencascade-config.cmake' 2>/dev/null
-          find /usr -name 'OpenCASCADE*.cmake' 2>/dev/null | head -10
 
       - name: Configure
         run: |
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
-            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_ENABLE_LEGACY_API=ON
 
       - name: Build
@@ -88,27 +73,19 @@ jobs:
   # ────────────────────────────────────────────────────────────
   linux-gcc-nolegacy:
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build \
-            libocct-foundation-dev libocct-modeling-algorithms-dev \
-            libocct-modeling-data-dev libocct-ocaf-dev \
-            libocct-data-exchange-dev libocct-visualization-dev \
-            libgtest-dev libeigen3-dev nlohmann-json3-dev \
-            libboost-all-dev qt6-base-dev
 
       - name: Configure (no-legacy)
         run: |
           cmake -S . -B build_nolegacy \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
-            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_ENABLE_LEGACY_API=OFF
 
       - name: Build
@@ -120,24 +97,17 @@ jobs:
   # ────────────────────────────────────────────────────────────
   # Linux Clang + AddressSanitizer + UndefinedBehaviorSanitizer
   # Catches memory bugs, OOB, use-after-free, integer overflow,
-  # null-pointer deref, etc. Tests run slower under ASan/UBSan
-  # but the suite is small enough to fit in CI budget.
+  # null-pointer deref, etc.
   # ────────────────────────────────────────────────────────────
   linux-clang-asan-ubsan:
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang lld cmake ninja-build \
-            libocct-foundation-dev libocct-modeling-algorithms-dev \
-            libocct-modeling-data-dev libocct-ocaf-dev \
-            libocct-data-exchange-dev libocct-visualization-dev \
-            libgtest-dev libeigen3-dev nlohmann-json3-dev \
-            libboost-all-dev qt6-base-dev
 
       - name: Configure (ASan + UBSan)
         run: |
@@ -146,8 +116,6 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
-            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_ENABLE_SANITIZER=address+undefined \
             -DOREO_ENABLE_LEGACY_API=ON
 
@@ -161,24 +129,17 @@ jobs:
         run: ctest --test-dir build_san --output-on-failure
 
   # ────────────────────────────────────────────────────────────
-  # libFuzzer smoke run (60s per harness). Catches crashes and
-  # divergent corpora; deeper runs are scheduled separately.
+  # libFuzzer smoke run (60s per harness)
   # ────────────────────────────────────────────────────────────
   linux-clang-fuzz:
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang lld cmake ninja-build \
-            libocct-foundation-dev libocct-modeling-algorithms-dev \
-            libocct-modeling-data-dev libocct-ocaf-dev \
-            libocct-data-exchange-dev libocct-visualization-dev \
-            libgtest-dev libeigen3-dev nlohmann-json3-dev \
-            libboost-all-dev qt6-base-dev
 
       - name: Configure (libFuzzer)
         run: |
@@ -187,8 +148,6 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
-            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_BUILD_FUZZERS=ON \
             -DOREO_ENABLE_SANITIZER=address+undefined \
             -DOREO_ENABLE_LEGACY_API=ON
@@ -223,23 +182,9 @@ jobs:
 
   # ────────────────────────────────────────────────────────────
   # Windows MSVC build + tests using the runner's preinstalled
-  # vcpkg (at $VCPKG_INSTALLATION_ROOT, typically C:/vcpkg). The
-  # repo's vcpkg.json drives manifest mode — vcpkg installs OCCT,
-  # Boost, Eigen, Qt6, nlohmann-json on first run and caches them.
-  #
-  # IMPORTANT — known cold-cache time bomb:
-  #   OCCT 7.9 compiled from source on a 4-vCPU GitHub runner takes
-  #   ~90 minutes by itself; the full vcpkg manifest (Boost 1.90,
-  #   Qt6 base, freetype, libpng, brotli, …) lands at 3-4 hours on
-  #   a fresh cache. GitHub Actions canceled our first run before
-  #   OCCT finished. Until we wire a prebuilt OCCT container or
-  #   prime the actions/cache once via a manual workflow, this job
-  #   is run with `continue-on-error: true` so a failure here does
-  #   NOT block the overall CI from going green.
-  #
-  # The developer-side build path is documented in README.md and
-  # is exercised locally by the kernel maintainers on every push;
-  # the Windows MSVC build is not the primary CI gate for v0.9.x.
+  # vcpkg + manifest mode. NON-BLOCKING (continue-on-error: true)
+  # because OCCT-from-source via vcpkg is 3-4h on a fresh runner.
+  # ────────────────────────────────────────────────────────────
   windows-msvc:
     runs-on: windows-2022
     continue-on-error: true
