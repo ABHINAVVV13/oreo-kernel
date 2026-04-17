@@ -36,7 +36,14 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:latest
+      # GHCR repository paths must be lowercase. `github.repository_owner`
+      # preserves the original casing (e.g. ABHINAVVV13), which Docker
+      # rejects at ref-parse time. dev-image.yml pushes to the lowercased
+      # path, so we hardcode the same literal here. If the repo is ever
+      # forked to a different owner, update this one line (or swap to a
+      # prep-job that outputs a lowercased owner — container.image is
+      # evaluated before steps run, so it can't compute its own value).
+      image: ghcr.io/abhinavvv13/oreo-kernel-dev:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
