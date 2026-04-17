@@ -146,8 +146,15 @@ public:
     // SCH-2: Configure the maximum number of migration steps walked by
     // migrate() / canLoad() before aborting with a cycle/depth error.
     // Default is 256 — bumped up from the legacy hardcoded 100.
-    void setMaxMigrationSteps(size_t steps) noexcept { maxMigrationSteps_ = steps; }
+    // Throws std::logic_error if the registry is frozen.
+    void setMaxMigrationSteps(size_t steps);
     size_t maxMigrationSteps() const noexcept { return maxMigrationSteps_; }
+
+    // Freeze the registry against further mutation. Once frozen,
+    // registerMigration / unregisterMigration / setMaxMigrationSteps all
+    // throw std::logic_error. Idempotent.
+    void freeze() noexcept { frozen_ = true; }
+    bool isFrozen() const noexcept { return frozen_; }
 
     // SCH-8: Introspection helpers for tooling / debugging.
     // registeredTypes(): every type that has a current version entry.
@@ -215,6 +222,11 @@ private:
 
     // SCH-2: configurable migration-step cap (was hardcoded 100).
     size_t maxMigrationSteps_ = 256;
+
+    // Registry-level freeze flag. Enforced by every mutator — unlike the
+    // context-level advisory check, there is no way to bypass this without
+    // unfreezing (there is intentionally no unfreeze method).
+    bool frozen_ = false;
 
     // SCH-7: most recent `_kernelVersion` seen in a header (mutable so
     // const migrate() can update it).

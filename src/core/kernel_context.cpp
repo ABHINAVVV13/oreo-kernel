@@ -252,9 +252,13 @@ bool KernelContext::isOCCTInitialized() {
 
 SchemaRegistry& KernelContext::mutableSchemas() {
     if (schemasFrozen_) {
+        // Diagnostic is an early-warning signal — actual mutation attempts
+        // on the returned reference will throw std::logic_error from the
+        // registry itself (see SchemaRegistry::registerMigration /
+        // unregisterMigration / setMaxMigrationSteps).
         diag_.error(ErrorCode::INVALID_STATE,
-                    "SchemaRegistry is frozen; mutableSchemas() should not be called "
-                    "after freezeSchemas()",
+                    "SchemaRegistry is frozen; mutations on the returned "
+                    "reference will throw std::logic_error",
                     "Perform all migration registration before freezeSchemas()");
     }
     return schemas_;

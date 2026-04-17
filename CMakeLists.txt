@@ -193,6 +193,11 @@ oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
 # Perf regression (generous time budgets — catches 10x regressions, not microbenchmark drift)
 oreo_add_test(test_perf tests/test_perf/test_perf.cpp)
 
+# Audit-fix regressions (5 issues from external contributor review: OcctStaticGuard
+# de-dup, SchemaRegistry freeze enforcement, ConfigLoader uint64 docId, TagAllocator
+# low-32 collision detection, DiagnosticCollector hard cap)
+oreo_add_test(test_foundation_audit_fixes tests/test_foundation/test_foundation_audit_fixes.cpp)
+
 # Tessellation / Meshing
 oreo_add_test(test_mesh tests/test_mesh/test_mesh.cpp)
 oreo_add_test(test_mesh_export tests/test_mesh/test_mesh_export.cpp)

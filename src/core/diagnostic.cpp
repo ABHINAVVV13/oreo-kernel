@@ -180,25 +180,40 @@ void DiagnosticCollector::bumpCounters_(const Diagnostic& d) {
 void DiagnosticCollector::report(Diagnostic diag) {
     stampMetadata_(diag);
 
-    // D-10 / CC-2: apply the cap. Drop the NEW diagnostic, emit a single
-    // DIAG_TRUNCATED marker on first overflow so downstream readers know
-    // something was lost.
+    // D-10 / CC-2: hard cap. diagnostics_.size() must never exceed
+    // maxDiagnostics_. On overflow:
+    //   - set truncated_ and bump overflowCount_;
+    //   - if there is room, replace the LAST slot with a single
+    //     DIAG_TRUNCATED marker so consumers of snapshot()/all() see the
+    //     loss without exceeding the cap;
+    //   - otherwise (cap == 0 is impossible here because setMaxDiagnostics
+    //     remaps it to SIZE_MAX, so this branch only triggers when the cap
+    //     is non-zero and already reached), drop silently.
+    //
+    // Dropping the new diagnostic preserves the FIRST-N-kept invariant
+    // that matters for root-cause analysis — the earliest diagnostic is
+    // almost always more informative than the Nth.
     if (diagnostics_.size() >= maxDiagnostics_) {
+        ++overflowCount_;
         if (!truncated_) {
             truncated_ = true;
-            Diagnostic marker;
-            marker.severity = Severity::Warning;
-            marker.code = ErrorCode::DIAG_TRUNCATED;
-            marker.message = "Diagnostic cap reached; further diagnostics dropped.";
-            marker.suggestion = "Increase setMaxDiagnostics() or clear() the collector.";
-            stampMetadata_(marker);
-            try {
-                diagnostics_.push_back(std::move(marker));
+            // Replace the last kept diagnostic with the marker so the
+            // vector size is unchanged. When maxDiagnostics_ == 0 (only
+            // possible if a caller used SIZE_MAX sentinel and still
+            // overflowed) there is no last slot to replace — skip.
+            if (!diagnostics_.empty()) {
+                Diagnostic marker;
+                marker.severity = Severity::Warning;
+                marker.code = ErrorCode::DIAG_TRUNCATED;
+                marker.message =
+                    "Diagnostic cap reached; further diagnostics dropped "
+                    "(last kept diagnostic was replaced by this marker).";
+                marker.suggestion =
+                    "Increase setMaxDiagnostics() or clear() the collector.";
+                stampMetadata_(marker);
+                // Replacing an existing slot is non-throwing (no allocation).
+                diagnostics_.back() = std::move(marker);
                 bumpCounters_(diagnostics_.back());
-            } catch (const std::bad_alloc&) {
-                // If even the marker can't be stored, fall through — the
-                // truncated_ flag still records that we overflowed.
-                ++overflowCount_;
             }
         }
         return;

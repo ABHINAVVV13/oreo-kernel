@@ -87,26 +87,33 @@ public:
     // ── Schema registry access ───────────────────────────
     //
     // schemas() is always available (returns const). mutableSchemas()
-    // is gated on the `schemasFrozen_` flag: after freezeSchemas() has
-    // been called, any attempt to mutate the registry reports a
-    // diagnostic and returns the registry anyway (lenient degrade).
-    // Call freezeSchemas() once migration registration is complete and
-    // the context is ready for serialization work.
+    // is a diagnostic-enhanced accessor. Registry-level enforcement is
+    // authoritative: after freezeSchemas() has been called, every
+    // mutator on SchemaRegistry (registerMigration, unregisterMigration,
+    // setMaxMigrationSteps) throws std::logic_error regardless of which
+    // accessor returned the reference — the legacy non-const schemas()
+    // overload does NOT provide a mutation bypass.
 
     const SchemaRegistry& schemas() const noexcept { return schemas_; }
 
-    // Legacy mutable overload: kept for source compatibility.
-    // Equivalent to mutableSchemas() but without the frozen diagnostic
-    // (pre-freeze workflows relied on this being silent).
+    // Legacy mutable overload: kept for source compatibility. Returns a
+    // mutable reference but mutations fail (throw) after freezeSchemas().
     SchemaRegistry& schemas() noexcept { return schemas_; }
 
-    // Preferred mutable accessor. Reports an Error diagnostic if the
-    // registry has been frozen (schemasFrozen_ == true). Still returns
-    // a reference to preserve callers that assume non-null semantics.
+    // Preferred mutable accessor. Reports a diagnostic in addition to the
+    // registry-level enforcement, so callers notice the misuse before the
+    // throw. Returns a reference so the signature can be used in
+    // expressions that assume non-null semantics (but calls on the frozen
+    // registry will still throw).
     SchemaRegistry& mutableSchemas();
 
     // Lock the schema registry against further mutation. Idempotent.
-    void freezeSchemas() noexcept { schemasFrozen_ = true; }
+    // Delegates to SchemaRegistry::freeze() so registry-level mutators
+    // enforce the lock too, not just the context-level accessor check.
+    void freezeSchemas() noexcept {
+        schemasFrozen_ = true;
+        schemas_.freeze();
+    }
 
     // Query the frozen state.
     bool schemasFrozen() const noexcept { return schemasFrozen_; }

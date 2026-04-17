@@ -6,9 +6,29 @@
 // Key properties:
 //   - Deterministic within a document: reset() + same operations = same tags
 //   - Document-scoped: two documents with different IDs never collide
+//     WITHIN THE ENCODED-TAG SPACE (see "Encoding limits" below)
 //   - Persistable: state can be saved and restored
-//   - Tag format: (documentId << 32) | operationCounter  (multi-doc mode)
-//                 sequential 1,2,3...                    (single-doc mode)
+//   - Tag format: (low32(documentId) << 32) | operationCounter (multi-doc)
+//                 sequential 1,2,3...                          (single-doc)
+//
+// ── Encoding limits (read before claiming cross-doc uniqueness) ──
+//
+// The on-the-wire tag is a 64-bit signed integer carrying 32 bits of
+// documentId and 32 bits of sequence counter. The FULL 64-bit documentId
+// is stored in documentId_ for identity/debug, but ONLY its low 32 bits
+// participate in the encoded tag. Two distinct 64-bit documentIds that
+// share low-32 bits therefore produce identical encoded tags for equal
+// sequence numbers.
+//
+// To detect this at the source rather than at name-lookup time, every
+// non-zero documentId passed to the constructor or setDocumentId() is
+// registered in a process-global map (low32 -> full documentId). A second
+// registration of a DIFFERENT full documentId with the same low 32 bits
+// throws std::logic_error immediately. Re-registering the same full
+// documentId is idempotent and always succeeds.
+//
+// This check is process-wide. If tests create transient allocators with
+// deliberately colliding IDs, call clearDocumentIdRegistry() between them.
 //
 // Thread safety:
 //   The counter is std::atomic<int64_t>. nextTag() / peek() / allocateRange()
@@ -27,8 +47,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -52,10 +74,15 @@ public:
 
     // Create with a document ID for cross-document uniqueness.
     // documentId should be unique per document (e.g., SipHash of document UUID).
+    // Throws std::logic_error if a DIFFERENT 64-bit documentId with the
+    // same low 32 bits has already been registered in this process.
     explicit TagAllocator(uint64_t documentId, int64_t startCounter = 0)
         : documentId_(documentId), counter_(startCounter), nextOcctTag_(1) {
         if (startCounter < 0) {
             throw std::invalid_argument("TagAllocator: negative startCounter");
+        }
+        if (documentId != 0) {
+            registerDocumentId(documentId);
         }
     }
 
@@ -198,12 +225,49 @@ public:
     }
 
     // TA-5: Set document ID. Throws if allocation has already begun.
+    // Also registers `id` in the process-global low-32-bit collision
+    // registry; throws std::logic_error if a DIFFERENT full 64-bit
+    // documentId sharing the same low 32 bits has already been seen.
     void setDocumentId(uint64_t id) {
         if (counter_.load(std::memory_order_relaxed) != 0) {
             throw std::logic_error(
                 "TagAllocator::setDocumentId after allocation");
         }
+        if (id != 0) {
+            registerDocumentId(id);
+        }
         documentId_ = id;
+    }
+
+    // Register `id` in the process-global low-32-bit collision registry.
+    // Re-registering the same full id is idempotent. Registering a
+    // DIFFERENT id with the same low 32 bits throws std::logic_error.
+    // Exposed so tooling (tests, diagnostics) can pre-check an id.
+    static void registerDocumentId(uint64_t id) {
+        const uint32_t low = static_cast<uint32_t>(id & 0xFFFFFFFFu);
+        std::lock_guard<std::mutex> g(docIdRegistryMutex_());
+        auto& map = docIdRegistry_();
+        auto it = map.find(low);
+        if (it == map.end()) {
+            map.emplace(low, id);
+            return;
+        }
+        if (it->second != id) {
+            throw std::logic_error(
+                "TagAllocator::registerDocumentId: low-32-bit collision "
+                "between two distinct 64-bit documentIds (existing=0x"
+                + toHex(it->second) + ", new=0x" + toHex(id)
+                + "). Encoded tags would be indistinguishable.");
+        }
+        // Same id already registered — idempotent, accept silently.
+    }
+
+    // Test helper: drop every registered documentId from the collision
+    // registry. ONLY for test isolation — production code should never
+    // need this. Not thread-safe w.r.t. concurrent TagAllocator ctors.
+    static void clearDocumentIdRegistry() noexcept {
+        std::lock_guard<std::mutex> g(docIdRegistryMutex_());
+        docIdRegistry_().clear();
     }
 
     // Get document ID (full 64-bit).
@@ -392,6 +456,24 @@ private:
     // occtTagMap_ in a mutex.
     std::unordered_map<int64_t, int32_t> occtTagMap_;
     std::atomic<int32_t>                  nextOcctTag_;
+
+    // Process-global registry for the low-32-bit collision check.
+    // Function-local statics so the initializer order across translation
+    // units doesn't matter.
+    static std::unordered_map<uint32_t, uint64_t>& docIdRegistry_() {
+        static std::unordered_map<uint32_t, uint64_t> m;
+        return m;
+    }
+    static std::mutex& docIdRegistryMutex_() {
+        static std::mutex m;
+        return m;
+    }
+    static std::string toHex(uint64_t v) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%016llx",
+                      static_cast<unsigned long long>(v));
+        return std::string(buf);
+    }
 };
 
 } // namespace oreo

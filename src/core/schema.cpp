@@ -91,6 +91,15 @@ inline bool sameFrom(const Migration& m, const std::string& type, const SchemaVe
 void SchemaRegistry::registerMigration(const std::string& type,
                                        SchemaVersion from, SchemaVersion to,
                                        MigrationFn migrator) {
+    // Registry-level freeze enforcement. This check is authoritative —
+    // no public accessor can bypass it, because every mutator lives
+    // here in the .cpp and consults frozen_.
+    if (frozen_) {
+        throw std::logic_error(
+            "SchemaRegistry is frozen; cannot register migration for '"
+            + type + "' from " + from.toString());
+    }
+
     // SCH-3: reject duplicate (type, from) migrations loudly at
     // registration time. Silent overwrites mask real bugs.
     for (const auto& existing : migrations_) {
@@ -315,6 +324,11 @@ std::vector<SchemaVersion> SchemaRegistry::versionsFor(const std::string& type) 
 
 bool SchemaRegistry::unregisterMigration(const std::string& type,
                                          const SchemaVersion& from) {
+    if (frozen_) {
+        throw std::logic_error(
+            "SchemaRegistry is frozen; cannot unregister migration for '"
+            + type + "' from " + from.toString());
+    }
     auto it = std::find_if(migrations_.begin(), migrations_.end(),
         [&](const Migration& m) { return sameFrom(m, type, from); });
     if (it == migrations_.end()) return false;
@@ -323,6 +337,14 @@ bool SchemaRegistry::unregisterMigration(const std::string& type,
     migrationMap_.erase(key);
     migrationTo_.erase(key);
     return true;
+}
+
+void SchemaRegistry::setMaxMigrationSteps(size_t steps) {
+    if (frozen_) {
+        throw std::logic_error(
+            "SchemaRegistry is frozen; cannot change maxMigrationSteps");
+    }
+    maxMigrationSteps_ = steps;
 }
 
 // ─── SCH-10: Round-trip test helper ─────────────────────────

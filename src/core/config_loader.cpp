@@ -91,7 +91,10 @@ void ConfigLoader::applyEnvOverlay(KernelConfig& config) {
     if (auto v = envInt("OREO_TAG_SEED"))
         config.tagSeed = *v;
     if (auto v = envInt("OREO_DOCUMENT_ID"))
-        config.documentId = static_cast<uint32_t>(*v);
+        // KernelConfig::documentId is uint64_t. envInt returns int64_t;
+        // reinterpret as unsigned to preserve the full 64-bit value when
+        // callers encode high bits via a two's-complement representation.
+        config.documentId = static_cast<uint64_t>(*v);
 
     if (auto v = envString("OREO_DOCUMENT_UUID"))
         config.documentUUID = *v;
@@ -162,11 +165,19 @@ void ConfigLoader::applyJsonFile(KernelConfig& config, const std::string& path) 
     }
 
     maybeAssignNumber(j, "tagSeed",    config.tagSeed);
-    // documentId is uint32_t; round-trip through a wider integral type.
+    // documentId is uint64_t — preserve the full 64 bits from the JSON
+    // integer. JSON-RFC-8259 integers are unbounded but nlohmann::json
+    // stores them as int64_t / uint64_t; accept either representation.
     {
         auto it = j.find("documentId");
-        if (it != j.end() && it->is_number_integer()) {
-            config.documentId = static_cast<uint32_t>(it->get<int64_t>());
+        if (it != j.end()) {
+            if (it->is_number_unsigned()) {
+                config.documentId = it->get<uint64_t>();
+            } else if (it->is_number_integer()) {
+                config.documentId = static_cast<uint64_t>(it->get<int64_t>());
+            }
+            // Non-integer number values (e.g. 1.5) are silently ignored,
+            // consistent with maybeAssignNumber's is_number() gating.
         }
     }
     maybeAssignString(j, "documentUUID", config.documentUUID);

@@ -107,57 +107,74 @@ OcctStaticGuard::~OcctStaticGuard() {
 
 // ── Save helpers ─────────────────────────────────────────────
 
+// De-dup note:
+//   savedKeys_ tracks which keys we've already snapshotted. A repeated
+//   set(K, ...) after an earlier set(K, ...) must NOT record a second
+//   snapshot — that would capture the intermediate value and, on restore
+//   (which walks savedSettings_ in insertion order), leave the process
+//   at the intermediate value instead of the true original. First-wins
+//   preserves the invariant "destructor restores original state."
+
 void OcctStaticGuard::saveString_(const char* key) {
+    const std::string keyStr(key ? key : "");
+    if (!savedKeys_.insert(keyStr).second) {
+        // Already saved earlier — keep the original snapshot; skip.
+        return;
+    }
     // IsSet tells us whether the key has been Init'd at all; CVal returns
     // empty string for unset keys, which is ambiguous with "set to empty".
     const bool wasSet = Interface_Static::IsSet(key) != Standard_False;
     const char* current = Interface_Static::CVal(key);
     if (!wasSet) {
-        unsetKeys_.emplace_back(key);
+        unsetKeys_.emplace_back(keyStr);
         try {
             restoreFailures_.emplace_back(
-                std::string("Key '") + key +
+                "Key '" + keyStr +
                 "' was originally unset; OCCT cannot truly unset it on restore");
         } catch (...) {
             // best-effort
         }
     }
     savedSettings_.push_back({
-        key,
+        keyStr,
         std::string(current ? current : "")
     });
 }
 
 void OcctStaticGuard::saveInt_(const char* key) {
+    const std::string keyStr(key ? key : "");
+    if (!savedKeys_.insert(keyStr).second) return;
     const bool wasSet = Interface_Static::IsSet(key) != Standard_False;
     const int current = Interface_Static::IVal(key);
     if (!wasSet) {
-        unsetKeys_.emplace_back(key);
+        unsetKeys_.emplace_back(keyStr);
         try {
             restoreFailures_.emplace_back(
-                std::string("Key '") + key +
+                "Key '" + keyStr +
                 "' was originally unset (int); restore will write 0, not unset");
         } catch (...) {
             // best-effort
         }
     }
-    savedSettings_.push_back({ key, current });
+    savedSettings_.push_back({ keyStr, current });
 }
 
 void OcctStaticGuard::saveDouble_(const char* key) {
+    const std::string keyStr(key ? key : "");
+    if (!savedKeys_.insert(keyStr).second) return;
     const bool wasSet = Interface_Static::IsSet(key) != Standard_False;
     const double current = Interface_Static::RVal(key);
     if (!wasSet) {
-        unsetKeys_.emplace_back(key);
+        unsetKeys_.emplace_back(keyStr);
         try {
             restoreFailures_.emplace_back(
-                std::string("Key '") + key +
+                "Key '" + keyStr +
                 "' was originally unset (double); restore will write 0.0, not unset");
         } catch (...) {
             // best-effort
         }
     }
-    savedSettings_.push_back({ key, current });
+    savedSettings_.push_back({ keyStr, current });
 }
 
 // ── Setters (OG-3) ───────────────────────────────────────────

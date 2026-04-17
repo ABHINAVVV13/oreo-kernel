@@ -21,6 +21,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -217,11 +218,25 @@ public:
     void setContextId(uint64_t contextId) { contextId_ = contextId; }
     uint64_t contextId() const { return contextId_; }
 
-    // D-10 / CC-2: Drop-if-full cap. When size() >= cap a single
-    // DIAG_TRUNCATED marker is emitted and further diagnostics are dropped
-    // until clear() runs. Default is 10000.
-    void setMaxDiagnostics(std::size_t cap) { maxDiagnostics_ = cap; }
+    // D-10 / CC-2: Hard cap. diagnostics_.size() will NEVER exceed the
+    // configured value. When a report() would cause overflow:
+    //   - the caller's diagnostic is dropped;
+    //   - overflowCount_ is incremented;
+    //   - truncated_ is set (queryable via isTruncated());
+    //   - if there is room, the LAST slot of diagnostics_ is replaced by a
+    //     single DIAG_TRUNCATED marker so snapshot consumers notice the
+    //     loss without exceeding the cap.
+    //
+    // A cap of 0 is treated as "unlimited", matching KernelContext
+    // quotas semantics. Use setMaxDiagnostics(SIZE_MAX) explicitly if you
+    // want "unlimited" without the 0-is-sentinel convention.
+    void setMaxDiagnostics(std::size_t cap) {
+        maxDiagnostics_ = (cap == 0)
+            ? (std::numeric_limits<std::size_t>::max)()
+            : cap;
+    }
     std::size_t maxDiagnostics() const { return maxDiagnostics_; }
+    bool isTruncated() const { return truncated_; }
 
     // CC-1: Count of diagnostics dropped due to std::bad_alloc in report().
     std::size_t overflowCount() const { return overflowCount_; }

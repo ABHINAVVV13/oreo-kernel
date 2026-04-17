@@ -59,6 +59,7 @@
 
 #include <mutex>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -140,11 +141,18 @@ private:
 
     std::unique_lock<std::mutex> lock_;
     std::vector<Saved> savedSettings_;
+    // Set of keys already saved, so a repeated set() on the same key never
+    // records a second (post-write) snapshot. Without this de-dup, restore
+    // order would leave the intermediate value, not the original. Keeping
+    // the first snapshot only is sufficient because the original is what
+    // we must restore regardless of how many times the caller overwrites.
+    std::unordered_set<std::string> savedKeys_;
     std::vector<std::string> unsetKeys_;
     std::vector<std::string> restoreFailures_;
 
     // Helpers — implemented in .cpp so Interface_Static headers stay out
-    // of this public header.
+    // of this public header. Each helper is a no-op if `key` was already
+    // saved earlier in this guard's lifetime (first-wins semantics).
     void saveString_(const char* key);
     void saveInt_(const char* key);
     void saveDouble_(const char* key);
