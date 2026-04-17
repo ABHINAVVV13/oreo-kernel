@@ -36,6 +36,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Third-party C/C++ deps consumed by oreo-kernel.
+#
+# Transitive -dev packages matter here: the libocct-*-dev packages
+# Depends: only the runtime .so.N of their own libraries, not of their
+# transitive link-interface libs. Because we use --no-install-recommends
+# (intentional, keeps the image lean), we must name every -dev package
+# whose *unversioned* .so symlink appears on OCCT's exported link line.
+#
+#   libtbb-dev       — OCCT modeling-algorithms links libtbb.so for
+#                       parallel BOP/meshing. Without this, relinking
+#                       liboreo-kernel.so fails with
+#                       "missing and no known rule to make it".
+#   libfreetype-dev  — OCCT visualization links libfreetype.so for text.
+#   libfreeimage-dev — OCCT visualization links libfreeimage.so for
+#                       texture I/O.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libocct-foundation-dev \
         libocct-modeling-algorithms-dev \
@@ -43,6 +57,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libocct-ocaf-dev \
         libocct-data-exchange-dev \
         libocct-visualization-dev \
+        libtbb-dev \
+        libfreetype-dev \
+        libfreeimage-dev \
         libgtest-dev \
         libeigen3-dev \
         nlohmann-json3-dev \
