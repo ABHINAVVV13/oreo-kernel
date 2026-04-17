@@ -122,15 +122,17 @@ experience before the 1.0 commitment.
 These are documented and tracked but **not** blockers for using the RC1
 in evaluation / pilot deployments:
 
-- **CI scope for v0.9.x is Linux-only (Ubuntu 24.04 + apt OCCT 7.7).**
-  The four Linux jobs (gcc-release, gcc-nolegacy, clang-asan-ubsan,
-  clang-fuzz) are the primary gate. The Windows MSVC job is wired
-  but runs with `continue-on-error: true` because compiling OCCT
-  from source via vcpkg on a fresh GitHub runner takes 3-4 hours
-  (OCCT alone is ~90 min) — long enough that GitHub Actions cancels
-  before completion on a cold cache. Windows builds are exercised
-  locally on every push; the proper Windows CI fix is a Docker
-  image with OCCT preinstalled, scheduled for after RC1.
+- **CI architecture: single workflow, single matrix, single container.**
+  All four configurations (gcc-release, gcc-no-legacy,
+  clang-asan-ubsan, clang-fuzz) run inside the prebuilt
+  `oreo-kernel-dev` container (Ubuntu 24.04 + OCCT 7.7 + every dep
+  preinstalled). Each matrix entry calls `ci/build.sh` with
+  config-driving env vars — no copy-pasted job blocks, no per-job
+  apt installs. Windows is intentionally NOT in CI: the kernel is
+  portable C++ and Linux is the authoritative gate; Windows is
+  verified locally by maintainers on every push. If Windows-specific
+  CI is later required it belongs in its own workflow with its own
+  toolchain story (Windows containers + prebuilt OCCT).
 - **Ctx-aware C API still incomplete.** Several legacy ops do not yet
   have ctx variants: `make_cone/torus/wedge`, `revolve`, `chamfer`,
   `sweep`, `loft`, `pattern_*`, `draft`, `hole`, `pocket`, `shell`,
