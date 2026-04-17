@@ -122,8 +122,15 @@ experience before the 1.0 commitment.
 These are documented and tracked but **not** blockers for using the RC1
 in evaluation / pilot deployments:
 
-- **CI on Linux/Clang has not been executed end-to-end.** First push to
-  GitHub triggers it. Please report any breakage via Issues.
+- **CI scope for v0.9.x is Linux-only (Ubuntu 24.04 + apt OCCT 7.7).**
+  The four Linux jobs (gcc-release, gcc-nolegacy, clang-asan-ubsan,
+  clang-fuzz) are the primary gate. The Windows MSVC job is wired
+  but runs with `continue-on-error: true` because compiling OCCT
+  from source via vcpkg on a fresh GitHub runner takes 3-4 hours
+  (OCCT alone is ~90 min) — long enough that GitHub Actions cancels
+  before completion on a cold cache. Windows builds are exercised
+  locally on every push; the proper Windows CI fix is a Docker
+  image with OCCT preinstalled, scheduled for after RC1.
 - **Ctx-aware C API still incomplete.** Several legacy ops do not yet
   have ctx variants: `make_cone/torus/wedge`, `revolve`, `chamfer`,
   `sweep`, `loft`, `pattern_*`, `draft`, `hole`, `pocket`, `shell`,
