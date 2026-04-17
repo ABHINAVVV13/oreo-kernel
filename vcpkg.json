@@ -1,6 +1,6 @@
 {
   "name": "oreo-kernel",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "oreoCAD geometry kernel — OCCT wrapper with topo naming and constraint solving",
   "dependencies": [
     "opencascade",

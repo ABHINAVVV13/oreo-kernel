@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 name: ci
 
 on:
@@ -10,6 +11,24 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# ── Shared configuration ──────────────────────────────────────────────
+#
+# Linux jobs use Ubuntu's apt-packaged OCCT (`libocct-*-dev`). The
+# package installs its CMake config at
+# `/usr/lib/x86_64-linux-gnu/cmake/opencascade/`, which is on the
+# multiarch path that CMake does NOT search by default. We add it
+# (along with the Boost / Qt6 / Eigen / nlohmann-json multiarch
+# config dirs) via CMAKE_PREFIX_PATH on every configure step.
+#
+# Windows jobs use the runner's preinstalled vcpkg at
+# `C:/vcpkg` (env var $VCPKG_INSTALLATION_ROOT) plus this repo's
+# vcpkg.json manifest. Manifest mode picks up the dependency list
+# automatically when CMAKE_TOOLCHAIN_FILE points at vcpkg.cmake.
+
+env:
+  LINUX_CMAKE_PREFIX: /usr/lib/x86_64-linux-gnu/cmake
+  LINUX_OCCT_DIR: /usr/lib/x86_64-linux-gnu/cmake/opencascade
 
 jobs:
   # ────────────────────────────────────────────────────────────
@@ -36,6 +55,8 @@ jobs:
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
+            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_ENABLE_LEGACY_API=ON
 
       - name: Build
@@ -75,6 +96,8 @@ jobs:
           cmake -S . -B build_nolegacy \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
+            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_ENABLE_LEGACY_API=OFF
 
       - name: Build
@@ -112,6 +135,8 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
+            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_ENABLE_SANITIZER=address+undefined \
             -DOREO_ENABLE_LEGACY_API=ON
 
@@ -151,6 +176,8 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH="$LINUX_CMAKE_PREFIX" \
+            -DOpenCASCADE_DIR="$LINUX_OCCT_DIR" \
             -DOREO_BUILD_FUZZERS=ON \
             -DOREO_ENABLE_SANITIZER=address+undefined \
             -DOREO_ENABLE_LEGACY_API=ON
@@ -184,24 +211,28 @@ jobs:
           if-no-files-found: ignore
 
   # ────────────────────────────────────────────────────────────
-  # Windows MSVC build + tests (matches the developer workflow
-  # documented in README/build commands)
+  # Windows MSVC build + tests using the runner's preinstalled
+  # vcpkg (at $VCPKG_INSTALLATION_ROOT, typically C:/vcpkg). The
+  # repo's vcpkg.json drives manifest mode — vcpkg installs OCCT,
+  # Boost, Eigen, Qt6, nlohmann-json on first run and caches them.
   # ────────────────────────────────────────────────────────────
   windows-msvc:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
+      - name: Cache vcpkg installed packages
+        uses: actions/cache@v4
         with:
-          vcpkgGitCommitId: master
+          path: build_msvc/vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
 
       - name: Configure
         shell: pwsh
         run: |
           cmake -S . -B build_msvc `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DOREO_ENABLE_LEGACY_API=ON
 
       - name: Build
