@@ -166,6 +166,30 @@ OreoContext oreo_context_create(void) {
     OREO_C_CATCH_RETURN(nullptr)
 }
 
+OreoContext oreo_context_create_with_doc(uint64_t documentId, const char* documentUUID) {
+    // If documentUUID is non-empty, the KernelContext constructor derives
+    // documentId from it via SipHash-2-4 — the caller's numeric documentId
+    // is ignored in that case, matching the header contract.
+    OREO_C_TRY
+    oreo::KernelConfig cfg;
+    cfg.documentId = documentId;
+    if (documentUUID && *documentUUID) {
+        cfg.documentUUID = documentUUID;
+    }
+    // create() throws std::logic_error on low-32-bit documentId collision
+    // (see TagAllocator::registerDocumentId). Let the OREO_C_CATCH wrapper
+    // surface that via diag() and return nullptr.
+    return new OreoContext_T{oreo::KernelContext::create(cfg)};
+    OREO_C_CATCH_RETURN(nullptr)
+}
+
+uint64_t oreo_context_document_id(OreoContext ctx) {
+    OREO_C_TRY
+    if (!ctx) return 0;
+    return ctx->ctx->tags().documentId();
+    OREO_C_CATCH_RETURN(0)
+}
+
 void oreo_context_free(OreoContext ctx) {
     OREO_C_TRY
     if (!ctx) return;
@@ -255,6 +279,15 @@ OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], in
     OREO_C_TRY
     if (!ctx) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
     if (!solid) { ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (n < 0) {
+        ctx->ctx->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !edges) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "edges pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedEdge> edgeVec;
     for (int i = 0; i < n; ++i) {
         if (edges[i]) edgeVec.push_back({oreo::IndexedName("Edge", i+1), edges[i]->ns.shape()});
@@ -334,6 +367,18 @@ OreoSolid oreo_revolve(OreoSolid base,
 OreoSolid oreo_fillet(OreoSolid solid, OreoEdge edges[], int n, double radius) {
     OREO_C_TRY
     if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    // Array-bounds gate (audit fix): a negative `n` or a null `edges` with
+    // n > 0 would have dereferenced junk / walked off the heap. Reject both
+    // before we touch `edges[i]`.
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !edges) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "edges pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedEdge> edgeVec;
     for (int i = 0; i < n; ++i) {
         if (edges[i]) {
@@ -347,6 +392,15 @@ OreoSolid oreo_fillet(OreoSolid solid, OreoEdge edges[], int n, double radius) {
 OreoSolid oreo_chamfer(OreoSolid solid, OreoEdge edges[], int n, double distance) {
     OREO_C_TRY
     if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !edges) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "edges pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedEdge> edgeVec;
     for (int i = 0; i < n; ++i) {
         if (edges[i]) {
@@ -381,6 +435,15 @@ OreoSolid oreo_boolean_intersect(OreoSolid a, OreoSolid b) {
 OreoSolid oreo_shell(OreoSolid solid, OreoFace faces[], int n, double thickness) {
     OREO_C_TRY
     if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !faces) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "faces pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedFace> faceVec;
     for (int i = 0; i < n; ++i) {
         if (faces[i]) {
@@ -393,7 +456,15 @@ OreoSolid oreo_shell(OreoSolid solid, OreoFace faces[], int n, double thickness)
 
 OreoSolid oreo_loft(OreoWire profiles[], int n, int make_solid) {
     OREO_C_TRY
-    if (!profiles) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !profiles) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "profiles pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedShape> pVec;
     for (int i = 0; i < n; ++i) {
         if (profiles[i]) pVec.push_back(profiles[i]->ns);
@@ -448,6 +519,15 @@ OreoSolid oreo_draft(OreoSolid solid, OreoFace faces[], int n,
                      double pull_dx, double pull_dy, double pull_dz) {
     OREO_C_TRY
     if (!solid) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !faces) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "faces pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedFace> faceVec;
     for (int i = 0; i < n; ++i) {
         if (faces[i]) faceVec.push_back({oreo::IndexedName("Face", i+1), faces[i]->ns.shape()});
@@ -522,7 +602,15 @@ OreoSolid oreo_make_face_from_wire(OreoWire wire) {
 
 OreoSolid oreo_combine(OreoSolid shapes[], int n) {
     OREO_C_TRY
-    if (!shapes) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return nullptr; }
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return nullptr;
+    }
+    if (n > 0 && !shapes) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "shapes pointer is NULL but n > 0");
+        return nullptr;
+    }
     std::vector<oreo::NamedShape> vec;
     for (int i = 0; i < n; ++i) {
         if (shapes[i]) vec.push_back(shapes[i]->ns);
@@ -660,8 +748,16 @@ OreoSolid oreo_import_step_file(const char* path) {
 
 int oreo_export_step_file(OreoSolid solids[], int n, const char* path) {
     OREO_C_TRY
-    if (!solids) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
     if (!path) { internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT, "Null handle"); return 0; }
+    if (n < 0) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE, "n must be >= 0");
+        return 0;
+    }
+    if (n > 0 && !solids) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "solids pointer is NULL but n > 0");
+        return 0;
+    }
     std::vector<oreo::NamedShape> shapes;
     for (int i = 0; i < n; ++i) {
         if (solids[i]) shapes.push_back(solids[i]->ns);

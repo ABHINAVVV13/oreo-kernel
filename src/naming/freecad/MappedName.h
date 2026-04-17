@@ -25,6 +25,7 @@
 #ifndef APP_MAPPED_NAME_H
 #define APP_MAPPED_NAME_H
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -909,7 +910,8 @@ public:
     /// \param recursive: recursively find the last non-zero tagOut
     ///
     /// \return Return the end position of the tagOut field, or return -1 if not found.
-    int findTagInElementName(long* tagOut = nullptr, int* lenOut = nullptr, std::string* postfixOut = nullptr,
+    int findTagInElementName(std::int64_t* tagOut = nullptr, int* lenOut = nullptr,
+                             std::string* postfixOut = nullptr,
                              char* typeOut = nullptr, bool negative = false,
                              bool recursive = true) const;
 

@@ -23,6 +23,7 @@
 #include "compat/PreCompiled.h"
 
 #ifndef _PreComp_
+# include <cstdint>
 # include <unordered_set>
 #endif
 
@@ -49,7 +50,7 @@ void MappedName::compact() const
 }
 
 
-int MappedName::findTagInElementName(long* tagOut, int* lenOut, std::string* postfixOut,
+int MappedName::findTagInElementName(std::int64_t* tagOut, int* lenOut, std::string* postfixOut,
                                      char* typeOut, bool negative, bool recursive) const
 {
     bool hex = true;
@@ -69,7 +70,7 @@ int MappedName::findTagInElementName(long* tagOut, int* lenOut, std::string* pos
         hex = false;
     }
     int offset = pos + (int)POSTFIX_TAG_SIZE;
-    long _tag = 0;
+    std::int64_t _tag = 0;
     int _len = 0;
     char sep = 0;
     char sep2 = 0;

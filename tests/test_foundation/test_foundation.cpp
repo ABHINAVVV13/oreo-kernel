@@ -13,6 +13,7 @@
 
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <cmath>
+#include <cstdint>
 
 // ═══════════════════════════════════════════════════════════════
 // 1. TagAllocator — Deterministic per-context IDs
@@ -371,10 +372,11 @@ TEST(Determinism, SameOperationsSameTags) {
 TEST(Determinism, ResetAndReplayIdentical) {
     auto ctx = oreo::KernelContext::create();
 
-    // First run
-    long t1 = ctx->tags().nextTag();
-    long t2 = ctx->tags().nextTag();
-    long t3 = ctx->tags().nextTag();
+    // nextTag() returns int64_t; using `long` here would narrow on Windows
+    // MSVC (32-bit long) and silently pass only on Linux.
+    std::int64_t t1 = ctx->tags().nextTag();
+    std::int64_t t2 = ctx->tags().nextTag();
+    std::int64_t t3 = ctx->tags().nextTag();
 
     // Reset and replay
     ctx->tags().reset();

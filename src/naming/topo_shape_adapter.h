@@ -32,6 +32,7 @@
 #include <Precision.hxx>
 
 #include <array>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -65,21 +66,26 @@ private:
 // Call buildElementMap() after an OCCT operation to construct proper element names.
 class TopoShapeAdapter {
 public:
-    TopoShapeAdapter() : Tag(0) {}
+    TopoShapeAdapter() : Tag(0), documentId_(0) {}
 
     explicit TopoShapeAdapter(const NamedShape& ns)
         : shape_(ns.shape())
         , Tag(ns.tag())
+        , documentId_(0)
         , elementMap_(std::make_shared<Data::ElementMap>())
     {}
 
     // The main entry point — extracted from FreeCAD's makeShapeWithElementMap.
     // Builds element names for resultShape using mapper to trace history from inputShapes.
+    // documentId is the full 64-bit KernelContext document identity; it is
+    // stamped onto every encoded name as a ;:Q postfix so cross-document
+    // identity survives the (low32 | counter) tag encoding.
     void buildElementMap(
         const TopoDS_Shape& resultShape,
         const ShapeMapper& mapper,
         const std::vector<TopoShapeAdapter>& inputs,
-        const char* op);
+        const char* op,
+        std::uint64_t documentId = 0);
 
     // Convert back to NamedShape
     NamedShape toNamedShape() const;
@@ -109,14 +115,16 @@ public:
     // Check if this shape can be mapped
     bool canMapElement() const;
 
-    // Shape tag
-    long Tag;
+    // Shape tag (int64 so high bits survive Windows 32-bit `long`).
+    std::int64_t Tag;
 
     // String hasher (optional, for hash compression of long names)
     App::StringHasherRef Hasher;
 
 private:
     TopoDS_Shape shape_;
+    // Full 64-bit documentId used to stamp ;:Q postfix during naming.
+    std::uint64_t documentId_;
     Data::ElementMapPtr elementMap_;
 
     // Ancestry caches

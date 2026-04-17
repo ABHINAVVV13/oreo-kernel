@@ -26,6 +26,7 @@
 #include "compat/FCGlobal.h"
 
 #include <bitset>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -120,7 +121,7 @@ public:
      *
      * User code is not supposed to create StringID directly, but through StringHasher::getID()
      */
-    StringID(long id, QByteArray data, const Flags& flags = Flag::None)
+    StringID(std::int64_t id, QByteArray data, const Flags& flags = Flag::None)
         : _id(id),
           _data(std::move(data)),
           _flags(flags)
@@ -139,8 +140,9 @@ public:
 
     ~StringID() override;
 
-    /// Returns the ID of this StringID
-    long value() const
+    /// Returns the ID of this StringID. Widened from `long` to std::int64_t
+    /// so the full 64-bit ID survives on Windows MSVC (32-bit long).
+    std::int64_t value() const
     {
         return _id;
     }
@@ -209,7 +211,7 @@ public:
     /// Light weight structure of holding a string ID and associated index
     struct IndexID
     {
-        long id;
+        std::int64_t id;        // Widened from `long` — see StringID::value().
         int index;
 
         explicit operator bool() const
@@ -311,7 +313,7 @@ public:
     friend class StringHasher;
 
 private:
-    long _id;
+    std::int64_t _id;        // Widened from `long` — see StringID::value().
     QByteArray _data;
     QByteArray _postfix;
     StringHasher* _hasher = nullptr;
@@ -526,7 +528,7 @@ public:
         return *_sid;
     }
 
-    long value() const
+    std::int64_t value() const
     {
         if (_sid) {
             return _sid->value();
@@ -718,7 +720,7 @@ public:
      * and the original text is not persistent. The caller use this function to
      * retrieve the reference count ID object after restore
      */
-    StringIDRef getID(long id, int index = 0) const;
+    StringIDRef getID(std::int64_t id, int index = 0) const;
 
     /** Obtain the reference counted StringID object from numerical id and index
      *
@@ -730,7 +732,7 @@ public:
         return getID(id.id, id.index);
     }
 
-    std::map<long, StringIDRef> getIDMap() const;
+    std::map<std::int64_t, StringIDRef> getIDMap() const;
 
     /// Clear all string hashes
     void clear();
@@ -774,13 +776,13 @@ public:
 
 protected:
     StringID* insert(const StringIDRef& sid);
-    long lastID() const;
+    std::int64_t lastID() const;
     void saveStream(std::ostream& stream) const;
     void restoreStream(std::istream& stream, std::size_t count);
     void restoreStreamNew(std::istream& stream, std::size_t count);
 
 private:
-    std::unique_ptr<HashMap> _hashes;///< Bidirectional map of StringID and its index (a long int).
+    std::unique_ptr<HashMap> _hashes;///< Bidirectional map of StringID and its index (an int64).
     mutable std::string _filename;
 };
 }// namespace App

@@ -32,6 +32,7 @@
 #include "MappedElement.h"
 #include "StringHasher.h"
 
+#include <cstdint>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -48,7 +49,11 @@ using ElementMapPtr = std::shared_ptr<ElementMap>;
 /** Element trace callback
      *
      * The callback has the following call signature
-     *  (const std::string &name, size_t offset, long encodedTag, long tag) -> bool
+     *  (const std::string &name, size_t offset, int64 encodedTag, int64 tag) -> bool
+     *
+     * Note: tag params were widened from `long` to std::int64_t so the full
+     * 64-bit tag survives on Windows MSVC where `long` is 32-bit and would
+     * silently truncate multi-document tag high bits.
      *
      * @param name: the current element name.
      * @param offset: the offset skipping the encoded element name for the next iteration.
@@ -58,7 +63,7 @@ using ElementMapPtr = std::shared_ptr<ElementMap>;
      *
      * @sa traceElement()
  */
-typedef std::function<bool(const MappedName&, int, long, long)> TraceCallback;
+typedef std::function<bool(const MappedName&, int, std::int64_t, std::int64_t)> TraceCallback;
 
 /* This class provides for ComplexGeoData's ability to provide proper naming.
  * Specifically, ComplexGeoData uses this class for it's `_id` property.
@@ -117,11 +122,12 @@ public:
      * mapped to one element
      *
      * Note: the original proc was in the context of ComplexGeoData, which provided `Tag` access,
-     *   now you must pass in `long masterTag` explicitly.
+     *   now you must pass in `int64` masterTag explicitly. Widened from `long`
+     *   so high bits survive on Windows MSVC (32-bit long).
      */
     MappedName setElementName(const IndexedName& element,
                               const MappedName& name,
-                              long masterTag,
+                              std::int64_t masterTag,
                               const ElementIDRefs* sid = nullptr,
                               bool overwrite = false);
 
@@ -130,15 +136,16 @@ public:
      * The result is streamed to `ss` and stored in `name`.
      *
      * Note: the original proc was in the context of ComplexGeoData, which provided `Tag` access,
-     *   now you must pass in `long masterTag` explicitly.
+     *   now you must pass in `int64` masterTag explicitly. Widened from `long`
+     *   so high bits survive on Windows MSVC (32-bit long).
      */
     void encodeElementName(char element_type,
                            MappedName& name,
                            std::ostringstream& ss,
                            ElementIDRefs* sids,
-                           long masterTag,
+                           std::int64_t masterTag,
                            const char* postfix = nullptr,
-                           long tag = 0,
+                           std::int64_t tag = 0,
                            bool forceTag = false) const;
 
     /// Remove \c name from the map
@@ -147,7 +154,7 @@ public:
     /// Remove \c idx and all the MappedNames associated with it
     void erase(const IndexedName& idx);
 
-    unsigned long size() const;
+    std::size_t size() const;
 
     bool empty() const;
 
@@ -171,16 +178,17 @@ public:
      *  each child is properly hashed (cached).
      *
      * Note: the original proc was in the context of ComplexGeoData, which provided `Tag` access,
-     *   now you must pass in `long masterTag` explicitly.
+     *   now you must pass in `int64` masterTag explicitly. Widened from `long`
+     *   so high bits survive on Windows MSVC (32-bit long).
      */
-    void hashChildMaps(long masterTag);
+    void hashChildMaps(std::int64_t masterTag);
 
     struct AppExport MappedChildElements
     {
         IndexedName indexedName;
         int count;
         int offset;
-        long tag;
+        std::int64_t tag;        // Widened from long (see file header note).
         ElementMapPtr elementMap;
         QByteArray postfix;
         ElementIDRefs sids;
@@ -188,17 +196,18 @@ public:
         // prefix() has been moved to ElementNamingUtils.h
     };
 
-    /* Note: the original addChildElements passed `ComplexGeoData& master` for getting the `Tag`,
-     *   now it just passes `long masterTag`.*/
-    void addChildElements(long masterTag, const std::vector<MappedChildElements>& children);
+    /* Note: the original addChildElements passed `ComplexGeoData& master` for
+     *   getting the `Tag`, now it just passes `int64 masterTag`. */
+    void addChildElements(std::int64_t masterTag, const std::vector<MappedChildElements>& children);
 
     std::vector<MappedChildElements> getChildElements() const;
 
     std::vector<MappedElement> getAll() const;
 
-    long getElementHistory(const MappedName & name,
-                           long masterTag,
-                           MappedName *original=nullptr, std::vector<MappedName> *history=nullptr) const;
+    std::int64_t getElementHistory(const MappedName & name,
+                                   std::int64_t masterTag,
+                                   MappedName *original=nullptr,
+                                   std::vector<MappedName> *history=nullptr) const;
 
     /** Iterate through the history of the give element name with a given callback
      *
@@ -206,7 +215,7 @@ public:
      * @param cb: trace callback with call signature.
      * @sa TraceCallback
      */
-    void traceElement(const MappedName& name, long masterTag, TraceCallback cb) const;
+    void traceElement(const MappedName& name, std::int64_t masterTag, TraceCallback cb) const;
 
 
 private:
@@ -246,11 +255,11 @@ private:
     static void addPostfix(const QByteArray& postfix, std::map<QByteArray, int>& postfixMap,
                            std::vector<QByteArray>& postfixes);
 
-    /* Note: the original proc passed `ComplexGeoData& master` for getting the `Tag`,
-     *   now it just passes `long masterTag`.*/
+    /* Note: the original proc passed `ComplexGeoData& master` for getting
+     *   the `Tag`, now it just passes `int64 masterTag`. */
     MappedName renameDuplicateElement(int index, const IndexedName& element,
                                       const IndexedName& element2, const MappedName& name,
-                                      ElementIDRefs& sids, long masterTag) const;
+                                      ElementIDRefs& sids, std::int64_t masterTag) const;
 
     /** Convenience method to hash the main element name
      *

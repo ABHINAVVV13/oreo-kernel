@@ -15,10 +15,17 @@
 //   ;:U       — upper element
 //   ;:L       — lower element
 //   ;:D       — duplicate disambiguation
+//   ;:Q       — document-identity postfix (oreo extension): carries full
+//               64-bit documentId hex so cross-document identity is preserved
+//               in the name. Parsers that don't know about ;:Q can ignore it
+//               safely — it never interacts with ;:H tag extraction.
 
 #ifndef OREO_MAPPED_NAME_H
 #define OREO_MAPPED_NAME_H
 
+#include <cinttypes>
+#include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <ostream>
 #include <string>
@@ -41,6 +48,12 @@ namespace ElementCodes {
     constexpr const char* POSTFIX_DUPLICATE = ";D";
     constexpr const char* POSTFIX_INDEX = ";:I";
     constexpr const char* POSTFIX_EXTERNAL = ";:X";
+    // POSTFIX_DOC encodes the full 64-bit documentId as exactly 16 hex chars.
+    // It is written once per top-level name so that cross-document identity
+    // survives the (low32(docId) << 32 | counter) tag encoding — which throws
+    // away the high 32 bits of documentId. See docs in this header.
+    constexpr const char* POSTFIX_DOC = ";:Q";
+    constexpr size_t POSTFIX_DOC_HEX_LEN = 16;  // 64-bit docId in hex
 } // namespace ElementCodes
 
 class MappedName {
@@ -68,11 +81,33 @@ public:
         return *this;
     }
 
-    // Append hex-encoded operation tag
-    MappedName& appendTag(long tag) {
+    // Append hex-encoded operation tag. The tag is formatted as a full 64-bit
+    // hexadecimal value using PRIx64 — this is critical on Windows where
+    // `long` is 32-bit and a `%lx` format would silently truncate the high
+    // 32 bits of a 64-bit tag. Treat the tag as unsigned for formatting so
+    // negative tags encode as their two's-complement hex (matches FreeCAD).
+    MappedName& appendTag(std::int64_t tag) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%lx", tag);
+        std::snprintf(buf, sizeof(buf), "%" PRIx64,
+                      static_cast<std::uint64_t>(tag));
         data_ += ElementCodes::POSTFIX_TAG;
+        data_ += buf;
+        return *this;
+    }
+
+    // Append the full 64-bit documentId as a ";:Q<16-hex>" postfix. This is
+    // a no-op for documentId == 0 (single-document mode) to keep names short
+    // and backward-compatible. The postfix is exactly 16 hex chars so the
+    // full 64-bit documentId survives round-trips through the naming and
+    // serialization layers — the high 32 bits of documentId are otherwise
+    // lost in the (low32(docId) << 32 | counter) tag encoding used by
+    // TagAllocator. Callers that build element names with cross-document
+    // semantics should emit this once per top-level name.
+    MappedName& appendDocumentId(std::uint64_t documentId) {
+        if (documentId == 0) return *this;
+        char buf[20];
+        std::snprintf(buf, sizeof(buf), "%016" PRIx64, documentId);
+        data_ += ElementCodes::POSTFIX_DOC;
         data_ += buf;
         return *this;
     }

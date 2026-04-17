@@ -480,9 +480,11 @@ TEST(DeepHistory, History_TraceHistoryFillet) {
 TEST(ElementMapIntegrity, EMap_CountMatchesTopology) {
     auto ctx = oreo::KernelContext::create();
 
-    // KNOWN LIMITATION: Primitives (makeBox with NullMapper + empty inputs) produce
-    // empty element maps because buildElementMap returns early when inputShapes is empty.
-    // Use an operation with actual inputs to get populated element maps.
+    // After the April 2026 document-identity plumbing audit, primitives
+    // (makeBox with NullMapper + empty inputs) DO populate the element map
+    // with one IndexedName-based MappedName per sub-shape. The prior
+    // "KNOWN: primitive element map is empty" limitation has been fixed in
+    // mapShapeElements via buildPrimitiveNames().
     auto boxR = oreo::makeBox(*ctx, 10, 20, 30);
     ASSERT_TRUE(boxR.ok());
 
@@ -494,11 +496,12 @@ TEST(ElementMapIntegrity, EMap_CountMatchesTopology) {
     EXPECT_EQ(edgeCount, 12);
     EXPECT_EQ(vertexCount, 8);
 
-    // Primitive element map exists but is empty (known: no inputShapes for primitives)
+    // Primitive element map must now have one entry per sub-shape.
     auto map = boxR.value().elementMap();
     ASSERT_NE(map, nullptr);
-    EXPECT_EQ(map->count("Face"), 0)
-        << "KNOWN: primitive element map is empty (buildElementMap skips when no inputs)";
+    EXPECT_EQ(map->count("Face"), 6);
+    EXPECT_EQ(map->count("Edge"), 12);
+    EXPECT_EQ(map->count("Vertex"), 8);
 
     // Now verify with an operation that HAS inputs — fillet passes the box as input.
     // (Extrude of a solid is geometrically unusual and may crash OCCT.)
@@ -635,18 +638,25 @@ TEST(ElementMapIntegrity, EMap_DuplicateTagDisambiguated) {
     EXPECT_NE(box1.value().tag(), box2.value().tag())
         << "Two sequential operations should have different tags";
 
-    // KNOWN LIMITATION: Primitive element maps are empty because buildElementMap
-    // returns early when inputShapes is empty (NullMapper + no inputs).
+    // After the audit, primitive element maps are populated (one entry per
+    // sub-shape). Each entry's encoded tag carries the operation tag, so
+    // the two boxes' element-name sets must differ even though both are
+    // topologically 6-faced cubes.
     auto map1 = box1.value().elementMap();
     auto map2 = box2.value().elementMap();
     ASSERT_NE(map1, nullptr);
     ASSERT_NE(map2, nullptr);
 
-    // Primitive maps are empty — verify that
-    EXPECT_EQ(map1->count("Face"), 0)
-        << "KNOWN: primitive element map is empty";
-    EXPECT_EQ(map2->count("Face"), 0)
-        << "KNOWN: primitive element map is empty";
+    EXPECT_EQ(map1->count("Face"), 6);
+    EXPECT_EQ(map2->count("Face"), 6);
+
+    // Face1's encoded name must differ between the two boxes because the
+    // op tag is baked into the name via ;:H<hex>. Otherwise the post-audit
+    // disambiguation claim is unfounded.
+    auto m1Face1 = map1->getMappedName(oreo::IndexedName("Face", 1));
+    auto m2Face1 = map2->getMappedName(oreo::IndexedName("Face", 1));
+    EXPECT_NE(m1Face1.data(), m2Face1.data())
+        << "distinct op tags must produce distinct face-1 mapped names";
 
     // To verify tag disambiguation, use operations with inputs (e.g., fillet).
     // (Extrude of a solid is geometrically unusual and may crash OCCT.)
@@ -678,18 +688,21 @@ TEST(ElementMapIntegrity, EMap_Tag0Semantics) {
     oreo::NamedShape ns(mkBox.Shape(), 0);
     EXPECT_EQ(ns.tag(), 0);
 
-    // Run through mapShapeElements with tag 0 and empty inputs.
-    // KNOWN: buildElementMap returns early when inputShapes is empty,
-    // so the element map will be empty regardless of tag value.
+    // Run through mapShapeElements with tag 0 and empty inputs. After the
+    // audit, mapShapeElements takes the primitive-name branch and produces
+    // one IndexedName-based entry per sub-shape — even when the op tag is
+    // zero, which is the "single-doc, no-op-tag" default.
     oreo::NullMapper mapper;
     std::vector<oreo::NamedShape> inputs;
     auto result = oreo::mapShapeElements(*ctx, mkBox.Shape(), mapper, inputs, 0, "tagzero");
 
-    // Element map exists but is empty (no inputs => early return)
+    // Element map is now populated: 6 faces + 12 edges + 8 vertices = 26.
     auto map = result.elementMap();
     ASSERT_NE(map, nullptr);
-    EXPECT_EQ(map->count(), 0)
-        << "KNOWN: mapShapeElements with empty inputs produces empty element map";
+    EXPECT_EQ(map->count("Face"), 6);
+    EXPECT_EQ(map->count("Edge"), 12);
+    EXPECT_EQ(map->count("Vertex"), 8);
+    EXPECT_EQ(map->count(), 26);
 
     // Shape topology is preserved regardless
     int faceCount = result.countSubShapes(TopAbs_FACE);
@@ -787,8 +800,11 @@ TEST(EMapSerialization, EMapSerial_ChildMapRoundTrip) {
 
 // 104. EMapSerial_LargeTagValue
 TEST(EMapSerialization, EMapSerial_LargeTagValue) {
-    // Create MappedName, call appendTag with very large value
-    long largeTag = static_cast<long>(INT64_MAX / 2);
+    // Create MappedName, call appendTag with very large value.
+    // Widened from `long` to int64_t — on Windows `long` is 32-bit so the
+    // narrowing cast from INT64_MAX/2 would silently drop the high bits and
+    // this test would fail to exercise its own premise.
+    std::int64_t largeTag = INT64_MAX / 2;
     oreo::MappedName name("BaseName");
     name.appendTag(largeTag);
 
@@ -801,9 +817,11 @@ TEST(EMapSerialization, EMapSerial_LargeTagValue) {
     EXPECT_GT(encoded.size(), std::string("BaseName").size());
 
     // Verify we can extract a tag from it
-    long extracted = oreo::ElementMap::extractTag(name);
-    // The extracted value should be nonzero (exact match depends on hex encoding width)
-    EXPECT_NE(extracted, 0) << "Large tag extraction returned zero";
+    std::int64_t extracted = oreo::ElementMap::extractTag(name);
+    // The extracted value must round-trip exactly — after the %" PRIx64
+    // widening, extractTag parses with strtoll so no 32-bit truncation.
+    EXPECT_EQ(extracted, largeTag)
+        << "Large tag did not round-trip through appendTag/extractTag";
 }
 
 // 105. EMapSerial_IndexedNameBoundary
@@ -854,7 +872,7 @@ TEST(StringHasher, Hasher_RoundTrip) {
 
     // Verify that encodeElementName produces consistent results
     oreo::MappedName input("Face1");
-    long tag = 42;
+    std::int64_t tag = 42;
 
     auto encoded1 = oreo::ElementMap::encodeElementName("Face", input, tag, ";:M");
     auto encoded2 = oreo::ElementMap::encodeElementName("Face", input, tag, ";:M");
@@ -871,7 +889,7 @@ TEST(StringHasher, Hasher_RoundTrip) {
 TEST(StringHasher, Hasher_DifferentStrings) {
     oreo::MappedName face1("Face1");
     oreo::MappedName face2("Face2");
-    long tag = 10;
+    std::int64_t tag = 10;
 
     auto encoded1 = oreo::ElementMap::encodeElementName("Face", face1, tag, ";:M");
     auto encoded2 = oreo::ElementMap::encodeElementName("Face", face2, tag, ";:M");
@@ -883,7 +901,7 @@ TEST(StringHasher, Hasher_DifferentStrings) {
 // 108. Hasher_EmptyString
 TEST(StringHasher, Hasher_EmptyString) {
     oreo::MappedName empty("");
-    long tag = 1;
+    std::int64_t tag = 1;
 
     // Should not crash on empty input
     auto encoded = oreo::ElementMap::encodeElementName("Face", empty, tag, ";:M");
@@ -901,7 +919,7 @@ TEST(EMapAdversarial, EMapAdverse_VeryLongNameChain) {
 
     // Append 50 tags to build a very long name chain
     for (int i = 1; i <= 50; ++i) {
-        name.appendTag(static_cast<long>(i));
+        name.appendTag(static_cast<std::int64_t>(i));
         name.appendPostfix(";:M");
     }
 
@@ -918,17 +936,19 @@ TEST(EMapAdversarial, EMapAdverse_VeryLongNameChain) {
 // 110. EMapAdverse_MaxTagInName
 TEST(EMapAdversarial, EMapAdverse_MaxTagInName) {
     oreo::MappedName name("MaxTag");
-    long maxTag = static_cast<long>(INT64_MAX);
+    // Widened from `long`: on Windows `long` is 32-bit so this literal would
+    // become 0xFFFFFFFF (INT_MAX) before widening back to int64 in appendTag,
+    // defeating the point of the test.
+    std::int64_t maxTag = INT64_MAX;
     name.appendTag(maxTag);
 
     std::string encoded = name.data();
     EXPECT_FALSE(encoded.empty());
     EXPECT_NE(encoded.find(oreo::ElementCodes::POSTFIX_TAG), std::string::npos);
 
-    // Verify extraction works
-    long extracted = oreo::ElementMap::extractTag(name);
-    // Due to hex encoding width, the extracted value should be nonzero
-    EXPECT_NE(extracted, 0) << "INT64_MAX tag extraction returned zero";
+    // Verify extraction round-trips the full 64-bit value.
+    std::int64_t extracted = oreo::ElementMap::extractTag(name);
+    EXPECT_EQ(extracted, maxTag) << "INT64_MAX tag did not round-trip";
 }
 
 // 111. EMapAdverse_NegativeIndex
@@ -1003,7 +1023,7 @@ TEST(EMapAdversarial, EMapAdverse_TypeCountersAfterDeserialize) {
     for (int i = 1; i <= 5; ++i) {
         std::string mName = "FaceBase" + std::to_string(i);
         map->setElementName(oreo::IndexedName("Face", i),
-                           oreo::MappedName(mName), static_cast<long>(i));
+                           oreo::MappedName(mName), static_cast<std::int64_t>(i));
     }
     ASSERT_EQ(map->count("Face"), 5);
 

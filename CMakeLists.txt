@@ -187,6 +187,20 @@ oreo_add_test(test_determinism tests/test_determinism/test_determinism.cpp)
 # Integration (end-to-end workflows: sketch->extrude->fillet->boolean, STEP round-trip, feature tree replay)
 oreo_add_test(test_integration tests/test_integration/test_integration.cpp)
 
+# Document-identity end-to-end regression (Part 1 of the April 2026 audit).
+# Verifies that a 64-bit documentId reaches every layer unchanged on both
+# Windows MSVC (where `long` is 32-bit) and Linux GCC.
+#
+# The test currently relies on oreo_face_name / oreo_serialize /
+# oreo_deserialize / oreo_free_buffer, which are gated behind
+# OREO_ENABLE_LEGACY_API (they take explicit handles but route diagnostics
+# through the process-global internalDefaultCtx). Part 2 of the audit
+# introduces ctx-aware wrappers; until then, this test is gated on the
+# legacy surface the same way test_foundation_battle2 is.
+if(OREO_ENABLE_LEGACY_API)
+    oreo_add_test(test_doc_identity tests/test_integration/test_doc_identity.cpp)
+endif()
+
 # Smoke-fuzz (random-input robustness for deserialize / schema migrate / sketch / STEP)
 oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
 

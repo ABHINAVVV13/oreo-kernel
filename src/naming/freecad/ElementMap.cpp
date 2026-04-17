@@ -17,6 +17,8 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/io/ios_state.hpp>
+#include <cstdint>
+#include <cstdlib>
 #include <set>
 #include <sstream>
 
@@ -302,7 +304,7 @@ ElementMapPtr ElementMap::restore(::App::StringHasherRef hasherRef, std::istream
             int cIndex = 0;
             int offset = 0;
             int count = 0;
-            long tag = 0;
+            std::int64_t tag = 0;
             int mapIndex = 0;
             if (!(stream >> cIndex >> offset >> count >> tag >> mapIndex >> tmp)) {
                 FC_THROWM(Base::RuntimeError, "Invalid element child");// NOLINT
@@ -344,7 +346,9 @@ ElementMapPtr ElementMap::restore(::App::StringHasherRef hasherRef, std::istream
                     // instead of hex by accident. To simplify maintenance
                     // of backward compatibility, it is not corrected, and
                     // just restored as decimal here.
-                    long childID = strtol(tokens[k].c_str(), nullptr, decBase);
+                    // strtoll: 64-bit parse so Windows (long=32) doesn't
+                    // silently truncate child string IDs.
+                    std::int64_t childID = std::strtoll(tokens[k].c_str(), nullptr, decBase);
                     auto sid = hasherRef->getID(childID);
                     if (!sid) {
                         childSIDWarn = "Missing element child string id";
@@ -395,11 +399,11 @@ ElementMapPtr ElementMap::restore(::App::StringHasherRef hasherRef, std::istream
                             FC_THROWM(Base::RuntimeError, "Invalid element entry");// NOLINT
                         }
                         ++offset;
-                        long elementNameIndex = strtol(tokens[0].c_str() + 1, nullptr, hexBase);
+                        std::int64_t elementNameIndex = std::strtoll(tokens[0].c_str() + 1, nullptr, hexBase);
                         if (elementNameIndex <= 0 || elementNameIndex > (int)postfixes.size()) {
                             FC_THROWM(Base::RuntimeError, "Invalid element name index");// NOLINT
                         }
-                        long elementIndex = strtol(tokens[1].c_str(), nullptr, hexBase);
+                        std::int64_t elementIndex = std::strtoll(tokens[1].c_str(), nullptr, hexBase);
                         ref->name = MappedName(
                             IndexedName::fromConst(postfixes[elementNameIndex - 1].c_str(),
                                                    static_cast<int>(elementIndex)));
@@ -417,7 +421,7 @@ ElementMapPtr ElementMap::restore(::App::StringHasherRef hasherRef, std::istream
                 }
 
                 if (tokens[offset] != "0") {
-                    long postfixIndex = strtol(tokens[offset].c_str(), nullptr, hexBase);
+                    std::int64_t postfixIndex = std::strtoll(tokens[offset].c_str(), nullptr, hexBase);
                     if (postfixIndex <= 0 || postfixIndex > (int)postfixes.size()) {
                         postfixWarn = "Invalid element postfix index";
                     }
@@ -446,7 +450,7 @@ ElementMapPtr ElementMap::restore(::App::StringHasherRef hasherRef, std::istream
                     }
                 }
                 for (int l = offset + 1; l < (int)tokens.size(); ++l) {
-                    long readID = strtol(tokens[l].c_str(), nullptr, hexBase);
+                    std::int64_t readID = std::strtoll(tokens[l].c_str(), nullptr, hexBase);
                     auto sid = hasherRef->getID(readID);
                     if (!sid) {
                         hasherIDWarn = "Invalid element name string id";
@@ -526,7 +530,7 @@ void ElementMap::addPostfix(const QByteArray& postfix, std::map<QByteArray, int>
 }
 
 MappedName ElementMap::setElementName(const IndexedName& element, const MappedName& name,
-                                      long masterTag, const ElementIDRefs* sid, bool overwrite)
+                                      std::int64_t masterTag, const ElementIDRefs* sid, bool overwrite)
 {
     if (!element) {
         throw Base::ValueError("Invalid input");
@@ -589,8 +593,8 @@ MappedName ElementMap::setElementName(const IndexedName& element, const MappedNa
 
 // try to hash element name while preserving the source tag
 void ElementMap::encodeElementName(char element_type, MappedName& name, std::ostringstream& ss,
-                                   ElementIDRefs* sids, long masterTag, const char* postfix,
-                                   long tag, bool forceTag) const
+                                   ElementIDRefs* sids, std::int64_t masterTag, const char* postfix,
+                                   std::int64_t tag, bool forceTag) const
 {
     if (postfix && (postfix[0] != 0)) {
         if (!boost::starts_with(postfix, ELEMENT_MAP_PREFIX)) {
@@ -598,7 +602,7 @@ void ElementMap::encodeElementName(char element_type, MappedName& name, std::ost
         }
         ss << postfix;
     }
-    long inputTag = 0;
+    std::int64_t inputTag = 0;
     if (!forceTag && (ss.tellp() == 0)) {
         if ((tag == 0) || tag == masterTag) {
             return;
@@ -625,7 +629,7 @@ void ElementMap::encodeElementName(char element_type, MappedName& name, std::ost
             // previous level name, and check for its tag.
             Data::MappedName mappedName(name, 0, pos);
             Data::MappedName prev = dehashElementName(mappedName);
-            long prevTag = 0;
+            std::int64_t prevTag = 0;
             prev.findTagInElementName(&prevTag, nullptr, nullptr, nullptr, true);
             if (prevTag == inputTag || prevTag == -inputTag) {
                 name = mappedName;
@@ -720,7 +724,7 @@ MappedName ElementMap::dehashElementName(const MappedName& name) const
 
 MappedName ElementMap::renameDuplicateElement(int index, const IndexedName& element,
                                               const IndexedName& element2, const MappedName& name,
-                                              ElementIDRefs& sids, long masterTag) const
+                                              ElementIDRefs& sids, std::int64_t masterTag) const
 {
     int idx {0};
 #ifdef FC_DEBUG
@@ -774,7 +778,7 @@ void ElementMap::erase(const IndexedName& idx)
     ref.clear();
 }
 
-unsigned long ElementMap::size() const
+std::size_t ElementMap::size() const
 {
     return mappedNames.size() + childElementSize;
 }
@@ -979,7 +983,7 @@ bool ElementMap::hasChildElementMap() const
     return !childElements.empty();
 }
 
-void ElementMap::hashChildMaps(long masterTag)
+void ElementMap::hashChildMaps(std::int64_t masterTag)
 {
     if (childElements.empty() || !this->hasher) {
         return;
@@ -989,7 +993,7 @@ void ElementMap::hashChildMaps(long masterTag)
         for (auto& indexedChild : indexedNameIndexedElements.second.children) {
             auto& child = indexedChild.second;
             int len = 0;
-            long tag = 0;
+            std::int64_t tag = 0;
             int pos = MappedName::fromRawData(child.postfix)
                           .findTagInElementName(&tag, &len, nullptr, nullptr, false, false);
             // TODO: What is this 10?
@@ -1041,7 +1045,7 @@ void ElementMap::collectChildMaps(std::map<const ElementMap*, int>& childMapSet,
     res.first->second = (int)childMaps.size();
 }
 
-void ElementMap::addChildElements(long masterTag, const std::vector<MappedChildElements>& children)
+void ElementMap::addChildElements(std::int64_t masterTag, const std::vector<MappedChildElements>& children)
 {
     std::ostringstream ss;
     ss << std::hex;
@@ -1279,10 +1283,10 @@ std::vector<MappedElement> ElementMap::getAll() const
     return ret;
 }
 
-long ElementMap::getElementHistory(const MappedName& name, long masterTag, MappedName* original,
-                                   std::vector<MappedName>* history) const
+std::int64_t ElementMap::getElementHistory(const MappedName& name, std::int64_t masterTag, MappedName* original,
+                                           std::vector<MappedName>* history) const
 {
-    long tag = 0;
+    std::int64_t tag = 0;
     int len = 0;
     int pos = name.findTagInElementName(&tag, &len, nullptr, nullptr, true);
     if (pos < 0) {
@@ -1324,7 +1328,7 @@ long ElementMap::getElementHistory(const MappedName& name, long masterTag, Mappe
             ret = dehashElementName(MappedName::fromRawData(ret, 0, len));
         }
 
-        long tag2 = 0;
+        std::int64_t tag2 = 0;
         pos = ret.findTagInElementName(&tag2, &len, nullptr, nullptr, true);
         if (pos < 0 || (tag2 != tag && tag2 != -tag && tag != masterTag && -tag != masterTag)) {
             return tag;
@@ -1336,9 +1340,9 @@ long ElementMap::getElementHistory(const MappedName& name, long masterTag, Mappe
     }
 }
 
-void ElementMap::traceElement(const MappedName& name, long masterTag, TraceCallback cb) const
+void ElementMap::traceElement(const MappedName& name, std::int64_t masterTag, TraceCallback cb) const
 {
-    long encodedTag = 0;
+    std::int64_t encodedTag = 0;
     int len = 0;
 
     auto pos = name.findTagInElementName(&encodedTag, &len, nullptr, nullptr, true);
@@ -1350,7 +1354,7 @@ void ElementMap::traceElement(const MappedName& name, long masterTag, TraceCallb
         return;
     }
 
-    std::set<long> tagSet;
+    std::set<std::int64_t> tagSet;
 
     std::vector<MappedName> names;
     if (masterTag) {

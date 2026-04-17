@@ -24,6 +24,7 @@
 
 #include <QCryptographicHash>
 #include <QHash>
+#include <cstdint>
 #include <deque>
 
 #include "compat/BaseStubs.h"
@@ -75,7 +76,7 @@ struct StringIDHasher
 
 using HashMapBase =
     boost::bimap<boost::bimaps::unordered_set_of<StringID*, StringIDHasher, StringIDHasher>,
-                 boost::bimaps::set_of<long>>;
+                 boost::bimaps::set_of<std::int64_t>>;
 
 class StringHasher::HashMap: public HashMapBase
 {
@@ -239,7 +240,7 @@ int StringHasher::getThreshold() const
     return _hashes->Threshold;
 }
 
-long StringHasher::lastID() const
+std::int64_t StringHasher::lastID() const
 {
     if (_hashes->right.empty()) {
         return 0;
@@ -430,7 +431,7 @@ StringIDRef StringHasher::getID(const Data::MappedName& name, const QVector<Stri
     return {insert(newStringIDRef), indexed.getIndex()};
 }
 
-StringIDRef StringHasher::getID(long id, int index) const
+StringIDRef StringHasher::getID(std::int64_t id, int index) const
 {
     if (id <= 0) {
         return {};
@@ -542,9 +543,9 @@ PyObject* StringHasher::getPyObject()
     Py_RETURN_NONE; // StringHasherPy removed
 }
 
-std::map<long, StringIDRef> StringHasher::getIDMap() const
+std::map<std::int64_t, StringIDRef> StringHasher::getIDMap() const
 {
-    std::map<long, StringIDRef> ret;
+    std::map<std::int64_t, StringIDRef> ret;
     for (auto& hasher : _hashes->right) {
         ret.emplace_hint(ret.end(), hasher.first, StringIDRef(hasher.second));
     }

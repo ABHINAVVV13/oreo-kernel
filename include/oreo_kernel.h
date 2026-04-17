@@ -97,6 +97,26 @@ typedef struct {
 OREO_API OreoContext oreo_context_create(void);
 OREO_API void       oreo_context_free(OreoContext ctx);
 
+// Create a context bound to a specific document identity.
+//
+//   documentId    — 64-bit document identifier. Must be unique within the
+//                   process. 0 means "single-document / default mode" (same
+//                   as oreo_context_create).
+//   documentUUID  — optional; if non-NULL and non-empty, documentId is
+//                   derived from it via SipHash-2-4 and the `documentId`
+//                   argument is ignored.
+//
+// Returns NULL on failure (including a collision on the low-32 bits with
+// an existing full-64-bit documentId — query oreo_last_error via a temp
+// context for details).
+OREO_API OreoContext oreo_context_create_with_doc(
+    uint64_t documentId,
+    const char* documentUUID);
+
+// Query the full 64-bit documentId of an existing context. Returns 0 for a
+// null handle or a context created in single-document mode.
+OREO_API uint64_t oreo_context_document_id(OreoContext ctx);
+
 // Get diagnostics from the context (replaces oreo_last_error for new code)
 OREO_API int        oreo_context_has_errors(OreoContext ctx);
 OREO_API int        oreo_context_has_warnings(OreoContext ctx);

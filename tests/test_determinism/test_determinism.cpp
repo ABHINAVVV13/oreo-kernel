@@ -381,10 +381,18 @@ TEST(DeterminismGolden, CanonicalOpSequenceHash) {
                  "[DeterminismGolden.CanonicalOpSequenceHash] actual = 0x%016llx\n",
                  static_cast<unsigned long long>(actual));
 
-    // Recorded on MSVC Release/x64 on 2026-04-17. A mismatch on another
-    // platform/compiler/arch is either a determinism regression or a legitimate
-    // expected divergence — investigate before blindly updating this value.
-    constexpr uint64_t kGolden = 0xe997ca4bf5c3dc89ULL;
+    // Recorded on MSVC Release/x64 on 2026-04-17 after Part 1 of the
+    // document-identity plumbing audit. The audit legitimately changed:
+    //   * MappedName tag format (%lx → %" PRIx64) — 32-bit tags on Windows
+    //     now format as full 16-char hex instead of being truncated
+    //   * Primitive-op element-name generation — makeBox et al. now emit
+    //     default IndexedName-based mapped names (previously empty)
+    //   * serialize wire layout — an explicit 1-byte version prefix
+    // Any of those changes shifts the bytes being hashed, so the golden was
+    // re-recorded. A mismatch on another platform/compiler/arch is either
+    // a determinism regression or a legitimate expected divergence —
+    // investigate before blindly updating this value.
+    constexpr uint64_t kGolden = 0x62cdedb36425cf21ULL;
 
     if constexpr (kGolden == 0ULL) {
         ADD_FAILURE() << "Golden not yet recorded. Observed hash = "

@@ -11,18 +11,22 @@
 #include "shape_mapper.h"
 #include "core/kernel_context.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace oreo {
 
-// Context-aware version (preferred)
+// Context-aware version (preferred).
+// opTag is the per-operation tag from ctx.tags().nextTag() — it is int64
+// so that multi-document tags (which pack documentId into the high 32 bits)
+// are not truncated on Windows where `long` is 32-bit.
 NamedShape mapShapeElements(
     KernelContext& ctx,
     const TopoDS_Shape& resultShape,
     const ShapeMapper& mapper,
     const std::vector<NamedShape>& inputShapes,
-    long opTag,
+    std::int64_t opTag,
     const char* opName = nullptr);
 
 } // namespace oreo

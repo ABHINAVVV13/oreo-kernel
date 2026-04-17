@@ -26,6 +26,8 @@
 #include "IndexedName.h"
 #include "MappedName.h"
 
+#include <cstdint>
+
 
 namespace App
 {
@@ -101,7 +103,8 @@ struct AppExport MappedElement
 
 struct AppExport HistoryItem {
     App::DocumentObject *obj;
-    long tag;
+    std::int64_t tag;        // Widened from long so Windows MSVC preserves
+                             // high bits; see naming/README if added.
     Data::MappedName element;
     Data::IndexedName index;
     std::vector<Data::MappedName> intermediates;

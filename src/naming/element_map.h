@@ -19,6 +19,7 @@
 #include "indexed_name.h"
 #include "mapped_name.h"
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -34,14 +35,16 @@ using ElementMapPtr = std::shared_ptr<ElementMap>;
 // element map along with the postfix applied during the operation.
 struct ChildElementMap {
     ElementMapPtr map;
-    long tag;                // Operation tag that created this child relationship
+    std::int64_t tag;        // Operation tag (int64 — widened from long so
+                             // high bits survive on Windows MSVC, where long
+                             // is 32-bit and would silently truncate).
     std::string postfix;     // Disambiguation postfix (for multi-input ops)
 };
 
 // History trace item — one step in the derivation chain of an element name
 struct HistoryTraceItem {
     MappedName name;
-    long tag;
+    std::int64_t tag;
     std::string operation;   // "Extrude", "Fillet", etc.
 };
 
@@ -55,7 +58,7 @@ public:
     // for a different index, disambiguates by appending ";D<n>" suffix.
     // Returns the actual MappedName used (may differ from input if disambiguated).
     MappedName setElementName(const IndexedName& index, const MappedName& name,
-                              long tag = 0, bool overwrite = false);
+                              std::int64_t tag = 0, bool overwrite = false);
 
     // Get the mapped name for an indexed element. Returns empty if not found.
     MappedName getMappedName(const IndexedName& index) const;
@@ -92,7 +95,7 @@ public:
 
     // Import names from a child element map into this map.
     // Used during mapShapeElements to pull in input names.
-    void importChildNames(const ElementMap& childMap, long childTag,
+    void importChildNames(const ElementMap& childMap, std::int64_t childTag,
                           const std::string& childPostfix);
 
     // ─── History encoding ────────────────────────────────────
@@ -105,7 +108,7 @@ public:
     static MappedName encodeElementName(
         const char* type,
         const MappedName& inputName,
-        long tag,
+        std::int64_t tag,
         const char* postfix);
 
     // ─── History tracing ─────────────────────────────────────
@@ -119,13 +122,24 @@ public:
     // stripping all operation postfixes.
     static std::string extractBaseName(const MappedName& name);
 
-    // Extract the operation tag from a mapped name postfix
-    static long extractTag(const MappedName& name);
+    // Extract the operation tag from a mapped name postfix. Returns a signed
+    // 64-bit value so that tags produced in multi-document mode (with high
+    // bits derived from documentId) are preserved without truncation on
+    // platforms where `long` is 32-bit (Windows MSVC).
+    static std::int64_t extractTag(const MappedName& name);
+
+    // Extract the full 64-bit documentId from a mapped name's ;:Q postfix.
+    // Returns 0 if the name has no ;:Q postfix (single-document mode).
+    static std::uint64_t extractDocumentId(const MappedName& name);
 
     // ─── Serialization ───────────────────────────────────────
 
-    // Binary format version (bump when format changes)
-    static constexpr uint32_t FORMAT_VERSION = 1;
+    // Binary format version (bump when format changes).
+    // v2 widens per-entry `tag` from 32-bit (implicit on Windows, explicit on
+    // Linux-long) to a full 64-bit value and introduces an explicit layout
+    // version in the element-map header. v1 files were produced before the
+    // cross-platform widening audit — they are no longer accepted.
+    static constexpr std::uint32_t FORMAT_VERSION = 2;
 
     // Serialize to binary buffer
     std::vector<uint8_t> serialize() const;

@@ -56,7 +56,7 @@ struct ShapeInfo {
 
 struct NameKey {
     Data::MappedName name;
-    long tag = 0;
+    std::int64_t tag = 0;
     int shapetype = 0;
 
     NameKey() = default;
@@ -265,7 +265,11 @@ std::vector<TopoShapeAdapter> TopoShapeAdapter::fromNamedShapes(const std::vecto
 }
 
 NamedShape TopoShapeAdapter::toNamedShape() const {
-    // Convert back to our NamedShape with element names from Data::ElementMap
+    // Convert back to our NamedShape with element names from Data::ElementMap.
+    // When documentId_ is non-zero, stamp every mapped name with a ;:Q
+    // postfix that carries the full 64-bit documentId — this preserves
+    // high-bit document identity that is otherwise truncated by the
+    // TagAllocator's (low32(docId) << 32 | counter) tag encoding.
     auto oreoMap = std::make_shared<ElementMap>();
 
     if (elementMap_) {
@@ -279,6 +283,10 @@ NamedShape TopoShapeAdapter::toNamedShape() const {
             // dataBytes().toStdString() is WRONG — it drops the postfix portion
             // which contains the operation history chain (;:H tags, ;:M/;:G etc).
             MappedName name(elem.name.toString());
+            // Stamp docId once per name. appendDocumentId is a no-op when
+            // documentId_ == 0, so single-document output is byte-identical
+            // to the pre-audit format.
+            name.appendDocumentId(documentId_);
             oreoMap->setElementName(idx, name, Tag);
         }
     }
@@ -294,9 +302,11 @@ void TopoShapeAdapter::buildElementMap(
     const TopoDS_Shape& shape,
     const ShapeMapper& mapper,
     const std::vector<TopoShapeAdapter>& inputShapes,
-    const char* op)
+    const char* op,
+    std::uint64_t documentId)
 {
     shape_ = shape;
+    documentId_ = documentId;
     cacheBuilt_ = false;
 
     if (shape_.IsNull()) return;

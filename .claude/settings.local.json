@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(cmake --build build_msvc --config Release)",
+      "Bash(ctest -C Release --output-on-failure)"
+    ]
+  }
+}
