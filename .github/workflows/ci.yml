@@ -35,7 +35,7 @@ jobs:
   # Linux GCC release build + full test suite
   # ────────────────────────────────────────────────────────────
   linux-gcc-release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +49,17 @@ jobs:
             libocct-data-exchange-dev libocct-visualization-dev \
             libgtest-dev libeigen3-dev nlohmann-json3-dev \
             libboost-all-dev qt6-base-dev
+
+      - name: Show OCCT install layout (debug)
+        run: |
+          echo "── apt OCCT version ──"
+          dpkg -l | grep libocct || true
+          echo "── CMake config search paths ──"
+          ls -la /usr/lib/x86_64-linux-gnu/cmake/ 2>/dev/null | head -30 || true
+          ls -la /usr/lib/cmake/ 2>/dev/null | head -30 || true
+          echo "── OCCT cmake config locations ──"
+          find /usr -name 'OpenCASCADEConfig.cmake' -o -name 'opencascade-config.cmake' 2>/dev/null
+          find /usr -name 'OpenCASCADE*.cmake' 2>/dev/null | head -10
 
       - name: Configure
         run: |
@@ -76,7 +87,7 @@ jobs:
   # server-safe configuration)
   # ────────────────────────────────────────────────────────────
   linux-gcc-nolegacy:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +124,7 @@ jobs:
   # but the suite is small enough to fit in CI budget.
   # ────────────────────────────────────────────────────────────
   linux-clang-asan-ubsan:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -154,7 +165,7 @@ jobs:
   # divergent corpora; deeper runs are scheduled separately.
   # ────────────────────────────────────────────────────────────
   linux-clang-fuzz:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
