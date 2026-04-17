@@ -181,6 +181,18 @@ oreo_add_test(test_foundation_obs tests/test_foundation/test_foundation_obs.cpp)
 # Foundation new features (KernelContext clone/merge/safeReset, cancellation, progress, combinators, validators, schema introspection)
 oreo_add_test(test_foundation_new_features tests/test_foundation/test_foundation_new_features.cpp)
 
+# Determinism (tag streams, shape hashes, golden op-sequence, cross-platform-intended)
+oreo_add_test(test_determinism tests/test_determinism/test_determinism.cpp)
+
+# Integration (end-to-end workflows: sketch->extrude->fillet->boolean, STEP round-trip, feature tree replay)
+oreo_add_test(test_integration tests/test_integration/test_integration.cpp)
+
+# Smoke-fuzz (random-input robustness for deserialize / schema migrate / sketch / STEP)
+oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
+
+# Perf regression (generous time budgets — catches 10x regressions, not microbenchmark drift)
+oreo_add_test(test_perf tests/test_perf/test_perf.cpp)
+
 # Tessellation / Meshing
 oreo_add_test(test_mesh tests/test_mesh/test_mesh.cpp)
 oreo_add_test(test_mesh_export tests/test_mesh/test_mesh_export.cpp)
