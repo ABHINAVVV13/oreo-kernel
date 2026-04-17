@@ -6,7 +6,8 @@
       "Bash(ctest -C Release --output-on-failure)",
       "Bash(cmake --build build_msvc --config Release --target test_doc_identity)",
       "Bash(find /c/Users/AbhinavPutta/Desktop/projects/oreoCAD/oreo-kernel/tests/test_sketch -name \"*.cpp\" -exec wc -l {} +)",
-      "Bash(awk -F: '{sum+=$2} END {print \"Total gtest cases: ~\" sum}')"
+      "Bash(awk -F: '{sum+=$2} END {print \"Total gtest cases: ~\" sum}')",
+      "Bash(grep -E '\\\\.\\(sh|bash\\)$')"
     ]
   }
 }
