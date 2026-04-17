@@ -2,21 +2,22 @@
 //
 // Every operation takes a KernelContext& as its first parameter.
 //
-// Wire format (current version = 1):
+// Wire format (current version = 3 — identity-model v2 hardening):
 //
-//   [format_version : u8 = 1]
+//   [format_version : u8 = 3]
 //   [brep_len       : u32]
 //   [brep_data      : brep_len bytes]
 //   [map_len        : u32]
-//   [map_data       : map_len bytes]   <- uses the inner ElementMap format
-//   [tag            : i64]
+//   [map_data       : map_len bytes]   <- uses the inner ElementMap format (v3)
+//   [root_identity  : {u64 documentId, u64 counter}]  <- 16 bytes
 //
-// The u8 version byte is new in the April 2026 foundation-audit hardening
-// pass. Buffers without a version byte (pre-audit files) deserialize as if
-// they have version 0 — which is not equal to OREO_SERIALIZE_FORMAT and is
-// rejected with DESERIALIZE_FAILED. This is intentional: the pre-audit
-// format truncated int64 tags to 32 bits on Windows (long=32), so silently
-// accepting those files would return tags whose high bits had been zeroed.
+// Legacy reader (version = 1) is kept for backward compatibility with
+// buffers produced before Phase 4. v1 had an 8-byte int64 tag at the
+// tail; the v1 reader decodes it via decodeV1Scalar with the calling
+// context's documentId as hint. See docs/identity-model.md §5.3.
+// Version 2 is RESERVED/ILLEGAL at the outer layer and is rejected —
+// it was never written to disk; skipping to 3 keeps the outer and
+// inner (ElementMap) FORMAT_VERSION numbers unified.
 
 #ifndef OREO_SERIALIZE_H
 #define OREO_SERIALIZE_H
@@ -33,7 +34,10 @@ namespace oreo {
 
 // Current on-disk format version. Bump when any byte in the layout moves.
 // See the file header for the full wire layout.
-constexpr std::uint8_t OREO_SERIALIZE_FORMAT_VERSION = 1;
+constexpr std::uint8_t OREO_SERIALIZE_FORMAT_VERSION = 3;
+
+// Legacy version the reader still accepts (read-only).
+constexpr std::uint8_t OREO_SERIALIZE_FORMAT_VERSION_V1_LEGACY = 1;
 
 // ═══════════════════════════════════════════════════════════════
 // Context-aware serialization functions

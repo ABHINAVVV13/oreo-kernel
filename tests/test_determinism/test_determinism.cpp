@@ -381,18 +381,22 @@ TEST(DeterminismGolden, CanonicalOpSequenceHash) {
                  "[DeterminismGolden.CanonicalOpSequenceHash] actual = 0x%016llx\n",
                  static_cast<unsigned long long>(actual));
 
-    // Recorded on MSVC Release/x64 on 2026-04-17 after Part 1 of the
-    // document-identity plumbing audit. The audit legitimately changed:
-    //   * MappedName tag format (%lx → %" PRIx64) — 32-bit tags on Windows
-    //     now format as full 16-char hex instead of being truncated
-    //   * Primitive-op element-name generation — makeBox et al. now emit
-    //     default IndexedName-based mapped names (previously empty)
-    //   * serialize wire layout — an explicit 1-byte version prefix
-    // Any of those changes shifts the bytes being hashed, so the golden was
-    // re-recorded. A mismatch on another platform/compiler/arch is either
-    // a determinism regression or a legitimate expected divergence —
-    // investigate before blindly updating this value.
-    constexpr uint64_t kGolden = 0x62cdedb36425cf21ULL;
+    // Recorded on MSVC Release/x64 on 2026-04-17 after the identity-model
+    // v2 hardening (Phases 1–3). Changes that shifted the hashed bytes
+    // relative to the pre-v2 golden:
+    //   * MappedName now emits ;:P<16hex>.<16hex> (33 chars fixed-width)
+    //     as the per-op identity carrier, replacing variable-length ;:H<hex>.
+    //     The ;:P form carries the full 64-bit documentId and counter so
+    //     high docId bits survive end-to-end.
+    //   * ElementMap serialization FORMAT_VERSION bumped 2 → 3. Per-entry
+    //     and per-child ShapeIdentity fields are 16 bytes (two u64s)
+    //     instead of an 8-byte int64 v1-squeezed scalar.
+    //   * Primitive-op element-name generation (pre-v2 audit) — makeBox
+    //     et al. emit default IndexedName-based mapped names.
+    // A mismatch on another platform/compiler/arch is either a determinism
+    // regression or a legitimate expected divergence — investigate before
+    // blindly updating this value.
+    constexpr uint64_t kGolden = 0xe637504ebdaffb36ULL;
 
     if constexpr (kGolden == 0ULL) {
         ADD_FAILURE() << "Golden not yet recorded. Observed hash = "

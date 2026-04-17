@@ -92,7 +92,7 @@ GeomResult draft(KernelContext& ctx,
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Draft");
     return scope.makeResult(mapped);
@@ -166,7 +166,7 @@ GeomResult hole(KernelContext& ctx,
         ctx.diag().error(ErrorCode::OCCT_FAILURE, "Failed to create hole cylinder");
         return scope.makeFailure<NamedShape>();
     }
-    auto cylTag = ctx.tags().nextTag();
+    auto cylTag = ctx.tags().nextShapeIdentity();
     NullMapper nullMapper;
     auto cylinder = mapShapeElements(ctx, cylShape, nullMapper, {}, cylTag, "HoleCylinder");
 

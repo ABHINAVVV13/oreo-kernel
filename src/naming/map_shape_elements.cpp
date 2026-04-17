@@ -2,9 +2,12 @@
 // FreeCAD element-mapping algorithm.
 //
 // Context-aware: receives KernelContext& for tag allocation and diagnostics.
+// Phase 3 identity-v2: opId is a full ShapeIdentity, not a squeezed int64.
 
 #include "map_shape_elements.h"
 #include "topo_shape_adapter.h"
+
+#include "core/shape_identity_v1.h"
 
 #include <TopExp.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
@@ -18,13 +21,13 @@ namespace {
 // `result`. Used when there are no input shapes to trace history from —
 // primitive operations (makeBox, makeCylinder, …). Without this, the
 // legacy FreeCAD buildElementMap path early-returns on empty input and
-// leaves the element map empty, which means oreo_face_name returns "" for
-// primitives. The names produced here carry the full 64-bit documentId as a
-// ;:Q postfix so the DocumentIdentityEndToEnd regression test observes it.
+// leaves the element map empty, which means element accessors would
+// return "". Each name carries a ;:P<16hex>.<16hex> identity postfix
+// (the v2 canonical carrier). No separate ;:Q postfix is emitted —
+// ;:P carries the full documentId inline.
 NamedShape buildPrimitiveNames(
     const TopoDS_Shape& result,
-    std::int64_t opTag,
-    std::uint64_t documentId)
+    ShapeIdentity opId)
 {
     auto map = std::make_shared<ElementMap>();
 
@@ -43,17 +46,15 @@ NamedShape buildPrimitiveNames(
         TopExp::MapShapes(result, t.occt, subMap);
         for (int i = 1; i <= subMap.Extent(); ++i) {
             IndexedName idx(t.name, i);
-            // Base name: "Face1" / "Edge3" etc. Then append the op tag so
-            // downstream ops can trace back to this primitive, and finally
-            // the ;:Q documentId postfix when multi-doc.
             MappedName name(std::string(t.name) + std::to_string(i));
-            name.appendTag(opTag);
-            name.appendDocumentId(documentId);
-            map->setElementName(idx, name, opTag);
+            // v2 canonical carrier: ";:P<16hex>.<16hex>". Full
+            // documentId + counter in one postfix; no separate ;:Q.
+            name.appendShapeIdentity(opId);
+            map->setElementName(idx, name, /*tag=*/0);
         }
     }
 
-    return NamedShape(result, map, opTag);
+    return NamedShape(result, map, opId);
 }
 
 } // anonymous namespace
@@ -63,40 +64,44 @@ NamedShape mapShapeElements(
     const TopoDS_Shape& resultShape,
     const ShapeMapper& mapper,
     const std::vector<NamedShape>& inputShapes,
-    std::int64_t opTag,
+    ShapeIdentity opId,
     const char* opName)
 {
     if (resultShape.IsNull()) {
         auto map = std::make_shared<ElementMap>();
-        return NamedShape(resultShape, map, opTag);
+        return NamedShape(resultShape, map, opId);
     }
-
-    // Retrieve the full 64-bit documentId from the context. When non-zero it
-    // is stamped as a ;:Q postfix on every generated name so the high 32
-    // bits of documentId survive the TagAllocator's (low32 | counter)
-    // encoding on both MSVC (32-bit long) and GCC (64-bit long).
-    const std::uint64_t documentId = ctx.tags().documentId();
 
     // Primitive op: no inputs to trace history from. The FreeCAD
     // buildElementMap algorithm early-returns in this case, so if we let it
-    // run the resulting element map would be empty and oreo_face_name etc.
+    // run the resulting element map would be empty and element accessors
     // would return "". Generate default IndexedName-based names instead.
     if (inputShapes.empty()) {
         (void)mapper;  // unused in the primitive path
         (void)opName;
-        return buildPrimitiveNames(resultShape, opTag, documentId);
+        return buildPrimitiveNames(resultShape, opId);
     }
 
-    // Convert inputs to adapters
+    // Convert inputs to adapters.
     auto inputAdapters = TopoShapeAdapter::fromNamedShapes(inputShapes);
 
-    // Run the full FreeCAD algorithm
+    // Run the full FreeCAD algorithm. The FreeCAD extraction's internal
+    // contract still uses int64 for master tags (adapter.Tag), so we
+    // pass encodeV1Scalar(opId) — lossless for identities the allocator
+    // produces (counter ≤ INT64_MAX in single-doc, ≤ UINT32_MAX in
+    // multi-doc). The full documentId goes through documentId_ so any
+    // names the adapter emits can stamp the full 64-bit identity. The
+    // NamedShape we return carries opId NATIVELY — we don't re-decode.
     TopoShapeAdapter adapter;
-    adapter.Tag = opTag;
-    adapter.buildElementMap(resultShape, mapper, inputAdapters, opName, documentId);
+    adapter.Tag = (opId.counter == 0) ? 0 : oreo::encodeV1Scalar(opId);
+    adapter.buildElementMap(resultShape, mapper, inputAdapters, opName,
+                            opId.documentId);
 
-    // Convert back to NamedShape
-    return adapter.toNamedShape();
+    // toNamedShape reconstructs a ShapeIdentity from adapter.Tag +
+    // documentId_. Re-wrap with the authoritative opId so callers see
+    // the exact identity the allocator handed out, not a round-trip.
+    NamedShape ns = adapter.toNamedShape();
+    return NamedShape(ns.shape(), ns.elementMap(), opId);
 }
 
 } // namespace oreo

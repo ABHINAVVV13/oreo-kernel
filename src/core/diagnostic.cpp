@@ -31,6 +31,10 @@ const char* errorCodeToString(ErrorCode code) {
         case ErrorCode::STEP_EXPORT_FAILED:  return "STEP_EXPORT_FAILED";
         case ErrorCode::SERIALIZE_FAILED:    return "SERIALIZE_FAILED";
         case ErrorCode::DESERIALIZE_FAILED:  return "DESERIALIZE_FAILED";
+        case ErrorCode::LEGACY_IDENTITY_DOWNGRADE:    return "LEGACY_IDENTITY_DOWNGRADE";
+        case ErrorCode::V2_IDENTITY_NOT_REPRESENTABLE: return "V2_IDENTITY_NOT_REPRESENTABLE";
+        case ErrorCode::MALFORMED_ELEMENT_NAME:       return "MALFORMED_ELEMENT_NAME";
+        case ErrorCode::BUFFER_TOO_SMALL:             return "BUFFER_TOO_SMALL";
         case ErrorCode::NOT_INITIALIZED:     return "NOT_INITIALIZED";
         case ErrorCode::INTERNAL_ERROR:      return "INTERNAL_ERROR";
         case ErrorCode::NOT_SUPPORTED:       return "NOT_SUPPORTED";

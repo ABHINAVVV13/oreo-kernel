@@ -358,7 +358,7 @@ OperationResult<StepImportResult> importStepFile(KernelContext& ctx, const std::
         fixShape(shape);
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     auto map = initImportedElementMap(shape);
     result.shape = NamedShape(shape, map, tag);
     result.metadata = meta;

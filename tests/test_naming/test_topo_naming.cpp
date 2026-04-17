@@ -74,11 +74,17 @@ TEST(TopoNaming, ElementMapCount) {
 // -- Name Encoding ----------------------------------------------------
 
 TEST(TopoNaming, EncodeElementName) {
+    // Phase 3: encodeElementName now takes a ShapeIdentity and writes
+    // ";:P<16hex>.<16hex>" via appendShapeIdentity. The ;:H form is
+    // deprecated writer-side; readers still understand it.
     oreo::MappedName input("Face1");
-    auto encoded = oreo::ElementMap::encodeElementName("Face", input, 0x1a, ";:M");
-    EXPECT_NE(encoded.data().find(";:H"), std::string::npos);
+    auto encoded = oreo::ElementMap::encodeElementName(
+        "Face", input, oreo::ShapeIdentity{0, 0x1a}, ";:M");
+    EXPECT_NE(encoded.data().find(";:P"), std::string::npos);
     EXPECT_NE(encoded.data().find(";:M"), std::string::npos);
-    EXPECT_NE(encoded.data().find("1a"), std::string::npos);
+    // counter=0x1a appears as "000000000000001a" in the fixed-width
+    // hex encoding of the ;:P postfix.
+    EXPECT_NE(encoded.data().find("000000000000001a"), std::string::npos);
 }
 
 // -- Serialization Round-trip -----------------------------------------

@@ -169,6 +169,19 @@ oreo_add_test(test_feature_tree tests/test_feature/test_feature_tree.cpp)
 # Foundation (context, diagnostics, units, schema, validation, determinism)
 oreo_add_test(test_foundation tests/test_foundation/test_foundation.cpp)
 
+# ShapeIdentity + v1 bridge (Phase 1 of the identity-model v2 hardening).
+# Does not depend on OREO_ENABLE_LEGACY_API — uses only core headers.
+oreo_add_test(test_shape_identity tests/test_foundation/test_shape_identity.cpp)
+
+# TagAllocator v2 (Phase 2). Exercises the v2 allocation / snapshot /
+# toOcctTag surface plus the v1-compat wrappers routing through it.
+oreo_add_test(test_tag_allocator_v2 tests/test_foundation/test_tag_allocator_v2.cpp)
+
+# Naming v2 (Phase 3). Covers ;:P postfix round-trips, rightmost-marker
+# algorithm in extractShapeIdentity, ElementMap v3 format, and v2 reader
+# downgrade warnings.
+oreo_add_test(test_naming_v2 tests/test_foundation/test_naming_v2.cpp)
+
 # Foundation hardened (adversarial tests: NaN, Inf, fail-closed, composable diagnostics)
 oreo_add_test(test_foundation_hardened tests/test_foundation/test_foundation_hardened.cpp)
 
@@ -185,7 +198,12 @@ oreo_add_test(test_foundation_new_features tests/test_foundation/test_foundation
 oreo_add_test(test_determinism tests/test_determinism/test_determinism.cpp)
 
 # Integration (end-to-end workflows: sketch->extrude->fillet->boolean, STEP round-trip, feature tree replay)
-oreo_add_test(test_integration tests/test_integration/test_integration.cpp)
+# Uses legacy singleton APIs (oreo_init, oreo_sketch_*, oreo_make_*, oreo_fillet, etc.).
+# Gated so the OREO_ENABLE_LEGACY_API=OFF build configures cleanly — the
+# no-legacy equivalent lives in test_doc_identity_nolegacy.
+if(OREO_ENABLE_LEGACY_API)
+    oreo_add_test(test_integration tests/test_integration/test_integration.cpp)
+endif()
 
 # Document-identity end-to-end regression (Part 1 of the April 2026 audit).
 # Verifies that a 64-bit documentId reaches every layer unchanged on both
@@ -201,11 +219,26 @@ if(OREO_ENABLE_LEGACY_API)
     oreo_add_test(test_doc_identity tests/test_integration/test_doc_identity.cpp)
 endif()
 
+# No-legacy doc-identity suite (Phase 6). Uses only ctx-aware APIs
+# (oreo_ctx_* + oreo_*_shape_id) so it runs on both OREO_ENABLE_LEGACY_API
+# configurations — critically, it is the acceptance gate for the OFF
+# build where none of the singleton-context APIs exist.
+oreo_add_test(test_doc_identity_nolegacy
+              tests/test_integration/test_doc_identity_nolegacy.cpp)
+
 # Smoke-fuzz (random-input robustness for deserialize / schema migrate / sketch / STEP)
 oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
 
 # Perf regression (generous time budgets — catches 10x regressions, not microbenchmark drift)
-oreo_add_test(test_perf tests/test_perf/test_perf.cpp)
+# Uses legacy oreo_make_box / oreo_fillet etc. Gate until it's ported to ctx APIs.
+if(OREO_ENABLE_LEGACY_API)
+    oreo_add_test(test_perf tests/test_perf/test_perf.cpp)
+endif()
+
+# Identity benchmark (Phase 7). Measures name hash/compare/insert/serialize
+# throughput on 10k-op workloads so CI can diff against a baseline. No
+# legacy API dependency — runs in both build configurations.
+oreo_add_test(bench_identity tests/test_perf/bench_identity.cpp)
 
 # Audit-fix regressions (5 issues from external contributor review: OcctStaticGuard
 # de-dup, SchemaRegistry freeze enforcement, ConfigLoader uint64 docId, TagAllocator

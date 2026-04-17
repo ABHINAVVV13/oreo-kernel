@@ -64,7 +64,7 @@ GeomResult fillet(KernelContext& ctx,
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Fillet");
     return scope.makeResult(mapped);
@@ -121,7 +121,7 @@ GeomResult chamfer(KernelContext& ctx,
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Chamfer");
     return scope.makeResult(mapped);

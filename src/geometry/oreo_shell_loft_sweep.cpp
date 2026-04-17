@@ -72,7 +72,7 @@ GeomResult shell(KernelContext& ctx,
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Shell");
     return scope.makeResult(mapped);
@@ -124,7 +124,7 @@ GeomResult loft(KernelContext& ctx, const std::vector<NamedShape>& profiles, boo
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, profiles, tag, "Loft");
     return scope.makeResult(mapped);
@@ -163,7 +163,7 @@ GeomResult sweep(KernelContext& ctx, const NamedShape& profile, const NamedShape
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {profile, path}, tag, "Sweep");
     return scope.makeResult(mapped);

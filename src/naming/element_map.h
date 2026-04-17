@@ -16,6 +16,7 @@
 #ifndef OREO_ELEMENT_MAP_H
 #define OREO_ELEMENT_MAP_H
 
+#include "core/shape_identity.h"
 #include "indexed_name.h"
 #include "mapped_name.h"
 
@@ -33,18 +34,22 @@ using ElementMapPtr = std::shared_ptr<ElementMap>;
 
 // Child element map reference — stores a reference to an input shape's
 // element map along with the postfix applied during the operation.
+//
+// Phase 3 migration (identity-model v2): the `tag` field (int64) has
+// been replaced with `id` (ShapeIdentity). Callers that previously did
+// `child.tag = opTag` must switch to `child.id = ShapeIdentity{doc, ctr}`.
+// This is a breaking struct-field change with no compat shim — the v1
+// field could only carry 32 bits of documentId.
 struct ChildElementMap {
     ElementMapPtr map;
-    std::int64_t tag;        // Operation tag (int64 — widened from long so
-                             // high bits survive on Windows MSVC, where long
-                             // is 32-bit and would silently truncate).
+    ShapeIdentity id;        // Operation identity — full 64+64. (Phase 3, was int64 tag.)
     std::string postfix;     // Disambiguation postfix (for multi-input ops)
 };
 
 // History trace item — one step in the derivation chain of an element name
 struct HistoryTraceItem {
     MappedName name;
-    std::int64_t tag;
+    ShapeIdentity id;        // Phase 3: full ShapeIdentity (was int64 tag).
     std::string operation;   // "Extrude", "Fillet", etc.
 };
 
@@ -95,20 +100,30 @@ public:
 
     // Import names from a child element map into this map.
     // Used during mapShapeElements to pull in input names.
-    void importChildNames(const ElementMap& childMap, std::int64_t childTag,
+    //
+    // Phase 3 migration: childTag (int64) → childId (ShapeIdentity).
+    void importChildNames(const ElementMap& childMap,
+                          ShapeIdentity childId,
                           const std::string& childPostfix);
 
     // ─── History encoding ────────────────────────────────────
 
-    // Encode a new element name from an input name + operation tag + postfix.
-    // This is the main entry point for building history chains.
+    // Encode a new element name from an input name + operation identity
+    // + postfix. This is the main entry point for building history
+    // chains.
     //
-    // Example: encodeElementName("Face", inputName, tag, ";:M")
-    //   produces: inputName + ";:H<tag_hex>" + ";:M"
+    // Phase 3 migration: emits ";:P<16hex>.<16hex>" via
+    // appendShapeIdentity() rather than the legacy ";:H<hex>" carrier.
+    // Callers that want to WRITE the legacy form should first encode
+    // the identity with encodeV1Scalar() and build the postfix manually
+    // — there is no longer a convenience for that.
+    //
+    // Example: encodeElementName("Face", inputName, id, ";:M")
+    //   produces: inputName + ";:P<16hex>.<16hex>" + ";:M"
     static MappedName encodeElementName(
         const char* type,
         const MappedName& inputName,
-        std::int64_t tag,
+        ShapeIdentity id,
         const char* postfix);
 
     // ─── History tracing ─────────────────────────────────────
@@ -126,26 +141,70 @@ public:
     // 64-bit value so that tags produced in multi-document mode (with high
     // bits derived from documentId) are preserved without truncation on
     // platforms where `long` is 32-bit (Windows MSVC).
+    //
+    // v2 compat: internally calls extractShapeIdentity() and then encodeV1Scalar().
+    // Throws std::overflow_error via encodeV1Scalar when a v2 name's
+    // counter > UINT32_MAX (multi-doc) — see identity-model.md §4.3 rule 5.
+    // Callers on the legacy writer path must wrap this in try/catch and
+    // emit V2_IDENTITY_NOT_REPRESENTABLE on failure.
     static std::int64_t extractTag(const MappedName& name);
 
     // Extract the full 64-bit documentId from a mapped name's ;:Q postfix.
     // Returns 0 if the name has no ;:Q postfix (single-document mode).
     static std::uint64_t extractDocumentId(const MappedName& name);
 
+    // Extract the v2 ShapeIdentity from a mapped name using the
+    // rightmost-marker algorithm (docs/identity-model.md §4.3 rule 4):
+    //   1. Find rightmost of {;:P, ;:H, ;:T}.
+    //   2. ;:P wins: parse 32hex directly.
+    //   3. ;:H / ;:T wins: parse scalar, decodeV1Scalar with ambient
+    //      documentId from ;:Q (or 0 if absent). An Error Case mismatch
+    //      from decodeV1Scalar is caught and funneled through the
+    //      malformed-payload path — extractShapeIdentity never throws.
+    //   4. No marker / malformed payload: returns ShapeIdentity{0, 0};
+    //      emits MALFORMED_ELEMENT_NAME via `diag` (if supplied) ONLY
+    //      for the malformed-payload case, not for the no-marker case.
+    //      A name with no identity markers is a bare base name, which
+    //      is legitimate (e.g. freshly imported STEP); a name with a
+    //      marker whose payload fails to parse is genuinely corrupt.
+    //
+    // No LEGACY_IDENTITY_DOWNGRADE emission from this overload — the
+    // ;:H/;:T branch uses a non-diag decodeV1Scalar to keep this a
+    // pure parser. Callers that need the downgrade warning should
+    // decode the scalar themselves via decodeV1Scalar with a sink.
+    static ShapeIdentity extractShapeIdentity(const MappedName& name,
+                                              class DiagnosticCollector* diag = nullptr);
+
     // ─── Serialization ───────────────────────────────────────
 
     // Binary format version (bump when format changes).
-    // v2 widens per-entry `tag` from 32-bit (implicit on Windows, explicit on
-    // Linux-long) to a full 64-bit value and introduces an explicit layout
-    // version in the element-map header. v1 files were produced before the
-    // cross-platform widening audit — they are no longer accepted.
-    static constexpr std::uint32_t FORMAT_VERSION = 2;
+    //   v1 — pre-audit; tag was truncated on Windows. REJECTED.
+    //   v2 — 64-bit tag, but still a squeezed v1 scalar (int64 with
+    //        low-32 of documentId shifted into high 32 bits). Reader
+    //        kept for backward compat; writer removed in v3.
+    //   v3 — full 16-byte ShapeIdentity per entry / per child.
+    //        (Phase 3 / identity-model v2 hardening.)
+    static constexpr std::uint32_t FORMAT_VERSION = 3;
+    static constexpr std::uint32_t FORMAT_VERSION_V2_LEGACY = 2;
 
-    // Serialize to binary buffer
+    // Serialize to binary buffer (always writes FORMAT_VERSION).
     std::vector<uint8_t> serialize() const;
 
-    // Deserialize from binary buffer. Returns nullptr on failure.
-    static ElementMapPtr deserialize(const uint8_t* data, size_t len);
+    // Deserialize from binary buffer. Returns nullptr on malformed or
+    // unsupported-version input.
+    //
+    // The `rootHint` is used to reconstruct full 64-bit documentIds when
+    // reading v2-format buffers (the v2 format still stores squeezed int64
+    // tags). Pass the root ShapeIdentity from the outer deserialize call
+    // so v2→v3 upgrades are lossless for buffers produced by the source
+    // document. See docs/identity-model.md §5.4.
+    //
+    // The `diag` sink (if non-null) receives LEGACY_IDENTITY_DOWNGRADE
+    // warnings on Case B decodes; it is also used for the dedup flag
+    // described in §5.4 (only one warning per top-level read).
+    static ElementMapPtr deserialize(const uint8_t* data, size_t len,
+                                     ShapeIdentity rootHint = {},
+                                     class DiagnosticCollector* diag = nullptr);
 
 private:
     // Forward mapping: IndexedName → MappedName

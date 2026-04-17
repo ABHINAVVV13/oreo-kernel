@@ -47,7 +47,7 @@ GeomResult revolve(KernelContext& ctx, const NamedShape& base, const gp_Ax1& axi
             }
         }
 
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         MakerMapper mapper(maker);
         auto mapped = mapShapeElements(ctx, result, mapper, {base}, tag, "Revolve");
         return scope.makeResult(mapped);

@@ -8,6 +8,7 @@
 #include "core/occt_try.h"
 #include "core/oreo_error.h"
 #include "core/oreo_tolerance.h"
+#include "core/shape_identity_v1.h"
 #include "core/validation.h"
 #include "io/shape_fix.h"
 #include "naming/map_shape_elements.h"
@@ -45,7 +46,7 @@ GeomResult mirror(KernelContext& ctx, const NamedShape& solid, const gp_Ax2& pla
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Mirror");
     return scope.makeResult(mapped);
@@ -132,7 +133,7 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     // Element map: pattern has complex multi-instance history.
     // We create a map referencing the base shape's map as a child,
     // and give each output element a pattern-specific name.
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     NullMapper nullMapper;
     auto mapped = mapShapeElements(ctx, accumulated, nullMapper, {solid}, tag, "LinearPattern");
 
@@ -140,7 +141,10 @@ GeomResult patternLinear(KernelContext& ctx, const NamedShape& solid, const gp_V
     if (solid.elementMap()) {
         ChildElementMap child;
         child.map = solid.elementMap();
-        child.tag = solid.tag();
+        // Phase 3 native v2: NamedShape carries the full ShapeIdentity,
+        // so we can grab it directly — no v1 scalar round-trip, no
+        // documentId squeeze.
+        child.id = solid.shapeId();
         child.postfix = ";:Plin";
         mapped.elementMap()->addChild(child);
     }
@@ -229,14 +233,15 @@ GeomResult patternCircular(KernelContext& ctx, const NamedShape& solid, const gp
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     NullMapper nullMapper;
     auto mapped = mapShapeElements(ctx, accumulated, nullMapper, {solid}, tag, "CircularPattern");
 
     if (solid.elementMap()) {
         ChildElementMap child;
         child.map = solid.elementMap();
-        child.tag = solid.tag();
+        // Phase 3 native v2: see LinearPattern — shapeId() directly.
+        child.id = solid.shapeId();
         child.postfix = ";:Pcirc";
         mapped.elementMap()->addChild(child);
     }

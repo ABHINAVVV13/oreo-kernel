@@ -206,7 +206,7 @@ GeomResult executeBooleanWithRetry(
     // -- Build element map ------------------------------------------------
     // Reuse the successful operation object directly — it already has the
     // modification/generation history needed for element mapping.
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(*successfulOp);
     auto mapped = mapShapeElements(ctx, result, mapper, {a, b}, tag, opName);
     return scope.makeResult(mapped);

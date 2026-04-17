@@ -4,9 +4,12 @@
 
 #include "core/kernel_context.h"
 #include "core/diagnostic.h"
+#include "core/shape_identity.h"
+#include "core/shape_identity_v1.h"
 #include "geometry/oreo_geometry.h"
 #include "io/oreo_step.h"
 #include "io/oreo_serialize.h"
+#include "naming/element_map.h"
 #include "naming/named_shape.h"
 #include "query/oreo_query.h"
 #include "sketch/oreo_sketch.h"
@@ -293,6 +296,170 @@ OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], in
         if (edges[i]) edgeVec.push_back({oreo::IndexedName("Edge", i+1), edges[i]->ns.shape()});
     }
     return wrapSolid(oreo::fillet(*ctx->ctx, solid->ns, edgeVec, radius));
+    OREO_C_CATCH_RETURN(nullptr)
+}
+
+// ============================================================
+// v2 identity-aware C API (Phase 5)
+// ============================================================
+
+namespace {
+
+// Shared helper for oreo_face_shape_id / oreo_edge_shape_id.
+int queryShapeId(OreoSolid solid, const char* elementType, int index,
+                 OreoShapeId* out) {
+    if (out) *out = OreoShapeId{0, 0};
+    if (!solid) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null handle");
+        return OREO_INVALID_INPUT;
+    }
+    if (!out) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "out pointer is NULL");
+        return OREO_INVALID_INPUT;
+    }
+    if (index < 1) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::OUT_OF_RANGE,
+            "index must be >= 1");
+        return OREO_INVALID_INPUT;
+    }
+    auto name = solid->ns.getElementName(oreo::IndexedName(elementType, index));
+    auto id   = oreo::ElementMap::extractShapeIdentity(name);
+    out->document_id = id.documentId;
+    out->counter     = id.counter;
+    return OREO_OK;
+}
+
+// Shared helper for oreo_ctx_face_name / oreo_ctx_edge_name.
+int queryName(OreoContext ctx, OreoSolid solid, const char* elementType,
+              int index, char* buf, size_t buflen, size_t* needed) {
+    if (!ctx) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null context handle");
+        return OREO_INVALID_INPUT;
+    }
+    if (!solid) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null solid handle");
+        return OREO_INVALID_INPUT;
+    }
+    if (!needed) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "needed pointer is NULL");
+        return OREO_INVALID_INPUT;
+    }
+    if (index < 1) {
+        ctx->ctx->diag().error(oreo::ErrorCode::OUT_OF_RANGE,
+            "index must be >= 1");
+        return OREO_INVALID_INPUT;
+    }
+    auto name = solid->ns.getElementName(oreo::IndexedName(elementType, index));
+    const auto& s = name.data();
+    *needed = s.size();  // excludes NUL
+
+    // Size-probe with NULL buffer always returns OREO_OK so callers can
+    // measure without triggering an error diagnostic.
+    if (buf == nullptr && buflen == 0) return OREO_OK;
+    if (buf == nullptr) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "buf is NULL but buflen > 0");
+        return OREO_INVALID_INPUT;
+    }
+    if (buflen < s.size() + 1) {
+        // Write as much as fits plus NUL so partial reads are safe.
+        if (buflen > 0) {
+            std::memcpy(buf, s.data(), buflen - 1);
+            buf[buflen - 1] = '\0';
+        }
+        return OREO_BUFFER_TOO_SMALL;
+    }
+    std::memcpy(buf, s.data(), s.size());
+    buf[s.size()] = '\0';
+    return OREO_OK;
+}
+
+}  // anonymous namespace
+
+int oreo_face_shape_id(OreoSolid solid, int index, OreoShapeId* out) {
+    OREO_C_TRY
+    return queryShapeId(solid, "Face", index, out);
+    OREO_C_CATCH_RETURN(OREO_INTERNAL_ERROR)
+}
+
+int oreo_edge_shape_id(OreoSolid solid, int index, OreoShapeId* out) {
+    OREO_C_TRY
+    return queryShapeId(solid, "Edge", index, out);
+    OREO_C_CATCH_RETURN(OREO_INTERNAL_ERROR)
+}
+
+int oreo_ctx_face_name(OreoContext ctx, OreoSolid solid, int index,
+                       char* buf, size_t buflen, size_t* needed) {
+    OREO_C_TRY
+    return queryName(ctx, solid, "Face", index, buf, buflen, needed);
+    OREO_C_CATCH_RETURN(OREO_INTERNAL_ERROR)
+}
+
+int oreo_ctx_edge_name(OreoContext ctx, OreoSolid solid, int index,
+                       char* buf, size_t buflen, size_t* needed) {
+    OREO_C_TRY
+    return queryName(ctx, solid, "Edge", index, buf, buflen, needed);
+    OREO_C_CATCH_RETURN(OREO_INTERNAL_ERROR)
+}
+
+int oreo_ctx_serialize(OreoContext ctx, OreoSolid solid,
+                       uint8_t* buf, size_t buflen, size_t* needed) {
+    OREO_C_TRY
+    if (!ctx) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null context handle");
+        return OREO_INVALID_INPUT;
+    }
+    if (!solid) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null solid handle");
+        return OREO_INVALID_INPUT;
+    }
+    if (!needed) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "needed pointer is NULL");
+        return OREO_INVALID_INPUT;
+    }
+    auto r = oreo::serialize(*ctx->ctx, solid->ns);
+    if (!r.ok()) return OREO_SERIALIZE_FAILED;
+    const auto& payload = r.value();
+    *needed = payload.size();
+
+    if (buf == nullptr && buflen == 0) return OREO_OK;  // size probe
+    if (buf == nullptr) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "buf is NULL but buflen > 0");
+        return OREO_INVALID_INPUT;
+    }
+    if (buflen < payload.size()) {
+        return OREO_BUFFER_TOO_SMALL;
+    }
+    std::memcpy(buf, payload.data(), payload.size());
+    return OREO_OK;
+    OREO_C_CATCH_RETURN(OREO_INTERNAL_ERROR)
+}
+
+OreoSolid oreo_ctx_deserialize(OreoContext ctx,
+                               const uint8_t* data, size_t len) {
+    OREO_C_TRY
+    if (!ctx) {
+        internalDefaultCtx()->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null context handle");
+        return nullptr;
+    }
+    if (!data) {
+        ctx->ctx->diag().error(oreo::ErrorCode::INVALID_INPUT,
+            "Null data pointer");
+        return nullptr;
+    }
+    auto r = oreo::deserialize(*ctx->ctx, data, len);
+    if (!r.ok()) return nullptr;
+    return wrapSolid(std::move(r).value());
     OREO_C_CATCH_RETURN(nullptr)
 }
 
@@ -663,7 +830,7 @@ OreoFace oreo_get_face(OreoSolid solid, int index) {
     if (index < 1) return nullptr;
     TopoDS_Shape face = solid->ns.getSubShape(TopAbs_FACE, index);
     if (face.IsNull()) return nullptr;
-    auto* h = new OreoFace_T{oreo::NamedShape(face, 0)};
+    auto* h = new OreoFace_T{oreo::NamedShape(face, oreo::ShapeIdentity{})};
     return h;
     OREO_C_CATCH_RETURN(nullptr)
 }
@@ -674,7 +841,7 @@ OreoEdge oreo_get_edge(OreoSolid solid, int index) {
     if (index < 1) return nullptr;
     TopoDS_Shape edge = solid->ns.getSubShape(TopAbs_EDGE, index);
     if (edge.IsNull()) return nullptr;
-    auto* h = new OreoEdge_T{oreo::NamedShape(edge, 0)};
+    auto* h = new OreoEdge_T{oreo::NamedShape(edge, oreo::ShapeIdentity{})};
     return h;
     OREO_C_CATCH_RETURN(nullptr)
 }

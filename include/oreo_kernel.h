@@ -58,6 +58,11 @@ typedef enum {
     OREO_STEP_EXPORT_FAILED,
     OREO_SERIALIZE_FAILED,
     OREO_DESERIALIZE_FAILED,
+    // Identity v2 additions (docs/identity-model.md §8 Q2).
+    OREO_LEGACY_IDENTITY_DOWNGRADE,     // Warning: v1 tag read, high docId bits inferred/lost
+    OREO_V2_IDENTITY_NOT_REPRESENTABLE, // v2 identity can't fit v1 scalar format
+    OREO_MALFORMED_ELEMENT_NAME,        // ;:P / ;:H payload could not be parsed
+    OREO_BUFFER_TOO_SMALL,              // Caller-supplied output buffer too small
     OREO_NOT_INITIALIZED,
     OREO_INTERNAL_ERROR,
 } OreoErrorCode;
@@ -69,6 +74,22 @@ typedef struct {
     const char* entity;
     const char* suggestion;
 } OreoError;
+
+// --- Shape identity (v2 hardening; see docs/identity-model.md §6.1) ---
+// A full 64+64 identity value: {documentId, counter}. Replaces the
+// squeezed int64 tag on the FFI boundary.
+typedef struct {
+    uint64_t document_id;
+    uint64_t counter;
+} OreoShapeId;
+
+// ABI layout checks. Guarded for C89/C99 consumers — the kernel's own
+// TUs compile as C11+, so the invariant is still enforced inside the
+// library. See docs/identity-model.md §6.1.
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(sizeof(OreoShapeId) == 16, "OreoShapeId ABI: size 16");
+_Static_assert(_Alignof(OreoShapeId) == 8, "OreoShapeId ABI: align 8");
+#endif
 
 // --- Bounding box ---
 typedef struct {
@@ -133,6 +154,51 @@ OREO_API OreoSolid oreo_ctx_extrude(OreoContext ctx, OreoSolid base, double dx, 
 OREO_API OreoSolid oreo_ctx_boolean_union(OreoContext ctx, OreoSolid a, OreoSolid b);
 OREO_API OreoSolid oreo_ctx_boolean_subtract(OreoContext ctx, OreoSolid target, OreoSolid tool);
 OREO_API OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], int n, double radius);
+
+// ============================================================
+// v2 identity-aware C API (Phase 5 — always available, no legacy gate)
+// ============================================================
+//
+// Thread-safety: one OreoContext per thread. Concurrent calls with the
+// same ctx are undefined. Concurrent calls with DIFFERENT ctx arguments
+// are safe.
+
+// Query a face or edge's ShapeIdentity by 1-based index. On success
+// returns OREO_OK and writes the identity to *out. On failure (null
+// handle, out-of-range index, missing element map, or docId/scalar
+// mismatch in a legacy-format read) returns the relevant OreoErrorCode
+// and sets *out to {0, 0}.
+OREO_API int oreo_face_shape_id(OreoSolid solid, int index, OreoShapeId* out);
+OREO_API int oreo_edge_shape_id(OreoSolid solid, int index, OreoShapeId* out);
+
+// Retrieve a face's or edge's stable name into a caller-owned buffer.
+// Size-probe protocol: pass (buf=NULL, buflen=0, needed=&n). On return,
+// *needed holds the number of bytes required (excluding NUL terminator).
+// Then allocate buflen >= *needed + 1 and call again.
+//
+// Returns:
+//   OREO_OK                — name fully written, NUL-terminated.
+//   OREO_BUFFER_TOO_SMALL  — buflen < *needed + 1; buf contains the
+//                            truncated prefix + NUL if buflen > 0.
+//   OREO_INVALID_INPUT     — null handle or negative/zero index.
+OREO_API int oreo_ctx_face_name(OreoContext ctx, OreoSolid solid, int index,
+                                 char* buf, size_t buflen, size_t* needed);
+OREO_API int oreo_ctx_edge_name(OreoContext ctx, OreoSolid solid, int index,
+                                 char* buf, size_t buflen, size_t* needed);
+
+// Serialize a shape to a caller-owned buffer using the v3 on-disk
+// format. Size-probe protocol as above: pass (buf=NULL, buflen=0,
+// needed=&n) to measure, then allocate and re-call. No thread-local
+// state, safe for concurrent use on distinct contexts.
+OREO_API int oreo_ctx_serialize(OreoContext ctx, OreoSolid solid,
+                                 uint8_t* buf, size_t buflen,
+                                 size_t* needed);
+
+// Deserialize a shape from a byte buffer. Accepts v3 (current) and
+// v1 (legacy) wire formats. Returns NULL on failure; call
+// oreo_context_last_error_message for details.
+OREO_API OreoSolid oreo_ctx_deserialize(OreoContext ctx,
+                                         const uint8_t* data, size_t len);
 
 // ============================================================
 // Legacy singleton-context C API

@@ -56,7 +56,14 @@ enum class ErrorCode {
     STEP_EXPORT_FAILED   = 11,  // STEP file could not be written
     SERIALIZE_FAILED     = 12,  // Binary serialization failed
     DESERIALIZE_FAILED   = 13,  // Binary deserialization failed
-    // gap for future I/O codes: 14-19
+    // Identity v2 new codes (block at 14; see docs/identity-model.md §8 Q2).
+    // Kept in the I/O block because all four surface at serialization or
+    // name-parsing boundaries.
+    LEGACY_IDENTITY_DOWNGRADE    = 14, // Warning: v1 tag read, high docId bits inferred or lost
+    V2_IDENTITY_NOT_REPRESENTABLE = 15, // Error: v2 identity with counter > UINT32_MAX can't fit in v1/v2 format
+    MALFORMED_ELEMENT_NAME       = 16, // Warning: element name had unparseable ;:P / ;:H payload
+    BUFFER_TOO_SMALL             = 17, // Error: size-probe buffer was too small for the output
+    // gap for future I/O codes: 18-19
     NOT_INITIALIZED      = 20,  // oreo_init() was not called
     INTERNAL_ERROR       = 21,  // Bug in oreo-kernel
     // gap for future internal-state codes: 22-29

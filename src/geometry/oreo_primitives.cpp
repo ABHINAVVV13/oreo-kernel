@@ -31,7 +31,7 @@ GeomResult makeBox(KernelContext& ctx, double dx, double dy, double dz) {
         double kdz = ctx.units().toKernelLength(dz);
 
         TopoDS_Shape shape = BRepPrimAPI_MakeBox(kdx, kdy, kdz).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Box");
         return scope.makeResult(mapped);
@@ -50,7 +50,7 @@ GeomResult makeBox(KernelContext& ctx, const gp_Pnt& origin, double dx, double d
         double kdy = ctx.units().toKernelLength(dy);
         double kdz = ctx.units().toKernelLength(dz);
         TopoDS_Shape shape = BRepPrimAPI_MakeBox(origin, kdx, kdy, kdz).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Box");
         return scope.makeResult(mapped);
@@ -66,7 +66,7 @@ GeomResult makeCylinder(KernelContext& ctx, double radius, double height) {
         double kr = ctx.units().toKernelLength(radius);
         double kh = ctx.units().toKernelLength(height);
         TopoDS_Shape shape = BRepPrimAPI_MakeCylinder(kr, kh).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Cylinder");
         return scope.makeResult(mapped);
@@ -82,7 +82,7 @@ GeomResult makeCylinder(KernelContext& ctx, const gp_Ax2& axis, double radius, d
         double kr = ctx.units().toKernelLength(radius);
         double kh = ctx.units().toKernelLength(height);
         TopoDS_Shape shape = BRepPrimAPI_MakeCylinder(axis, kr, kh).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Cylinder");
         return scope.makeResult(mapped);
@@ -96,7 +96,7 @@ GeomResult makeSphere(KernelContext& ctx, double radius) {
     OREO_OCCT_TRY
         double kr = ctx.units().toKernelLength(radius);
         TopoDS_Shape shape = BRepPrimAPI_MakeSphere(kr).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Sphere");
         return scope.makeResult(mapped);
@@ -110,7 +110,7 @@ GeomResult makeSphere(KernelContext& ctx, const gp_Pnt& center, double radius) {
     OREO_OCCT_TRY
         double kr = ctx.units().toKernelLength(radius);
         TopoDS_Shape shape = BRepPrimAPI_MakeSphere(center, kr).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Sphere");
         return scope.makeResult(mapped);
@@ -132,7 +132,7 @@ GeomResult makeCone(KernelContext& ctx, double radius1, double radius2, double h
         double kr2 = ctx.units().toKernelLength(radius2);
         double kh = ctx.units().toKernelLength(height);
         TopoDS_Shape shape = BRepPrimAPI_MakeCone(kr1, kr2, kh).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Cone");
         return scope.makeResult(mapped);
@@ -152,7 +152,7 @@ GeomResult makeTorus(KernelContext& ctx, double majorRadius, double minorRadius)
         double kmaj = ctx.units().toKernelLength(majorRadius);
         double kmin = ctx.units().toKernelLength(minorRadius);
         TopoDS_Shape shape = BRepPrimAPI_MakeTorus(kmaj, kmin).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Torus");
         return scope.makeResult(mapped);
@@ -171,7 +171,7 @@ GeomResult makeWedge(KernelContext& ctx, double dx, double dy, double dz, double
         double kdz = ctx.units().toKernelLength(dz);
         double kltx = ctx.units().toKernelLength(ltx);
         TopoDS_Shape shape = BRepPrimAPI_MakeWedge(kdx, kdy, kdz, kltx).Shape();
-        auto tag = ctx.tags().nextTag();
+        auto tag = ctx.tags().nextShapeIdentity();
         NullMapper mapper;
         auto mapped = mapShapeElements(ctx, shape, mapper, {}, tag, "Wedge");
         return scope.makeResult(mapped);

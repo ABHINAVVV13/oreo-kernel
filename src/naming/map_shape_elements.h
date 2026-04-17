@@ -7,9 +7,10 @@
 #ifndef OREO_MAP_SHAPE_ELEMENTS_H
 #define OREO_MAP_SHAPE_ELEMENTS_H
 
+#include "core/kernel_context.h"
+#include "core/shape_identity.h"
 #include "named_shape.h"
 #include "shape_mapper.h"
-#include "core/kernel_context.h"
 
 #include <cstdint>
 #include <string>
@@ -17,16 +18,14 @@
 
 namespace oreo {
 
-// Context-aware version (preferred).
-// opTag is the per-operation tag from ctx.tags().nextTag() — it is int64
-// so that multi-document tags (which pack documentId into the high 32 bits)
-// are not truncated on Windows where `long` is 32-bit.
+// Phase 3: opId is the per-operation ShapeIdentity from
+// ctx.tags().nextShapeIdentity() — a full 64+64 identity, no squeeze.
 NamedShape mapShapeElements(
     KernelContext& ctx,
     const TopoDS_Shape& resultShape,
     const ShapeMapper& mapper,
     const std::vector<NamedShape>& inputShapes,
-    std::int64_t opTag,
+    ShapeIdentity opId,
     const char* opName = nullptr);
 
 } // namespace oreo

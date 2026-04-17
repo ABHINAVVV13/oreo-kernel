@@ -73,7 +73,7 @@ GeomResult offset(KernelContext& ctx, const NamedShape& solid, double distance) 
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Offset");
     return scope.makeResult(mapped);
@@ -127,7 +127,7 @@ GeomResult thicken(KernelContext& ctx, const NamedShape& shellOrFace, double thi
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {shellOrFace}, tag, "Thicken");
     return scope.makeResult(mapped);
@@ -177,7 +177,7 @@ GeomResult splitBody(KernelContext& ctx, const NamedShape& solid, const gp_Pln& 
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(splitter);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "Split");
     return scope.makeResult(mapped);
@@ -234,7 +234,7 @@ GeomResult filletVariable(KernelContext& ctx,
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {solid}, tag, "VariableFillet");
     return scope.makeResult(mapped);
@@ -272,7 +272,7 @@ GeomResult wireOffset(KernelContext& ctx, const NamedShape& wire, double distanc
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(maker);
     auto mapped = mapShapeElements(ctx, result, mapper, {wire}, tag, "WireOffset");
     return scope.makeResult(mapped);
@@ -305,7 +305,7 @@ GeomResult makeFaceFromWire(KernelContext& ctx, const NamedShape& wire) {
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     NullMapper mapper;
     auto mapped = mapShapeElements(ctx, result, mapper, {wire}, tag, "MakeFace");
     return scope.makeResult(mapped);
@@ -368,7 +368,7 @@ GeomResult wireFillet(KernelContext& ctx,
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     MakerMapper mapper(fillet2d);
     auto mapped = mapShapeElements(ctx, result, mapper, {wire}, tag, "WireFillet");
     return scope.makeResult(mapped);
@@ -391,7 +391,7 @@ GeomResult combine(KernelContext& ctx, const std::vector<NamedShape>& shapes) {
         }
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     NullMapper mapper;
     auto mapped = mapShapeElements(ctx, compound, mapper, shapes, tag, "Combine");
     return scope.makeResult(mapped);

@@ -43,6 +43,8 @@
 #ifndef OREO_TAG_ALLOCATOR_H
 #define OREO_TAG_ALLOCATOR_H
 
+#include "shape_identity.h"
+#include "shape_identity_v1.h"
 #include "thread_safety.h"
 
 #include <atomic>
@@ -64,9 +66,26 @@ namespace oreo {
 
 class OREO_CONTEXT_BOUND TagAllocator {
 public:
-    // Snapshot of allocator state — used for cloning / rollback (TA-7).
-    struct Snapshot {
+    // ──────────────────────────────────────────────────────────────
+    // v1 Snapshot — DEPRECATED. Retained for back-compat; the struct's
+    // int64 counter is narrower than v2 supports once counters exceed
+    // INT64_MAX. Use SnapshotV2 for all new code.
+    // ──────────────────────────────────────────────────────────────
+    struct
+    [[deprecated("use TagAllocator::SnapshotV2 instead — its counter is "
+                 "uint64_t to match ShapeIdentity::counter")]]
+    Snapshot {
         int64_t  counter;
+        uint64_t documentId;
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // v2 Snapshot (Phase 2). The counter is uint64_t so it matches
+    // ShapeIdentity::counter semantics and isn't silently narrowed at
+    // the snapshot/restore boundary.
+    // ──────────────────────────────────────────────────────────────
+    struct SnapshotV2 {
+        uint64_t counter;
         uint64_t documentId;
     };
 
@@ -93,68 +112,91 @@ public:
     TagAllocator(TagAllocator&&) = delete;
     TagAllocator& operator=(TagAllocator&&) = delete;
 
-    // Allocate the next tag. Combines documentId with sequential counter.
-    // Single-document mode (documentId=0): returns 1, 2, 3...
-    // Multi-document mode: upper 32 bits = documentId (low 32 bits thereof),
-    //                      lower 32 bits = seq.
+    // ──────────────────────────────────────────────────────────────
+    // v2 allocation path (Phase 2 — primary; callers prefer this).
     //
-    // TA-1: counter is atomic; fetch_add with relaxed ordering is sufficient
-    //       because documentId_ is set at construction (or pre-allocation via
-    //       setDocumentId, guarded by TA-5) and is never mutated concurrently
-    //       with allocation — so a plain read after the atomic increment is
-    //       race-free.
-    // TA-2: single-doc mode now checks for signed overflow against INT64_MAX.
-    int64_t nextTag() {
+    // Returns a full ShapeIdentity with no 32-bit squeeze, so high
+    // documentId bits are preserved through every downstream boundary
+    // that carries a ShapeIdentity directly (naming, serialize v3, C
+    // API v2). The v1 cap at UINT32_MAX is NOT enforced here — the
+    // counter can run up to INT64_MAX. Only encodeV1Scalar (§3.1) caps
+    // at the boundary back to v1 format.
+    // ──────────────────────────────────────────────────────────────
+    ShapeIdentity nextShapeIdentity() {
         int64_t prev = counter_.fetch_add(1, std::memory_order_relaxed);
-        // Signed overflow detection: prev must be non-negative, and prev+1
-        // must still be non-negative. If prev == INT64_MAX, the stored
-        // value wrapped to INT64_MIN — we cannot safely roll back under
-        // concurrency, so we surface the error and leave the counter as-is.
-        // Subsequent callers will see the negative value and also throw.
         if (prev < 0 || prev == std::numeric_limits<int64_t>::max()) {
             throw std::overflow_error("TagAllocator: counter overflow (int64)");
         }
         int64_t seq = prev + 1;
-
-        const uint64_t docId = documentId_; // plain read; see TA-1 comment
-        if (docId == 0) {
-            return seq;
-        }
-        if (seq > static_cast<int64_t>(UINT32_MAX)) {
-            throw std::overflow_error(
-                "TagAllocator: counter overflow in multi-document mode "
-                "(>2^32 ops per doc)");
-        }
-        // Only the low 32 bits of docId participate in the encoding — that's
-        // the on-the-wire slot width we have. The full 64-bit docId is kept
-        // in documentId_ for identity/debug; callers needing full-precision
-        // cross-doc uniqueness should use snapshot().documentId.
-        return (static_cast<int64_t>(docId & 0xFFFFFFFFu) << 32)
-             | (seq & 0xFFFFFFFFll);
+        // Note: no UINT32_MAX cap — v2 counters are 64-bit end-to-end.
+        return ShapeIdentity{documentId_, static_cast<uint64_t>(seq)};
     }
 
-    // TA-7: Peek at what nextTag() would return, without advancing.
-    // In multi-doc mode this returns the *encoded* tag for convenience.
-    int64_t peek() const {
+    // Peek at what nextShapeIdentity() would return, without advancing.
+    ShapeIdentity peekShapeIdentity() const {
         int64_t cur = counter_.load(std::memory_order_relaxed);
         if (cur < 0 || cur == std::numeric_limits<int64_t>::max()) {
             throw std::overflow_error("TagAllocator: counter overflow");
         }
-        int64_t seq = cur + 1;
-        const uint64_t docId = documentId_;
-        if (docId == 0) return seq;
-        if (seq > static_cast<int64_t>(UINT32_MAX)) {
-            throw std::overflow_error(
-                "TagAllocator: counter overflow in multi-document mode");
-        }
-        return (static_cast<int64_t>(docId & 0xFFFFFFFFu) << 32)
-             | (seq & 0xFFFFFFFFll);
+        return ShapeIdentity{documentId_, static_cast<uint64_t>(cur + 1)};
     }
 
-    // TA-7: Atomically reserve n sequential tags. Returns [start, end) — a
+    // Atomically reserve n sequential ShapeIdentities. Returns the
+    // (first, one-past-last) pair as a closed-open range: the counter
+    // values are [first.counter, lastExclusive.counter). n must be > 0.
+    std::pair<ShapeIdentity, ShapeIdentity> allocateRangeV2(int64_t n) {
+        if (n <= 0) {
+            throw std::invalid_argument(
+                "TagAllocator::allocateRangeV2: n must be positive");
+        }
+        int64_t prev = counter_.fetch_add(n, std::memory_order_relaxed);
+        if (prev < 0 || prev > std::numeric_limits<int64_t>::max() - n - 1) {
+            throw std::overflow_error(
+                "TagAllocator::allocateRangeV2: counter overflow");
+        }
+        int64_t start = prev + 1;
+        int64_t endExclusive = prev + n + 1;  // half-open
+        return {
+            ShapeIdentity{documentId_, static_cast<uint64_t>(start)},
+            ShapeIdentity{documentId_, static_cast<uint64_t>(endExclusive)},
+        };
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // v1 allocation path — DEPRECATED. Kept for source compatibility;
+    // all internal paths have been rewritten to use nextShapeIdentity.
+    // Deprecation fires on EXTERNAL callers; the internal deprecated
+    // methods below route through the v2 path + encodeV1Scalar.
+    //
+    // Single-document mode (documentId=0): returns 1, 2, 3...
+    // Multi-document mode: upper 32 bits = documentId (low 32 bits thereof),
+    //                      lower 32 bits = seq. Throws overflow_error
+    //                      when the v1 format can no longer represent the
+    //                      v2 counter (counter > UINT32_MAX).
+    // ──────────────────────────────────────────────────────────────
+    [[deprecated("use TagAllocator::nextShapeIdentity() — the v1 int64 "
+                 "encoding squeezes documentId into 32 bits and caps at "
+                 "UINT32_MAX counters")]]
+    int64_t nextTag() {
+        // Route through the v2 path + encodeV1Scalar so the two stay in
+        // lockstep on any future fix. encodeV1Scalar throws on multi-doc
+        // counter > UINT32_MAX, matching the pre-audit nextTag cliff.
+        return encodeV1Scalar(nextShapeIdentity());
+    }
+
+    // Peek at what nextTag() would return, without advancing.
+    [[deprecated("use TagAllocator::peekShapeIdentity() instead")]]
+    int64_t peek() const {
+        return encodeV1Scalar(peekShapeIdentity());
+    }
+
+    // Atomically reserve n sequential tags. Returns [start, end) — a
     // half-open range of *sequence* numbers; callers can encode each with
     // encodeTag() below if they need the docId-combined form.
     // n must be > 0.
+    [[deprecated("use TagAllocator::allocateRangeV2() — returns a pair "
+                 "of ShapeIdentity values, avoiding the v1 sequence "
+                 "narrowing")]]
     std::pair<int64_t, int64_t> allocateRange(int64_t n) {
         if (n <= 0) {
             throw std::invalid_argument(
@@ -183,18 +225,15 @@ public:
 
     // Encode a raw sequence number as a tag in the current documentId space.
     // Exposed for callers of allocateRange().
+    [[deprecated("use encodeV1Scalar(ShapeIdentity) on a ShapeIdentity "
+                 "produced by allocateRangeV2(), or use the v2 identity "
+                 "directly without encoding")]]
     int64_t encodeTag(int64_t seq) const {
         if (seq <= 0) {
             throw std::invalid_argument("TagAllocator::encodeTag: seq must be > 0");
         }
-        const uint64_t docId = documentId_;
-        if (docId == 0) return seq;
-        if (seq > static_cast<int64_t>(UINT32_MAX)) {
-            throw std::overflow_error(
-                "TagAllocator::encodeTag: 32-bit overflow in multi-doc mode");
-        }
-        return (static_cast<int64_t>(docId & 0xFFFFFFFFu) << 32)
-             | (seq & 0xFFFFFFFFll);
+        return encodeV1Scalar(ShapeIdentity{documentId_,
+                                            static_cast<uint64_t>(seq)});
     }
 
     // TA-8: Full reset to default-constructed state: counter AND documentId
@@ -283,11 +322,68 @@ public:
         return counter_.load(std::memory_order_relaxed) == 0;
     }
 
-    // TA-7: Snapshot / restore for cloning and rollback.
-    Snapshot snapshot() const {
-        Snapshot s;
-        s.counter    = counter_.load(std::memory_order_relaxed);
+    // ──────────────────────────────────────────────────────────────
+    // v2 Snapshot / restore (Phase 2). Primary path — counter is
+    // uint64_t so it matches ShapeIdentity::counter semantics.
+    // ──────────────────────────────────────────────────────────────
+    SnapshotV2 snapshotV2() const {
+        SnapshotV2 s;
+        int64_t raw = counter_.load(std::memory_order_relaxed);
+        if (raw < 0) {
+            throw std::logic_error(
+                "TagAllocator::snapshotV2: counter in overflow state");
+        }
+        s.counter    = static_cast<uint64_t>(raw);
         s.documentId = documentId_;
+        return s;
+    }
+
+    void restoreV2(const SnapshotV2& snap, bool force = false) {
+        if (snap.counter > static_cast<uint64_t>(
+                std::numeric_limits<int64_t>::max())) {
+            // Internal counter_ is int64_t — v2 callers can construct a
+            // snapshot with counter > INT64_MAX only by hand-crafting one,
+            // which would be a bug. Reject loudly rather than wrapping.
+            throw std::invalid_argument(
+                "TagAllocator::restoreV2: snapshot counter exceeds INT64_MAX");
+        }
+        int64_t target = static_cast<int64_t>(snap.counter);
+        int64_t current = counter_.load(std::memory_order_relaxed);
+        if (!force && current > target) {
+            throw std::logic_error(
+                "TagAllocator::restoreV2: counter has advanced past snapshot "
+                "(use force=true to discard issued identities)");
+        }
+        counter_.store(target, std::memory_order_relaxed);
+        documentId_ = snap.documentId;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // v1 Snapshot / restore — DEPRECATED. Route through v2.
+    // ──────────────────────────────────────────────────────────────
+    [[deprecated("use TagAllocator::snapshotV2() instead")]]
+    Snapshot snapshot() const {
+        // Suppress the deprecation warning from our own internal use of
+        // the struct name (MSVC-scoped; GCC and Clang use their own
+        // equivalents). The route is: v2 snapshot first, then narrow.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+        Snapshot s;
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+        auto v2 = snapshotV2();
+        if (v2.counter > static_cast<uint64_t>(
+                std::numeric_limits<int64_t>::max())) {
+            throw std::overflow_error(
+                "TagAllocator::snapshot: v2 counter exceeds INT64_MAX and "
+                "cannot be narrowed to the deprecated Snapshot struct; "
+                "use snapshotV2() instead");
+        }
+        s.counter    = static_cast<int64_t>(v2.counter);
+        s.documentId = v2.documentId;
         return s;
     }
 
@@ -295,6 +391,7 @@ public:
     // current counter has not advanced past the snapshot (prevents time
     // travel that would re-issue already-handed-out tags). Pass force=true
     // to override (e.g., discarding a failed transaction).
+    [[deprecated("use TagAllocator::restoreV2() instead")]]
     void restore(const Snapshot& snap, bool force = false) {
         if (snap.counter < 0) {
             throw std::invalid_argument(
@@ -314,54 +411,81 @@ public:
 
     // Extract the document ID bits from a tag (upper 32 bits).
     // Note: in multi-doc mode this returns the low 32 bits of documentId_.
+    //
+    // DEPRECATED: v2 callers should keep the ShapeIdentity around rather
+    // than encoding and then splitting it. The 32-bit docId half this
+    // function returns is exactly the squeeze.
+    [[deprecated("use ShapeIdentity::documentId — this function returns "
+                 "only the v1-squeezed low 32 bits of the original docId")]]
     static uint32_t extractDocumentId(int64_t tag) {
         return static_cast<uint32_t>((static_cast<uint64_t>(tag) >> 32)
                                      & 0xFFFFFFFFu);
     }
 
     // Extract the operation counter from a tag (lower 32 bits).
+    [[deprecated("use ShapeIdentity::counter — this function returns only "
+                 "the low 32 bits, which truncates v2 counters > UINT32_MAX")]]
     static uint32_t extractCounter(int64_t tag) {
         return static_cast<uint32_t>(static_cast<uint64_t>(tag)
                                      & 0xFFFFFFFFu);
     }
 
-    // TA-3: Convert an int64_t tag to a 32-bit value for OCCT APIs that
-    // require int (OCCT's Standard_Integer is 32-bit).
+    // ──────────────────────────────────────────────────────────────
+    // toOcctTag — convert a ShapeIdentity to an int32_t for OCCT APIs
+    // that require int (OCCT's Standard_Integer is 32-bit).
     //
-    //   * Multi-doc tags (any tag with bits set above bit 31): use the
-    //     per-allocator mapping. Returns a stable 32-bit handle that's
-    //     unique within THIS allocator instance.
-    //   * Single-doc tags that fit in int32_t: pass through for backward
-    //     compat.
-    //   * Single-doc tags that overflow int32_t: also go through the map.
+    //   * Single-doc identities with counter <= INT32_MAX: pass through
+    //     the counter as-is (v1 backward-compat).
+    //   * Everything else: allocated via the per-allocator map and
+    //     returned as a stable 32-bit handle unique within THIS
+    //     allocator instance.
     //
-    // IMPORTANT: the mapping is per-allocator and does NOT persist across
+    // The mapping is per-allocator and does NOT persist across
     // serialization. Do not rely on it for cross-session identity.
     //
     // Throws std::overflow_error if the OCCT tag space itself overflows
     // (>2^31 - 1 distinct mappings in one allocator — effectively never).
-    int32_t toOcctTag(int64_t tag) {
-        if (tag <= 0) {
+    // Throws std::invalid_argument if the identity is invalid
+    // (counter == 0).
+    // ──────────────────────────────────────────────────────────────
+    int32_t toOcctTag(ShapeIdentity id) {
+        if (!id.isValid()) {
             throw std::invalid_argument(
-                "TagAllocator::toOcctTag: non-positive tag");
+                "TagAllocator::toOcctTag: invalid ShapeIdentity (counter == 0)");
         }
-        // Fast path: tag fits in int32_t (no high bits set). This covers
-        // single-doc tags 1..INT32_MAX. A multi-doc tag with docId==0 in the
-        // encoding would be indistinguishable from a single-doc tag anyway,
-        // so passing it through is correct.
-        if (tag <= std::numeric_limits<int32_t>::max()) {
-            return static_cast<int32_t>(tag);
+        // Fast path: single-doc and counter fits in int32_t. Preserves
+        // v1's identity pass-through for tags 1..INT32_MAX.
+        if (id.isSingleDoc() && id.counter <=
+                static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            return static_cast<int32_t>(id.counter);
         }
-        // Slow path: multi-doc or >2^31. Map via per-allocator table.
-        auto it = occtTagMap_.find(tag);
+        auto it = occtTagMap_.find(id);
         if (it != occtTagMap_.end()) return it->second;
         int next = nextOcctTag_.fetch_add(1, std::memory_order_relaxed);
         if (next <= 0) {
             throw std::overflow_error(
                 "TagAllocator::toOcctTag: OCCT 32-bit tag space exhausted");
         }
-        occtTagMap_.emplace(tag, next);
+        occtTagMap_.emplace(id, next);
         return next;
+    }
+
+    // v1-compat overload — DEPRECATED. Decodes the scalar back into a
+    // ShapeIdentity using this allocator's documentId_ as the hint, then
+    // calls the v2 path. Consistency guarantee: a scalar produced by
+    // nextTag() on this allocator maps to the same int32_t as the
+    // corresponding ShapeIdentity from nextShapeIdentity(). Cross-
+    // allocator scalars (produced by a different document) may throw
+    // std::invalid_argument — §3.2 Error Case.
+    [[deprecated("use TagAllocator::toOcctTag(ShapeIdentity) — the v1 "
+                 "scalar decode loses information and can throw on "
+                 "cross-document inputs")]]
+    int32_t toOcctTag(int64_t tag) {
+        if (tag <= 0) {
+            throw std::invalid_argument(
+                "TagAllocator::toOcctTag: non-positive tag");
+        }
+        return toOcctTag(decodeV1Scalar(tag, documentId_, nullptr));
     }
 
     // TA-4: Generate a document ID from a string (e.g., UUID) using
@@ -454,7 +578,11 @@ private:
     // inserts — this class is OREO_CONTEXT_BOUND, so single-thread access
     // is the contract. If toOcctTag ever needs concurrent use, wrap
     // occtTagMap_ in a mutex.
-    std::unordered_map<int64_t, int32_t> occtTagMap_;
+    // Phase 2 migration: keyed by ShapeIdentity so v2 counters above
+    // UINT32_MAX (which can't be round-tripped through a v1 scalar)
+    // still have stable OCCT-tag mappings. The hash specialization in
+    // shape_identity.h makes this straightforward.
+    std::unordered_map<ShapeIdentity, int32_t> occtTagMap_;
     std::atomic<int32_t>                  nextOcctTag_;
 
     // Process-global registry for the low-32-bit collision check.

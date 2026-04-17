@@ -426,7 +426,10 @@ TEST(DeepHistory, History_TraceHistoryBoolean) {
     } else {
         int withHistory = 0;
         for (auto& [idx, mapped] : allFaces) {
-            if (mapped.find(oreo::ElementCodes::POSTFIX_TAG) != std::string::npos) {
+            // v2 canonical carrier is ;:P; legacy ;:H only appears on
+            // names that survived a v1 read path without canonicalization.
+            if (mapped.find(oreo::ElementCodes::POSTFIX_IDENTITY) != std::string::npos
+                || mapped.find(oreo::ElementCodes::POSTFIX_TAG) != std::string::npos) {
                 ++withHistory;
             }
         }
@@ -463,7 +466,10 @@ TEST(DeepHistory, History_TraceHistoryFillet) {
     } else {
         int withHistory = 0;
         for (auto& [idx, mapped] : allFaces) {
-            if (mapped.find(oreo::ElementCodes::POSTFIX_TAG) != std::string::npos) {
+            // v2 canonical carrier is ;:P; legacy ;:H only appears on
+            // names that survived a v1 read path without canonicalization.
+            if (mapped.find(oreo::ElementCodes::POSTFIX_IDENTITY) != std::string::npos
+                || mapped.find(oreo::ElementCodes::POSTFIX_TAG) != std::string::npos) {
                 ++withHistory;
             }
         }
@@ -616,7 +622,7 @@ TEST(ElementMapIntegrity, EMap_NullShapeHandled) {
 
     // mapShapeElements with a null shape should not crash
     // It should return a valid (possibly null) NamedShape
-    auto result = oreo::mapShapeElements(*ctx, nullShape, mapper, inputs, 1, "test");
+    auto result = oreo::mapShapeElements(*ctx, nullShape, mapper, inputs, oreo::ShapeIdentity{0,1}, "test");
     // The result is a NamedShape, check it doesn't crash accessing it
     EXPECT_TRUE(result.isNull() || !result.isNull());
     // If not null, its element map should be accessible
@@ -694,7 +700,8 @@ TEST(ElementMapIntegrity, EMap_Tag0Semantics) {
     // zero, which is the "single-doc, no-op-tag" default.
     oreo::NullMapper mapper;
     std::vector<oreo::NamedShape> inputs;
-    auto result = oreo::mapShapeElements(*ctx, mkBox.Shape(), mapper, inputs, 0, "tagzero");
+    auto result = oreo::mapShapeElements(*ctx, mkBox.Shape(), mapper, inputs,
+                                         oreo::ShapeIdentity{}, "tagzero");
 
     // Element map is now populated: 6 faces + 12 edges + 8 vertices = 26.
     auto map = result.elementMap();
@@ -768,7 +775,8 @@ TEST(EMapSerialization, EMapSerial_ChildMapRoundTrip) {
 
     oreo::ChildElementMap childRef;
     childRef.map = childMap;
-    childRef.tag = 42;
+    // Phase 3: ChildElementMap::tag (int64) → ChildElementMap::id (ShapeIdentity).
+    childRef.id = oreo::ShapeIdentity{0, 42};
     childRef.postfix = ";:C";
     parentMap->addChild(childRef);
 
@@ -788,7 +796,7 @@ TEST(EMapSerialization, EMapSerial_ChildMapRoundTrip) {
 
     // Verify child survived
     ASSERT_EQ(restored->children().size(), 1u);
-    EXPECT_EQ(restored->children()[0].tag, 42);
+    EXPECT_EQ(restored->children()[0].id, (oreo::ShapeIdentity{0, 42}));
     EXPECT_EQ(restored->children()[0].postfix, ";:C");
     ASSERT_NE(restored->children()[0].map, nullptr);
     EXPECT_EQ(restored->children()[0].map->count(), 2);
@@ -869,19 +877,21 @@ TEST(StringHasher, Hasher_RoundTrip) {
     // The FreeCAD StringHasher uses App:: namespace and requires Qt.
     // Test the oreo::ElementMap's own hashing/encoding instead,
     // which is the production code path for topological naming.
+    //
+    // Phase 3: encodeElementName takes a ShapeIdentity; the produced
+    // postfix is ;:P<16hex>.<16hex>.
 
-    // Verify that encodeElementName produces consistent results
     oreo::MappedName input("Face1");
-    std::int64_t tag = 42;
+    oreo::ShapeIdentity id{0, 42};
 
-    auto encoded1 = oreo::ElementMap::encodeElementName("Face", input, tag, ";:M");
-    auto encoded2 = oreo::ElementMap::encodeElementName("Face", input, tag, ";:M");
+    auto encoded1 = oreo::ElementMap::encodeElementName("Face", input, id, ";:M");
+    auto encoded2 = oreo::ElementMap::encodeElementName("Face", input, id, ";:M");
 
     EXPECT_EQ(encoded1.data(), encoded2.data())
-        << "Same input + same tag + same postfix should produce identical encoded name";
+        << "Same input + same identity + same postfix should produce identical encoded name";
 
     // Verify the encoding contains the expected parts
-    EXPECT_NE(encoded1.find(oreo::ElementCodes::POSTFIX_TAG), std::string::npos);
+    EXPECT_NE(encoded1.find(oreo::ElementCodes::POSTFIX_IDENTITY), std::string::npos);
     EXPECT_NE(encoded1.find(";:M"), std::string::npos);
 }
 
@@ -889,24 +899,24 @@ TEST(StringHasher, Hasher_RoundTrip) {
 TEST(StringHasher, Hasher_DifferentStrings) {
     oreo::MappedName face1("Face1");
     oreo::MappedName face2("Face2");
-    std::int64_t tag = 10;
+    oreo::ShapeIdentity id{0, 10};
 
-    auto encoded1 = oreo::ElementMap::encodeElementName("Face", face1, tag, ";:M");
-    auto encoded2 = oreo::ElementMap::encodeElementName("Face", face2, tag, ";:M");
+    auto encoded1 = oreo::ElementMap::encodeElementName("Face", face1, id, ";:M");
+    auto encoded2 = oreo::ElementMap::encodeElementName("Face", face2, id, ";:M");
 
     EXPECT_NE(encoded1.data(), encoded2.data())
-        << "Different base names with same tag should produce different encoded names";
+        << "Different base names with same identity should produce different encoded names";
 }
 
 // 108. Hasher_EmptyString
 TEST(StringHasher, Hasher_EmptyString) {
     oreo::MappedName empty("");
-    std::int64_t tag = 1;
+    oreo::ShapeIdentity id{0, 1};
 
     // Should not crash on empty input
-    auto encoded = oreo::ElementMap::encodeElementName("Face", empty, tag, ";:M");
+    auto encoded = oreo::ElementMap::encodeElementName("Face", empty, id, ";:M");
     // The result should at least contain the postfix parts
-    EXPECT_NE(encoded.find(oreo::ElementCodes::POSTFIX_TAG), std::string::npos);
+    EXPECT_NE(encoded.find(oreo::ElementCodes::POSTFIX_IDENTITY), std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

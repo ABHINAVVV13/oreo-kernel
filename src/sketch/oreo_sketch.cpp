@@ -608,7 +608,7 @@ OperationResult<NamedShape> sketchToWire(
         return scope.makeFailure<NamedShape>();
     }
 
-    auto tag = ctx.tags().nextTag();
+    auto tag = ctx.tags().nextShapeIdentity();
     return scope.makeResult(NamedShape(wire, tag));
 }
 
