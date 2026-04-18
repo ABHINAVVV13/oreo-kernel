@@ -17,78 +17,78 @@ oreo-kernel is the core geometry engine for oreoCAD. It is **not** a fork of Fre
 - Implements a parametric feature tree with replay, undo, and serialization
 - Provides a foundation layer for error handling, diagnostics, units, schema migration, and validation (see [Foundation layer](#foundation-layer))
 
-## Build requirements
+## Getting started
 
+> oreo-kernel is **Docker-first**. There are no supported native
+> Windows / Linux / macOS build paths — the determinism test suite
+> asserts byte-identical output across every host, and the only
+> honest way to guarantee that is to pin the toolchain at the image
+> layer. The full rationale is in [docs/deployment.md](docs/deployment.md).
 
-| Requirement  | Version               |
-| ------------ | --------------------- |
-| CMake        | 3.20+                 |
-| vcpkg        | latest                |
-| C++ compiler | MSVC 2022+ or GCC 11+ |
-| OS           | Windows 10/11, Linux  |
+### For consumers — use oreo-kernel in your code
 
-
-Dependencies managed by vcpkg (see `vcpkg.json`):
-
-- OpenCASCADE (OCCT)
-- Eigen3
-- Boost (graph, iostreams)
-- Google Test
-- nlohmann/json
-- Qt6 Core
-
-## Build instructions
-
-### Using CMake presets (recommended)
-
-```bash
-cmake --preset default
-cmake --build --preset release
-ctest --preset default
+```dockerfile
+FROM ghcr.io/abhinavvv13/oreo-kernel:v0.9.0
+# Your source + CMakeLists with find_package(OreoKernel REQUIRED)
+# and target_link_libraries(... PRIVATE OreoKernel::oreo-kernel)
 ```
 
-### Manual (without presets)
+Complete worked example (C++, CMake, Dockerfile): see
+[docs/deployment.md § For consumers](docs/deployment.md#for-consumers).
+
+### For contributors — develop on oreo-kernel itself
+
+Requirements:
+
+| | |
+|---|---|
+| Docker Desktop (Windows / macOS) *or* Docker Engine (Linux) | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+| VS Code + the **Dev Containers** extension | [code.visualstudio.com](https://code.visualstudio.com/) |
+
+That's the entire prerequisite list. No MSVC, no vcpkg, no OCCT, no Qt SDK.
 
 ```bash
-cmake -B build -G Ninja \
-    -DCMAKE_TOOLCHAIN_FILE=<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake \
-    -DCMAKE_BUILD_TYPE=Release
-
-cmake --build build --config Release
+git clone https://github.com/ABHINAVVV13/oreo-kernel
+cd oreo-kernel
+code .
+# → VS Code shows "Reopen in Container"  →  click it
+# → terminal, compiler, IntelliSense, debugger all run in the container
 ```
 
-### Docker (Linux dev + CI)
-
-For a reproducible build environment that matches what CI uses:
+Inside the container:
 
 ```bash
-# Build the dev image (one-time, ~10 min on a fresh machine).
-docker build -t oreo-kernel-dev -f docker/Dockerfile .
-
-# Mount the source and build inside the container.
-docker run --rm -it -v "$PWD":/workspace -w /workspace oreo-kernel-dev \
-    sh -c 'cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-              && cmake --build build --parallel \
-              && ctest --test-dir build --output-on-failure'
+cmake --preset debug          # configure
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
 
-The image ships Ubuntu 24.04 + OCCT 7.7 + Boost + Qt6 + Eigen +
-nlohmann-json + GTest + Clang/GCC, with `CMAKE_PREFIX_PATH` and
-`OpenCASCADE_DIR` pre-exported so a bare `cmake -S . -B build` Just
-Works. CI pulls the published image from
-`ghcr.io/<owner>/oreo-kernel-dev:latest` (rebuild via the `dev-image`
-GitHub workflow).
+Available CMake presets: `debug`, `release`, `no-legacy`, `asan`,
+`fuzz` (see [CMakePresets.json](CMakePresets.json)).
 
-### Running tests
+Full contributor guide, including how to reproduce every CI matrix
+cell locally and how to debug in VS Code:
+[docs/deployment.md § For contributors](docs/deployment.md#for-contributors).
 
-```bash
-cd build
-ctest --output-on-failure
-```
+### What the image contains
 
-Build directories (`build/`, `build_vs/`, `build_msvc/`) are gitignored.
+Built from a single multi-stage [docker/Dockerfile](docker/Dockerfile):
 
-## Test suite (19 executables, ~580 gtest cases)
+| Component | Version | Source |
+|---|---|---|
+| OCCT (OpenCASCADE) | **7.9.3** | built from source, pinned git tag `V7_9_3` |
+| Base OS | Ubuntu 24.04 | apt |
+| GCC | 13.x | apt (`build-essential`) |
+| Clang + sanitizer runtimes | 18.x | apt (`clang`, `libclang-rt-18-dev`, `llvm-18`) |
+| Boost | 1.83 | apt |
+| Qt 6 (Core only, headless) | 6.4.2 | apt |
+| Eigen 3 | 3.4.0 | apt |
+| nlohmann-json | 3.11.3 | apt |
+| GTest | 1.14.0 | apt |
+
+Everything is pinned. Rebuilds from scratch are deterministic.
+
+## Test suite (39 ctest targets, all required green on every PR)
 
 **Unit / geometry**
 

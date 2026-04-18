@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Ignore generated documentation outputs. The hand-written sources
+# (*.md files in this directory) are tracked normally; only build
+# artifacts produced by docs tooling (Doxygen, Sphinx, mkdocs, etc.)
+# should ever land here, and they do not belong in git.
+
+# Doxygen — default output dir when running `doxygen Doxyfile` at
+# repo root. Also the conventional HTML+xml subdirs.
+_doxygen/
+doxygen/
+html/
+xml/
+latex/
+
+# Sphinx — default build dir from `sphinx-build . _build`.
+_build/
+
+# mkdocs — default site dir from `mkdocs build`.
+site/
+
+# mdBook — default output dir from `mdbook build`.
+book/
+
+# Generated API reference that shadows the hand-written guides.
+# (Reserved; not currently produced, but prevents accidental check-in
+# if someone wires up a generator later.)
+api/
+generated/
+
+# Editor swap/temp files that occasionally land in docs/.
+*.tmp
+*.bak
