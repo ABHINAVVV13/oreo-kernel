@@ -28,6 +28,24 @@ find_package(Boost REQUIRED COMPONENTS graph iostreams)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 
+# ── OCCT STEP-library layout detection ───────────────────────────────────────
+#
+# OCCT 7.7 consolidated STEP I/O into a single TKDESTEP library covering
+# both STEPControl_* and STEPCAFControl_*. Earlier versions (including
+# Ubuntu 24.04's apt-shipped 7.6.3) still use the split layout:
+#   * STEPControl_Reader/Writer     → TKSTEP
+#   * STEPCAFControl_Reader/Writer  → TKXDESTEP
+#
+# We use imported-target existence checks (not version parsing) so this
+# works regardless of which OCCT config format is on disk. Windows vcpkg
+# ships 7.7+ → TKDESTEP path; Linux apt ships 7.6.x → TKSTEP+TKXDESTEP.
+if(TARGET TKDESTEP)
+    set(OCCT_STEP_LIBS TKDESTEP)
+else()
+    set(OCCT_STEP_LIBS TKSTEP TKXDESTEP)
+endif()
+message(STATUS "OCCT STEP libraries: ${OCCT_STEP_LIBS}")
+
 # ── Build options ─────────────────────────────────────────────────────────────
 #
 # OREO_ENABLE_LEGACY_API (default ON):
@@ -94,7 +112,34 @@ if(NOT OREO_ENABLE_SANITIZER STREQUAL "none")
             list(APPEND _oreo_san_flags -fsanitize=address -fno-omit-frame-pointer)
         endif()
         if(_oreo_san_lower MATCHES "undefined")
-            list(APPEND _oreo_san_flags -fsanitize=undefined -fno-sanitize-recover=undefined)
+            # -fno-sanitize=vptr: the vptr check emits calls to
+            # __ubsan_vptr_type_cache / __ubsan_handle_dynamic_type_cache_miss_*
+            # which live in libclang_rt.ubsan_standalone_cxx — the C++
+            # UBSan runtime. When a C consumer (test_capi_consumer or a
+            # downstream user writing plain C) links liboreo-kernel.so,
+            # clang's C driver doesn't auto-link that C++ runtime and the
+            # link fails with undefined references. Disabling vptr keeps
+            # the flat C ABI linkable under sanitizers.
+            #
+            # -fno-sanitize-recover=undefined makes every remaining UBSan
+            # check abort on the first error, EXCEPT alignment which we
+            # mark recoverable via -fsanitize-recover=alignment. Why:
+            # OCCT's NCollection_TListNode<T> downcasts through a
+            # pointer-arithmetic trick that UBSan's alignment check
+            # flags as a false positive (the runtime memory is actually
+            # aligned; the static type just claims more than OCCT's
+            # ListNode base provides). Recoverable mode lets the
+            # suppressions file in ci/ubsan.supp silence that specific
+            # check without weakening coverage of the rest. All other
+            # UBSan categories (int overflow, null deref, OOB, bool/enum
+            # cast, shift-out-of-range, function-ptr mismatch, etc.)
+            # remain non-recoverable, abort immediately, and cannot be
+            # silenced — that's where real bugs live.
+            list(APPEND _oreo_san_flags
+                -fsanitize=undefined
+                -fno-sanitize=vptr
+                -fno-sanitize-recover=undefined
+                -fsanitize-recover=alignment)
         endif()
         if(_oreo_san_lower MATCHES "thread")
             list(APPEND _oreo_san_flags -fsanitize=thread)
@@ -231,8 +276,8 @@ function(_oreo_kernel_configure_common target)
             TKOffset
             TKShHealing
             TKMesh
-            # OCCT STEP I/O
-            TKDESTEP
+            # OCCT STEP I/O — see OCCT_STEP_LIBS detection above
+            ${OCCT_STEP_LIBS}
             TKXSBase
             TKXCAF
             TKLCAF
@@ -465,7 +510,12 @@ oreo_add_test(test_fuzz tests/test_fuzz/test_fuzz.cpp)
 
 # Perf regression (generous time budgets — catches 10x regressions, not microbenchmark drift)
 # Uses legacy oreo_make_box / oreo_fillet etc. Gate until it's ported to ctx APIs.
-if(OREO_ENABLE_LEGACY_API)
+# Also skipped under sanitizers — ASan/UBSan/TSan slow every load/store
+# by 2-10x, which busts the microsecond-granularity wall-clock budgets
+# these tests assert against. Running them under sanitizers produces
+# false-positive perf regressions that drown out real ones. Perf
+# regression detection belongs in the non-sanitized gcc-release cell.
+if(OREO_ENABLE_LEGACY_API AND OREO_ENABLE_SANITIZER STREQUAL "none")
     oreo_add_test(test_perf tests/test_perf/test_perf.cpp)
 endif()
 

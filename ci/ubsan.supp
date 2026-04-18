@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# UndefinedBehaviorSanitizer suppressions for third-party library code.
+#
+# Format: "<check>:<substring-of-function-or-source-path>".
+# Each entry must point at a specific check + target and carry a
+# one-line comment explaining why the report is tolerated. If it's
+# unclear, err on the side of NOT suppressing — a real bug masked
+# by an over-broad suppression is much more expensive than a
+# harmless warning.
+#
+# These suppressions are NOT for oreo-kernel code. If your code
+# triggers an UBSan report, fix the bug instead.
+
+# ── OCCT 7.9 ────────────────────────────────────────────────────────
+#
+# NCollection_TListNode<T> stores the template value inline via a
+# pointer-arithmetic downcast that UBSan's "alignment" check flags
+# for types whose alignof exceeds the base NCollection_ListNode's
+# guaranteed alignment. The actual runtime behaviour is fine on
+# x86_64 (unaligned loads are permitted and the pointer is naturally
+# aligned after the first dummy field); the check is a false positive
+# for this platform. Upstream is aware; scoped narrowly so any UB in
+# our own code still fires.
+alignment:NCollection_TListNode
+alignment:NCollection_ListNode

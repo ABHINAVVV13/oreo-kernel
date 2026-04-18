@@ -27,6 +27,7 @@
 
 #ifndef _PreComp_
 # include <cstdlib>
+# include <mutex>
 # include <unordered_set>
 #endif
 
@@ -74,8 +75,24 @@ void IndexedName::set(
     const std::vector<const char*>& allowedNames,
     bool allowOthers)
 {
-    // Storage for names that we weren't given external storage for
+    // Storage for names that we weren't given external storage for.
+    //
+    // NameSet is process-global (it canonicalises type strings so that
+    // pointer equality is a valid type comparison everywhere downstream).
+    // The original FreeCAD code was single-threaded; oreo-kernel runs
+    // feature-tree replay in parallel across KernelContexts, so concurrent
+    // inserts triggered rehashes that freed the same bucket array twice
+    // (caught by ASan in Concurrency.ParallelFeatureTreeReplay).
+    // NameSetMutex serializes inserts AND the reads of res.first that
+    // follow — a concurrent insert on a different thread can rehash the
+    // table and invalidate the iterator, so we hold the lock through
+    // ensureUnshared() and the constData() load.
+    //
+    // Element pointers (not iterators) remain stable across rehash, so
+    // storing res.first->bytes.constData() into this->type is safe once
+    // we have the pointer; the lock only needs to cover its retrieval.
     static std::unordered_set<ByteArray, ByteArrayHasher> NameSet;
+    static std::mutex NameSetMutex;
 
     if (length < 0) {
         length = static_cast<int>(std::strlen(name));
@@ -107,6 +124,7 @@ void IndexedName::set(
     // If the type was NOT in the list of allowedNames, but the caller has set the allowOthers flag to
     // true, then add the new type to the static NameSet (if it is not already there).
     if (allowOthers) {
+        std::lock_guard<std::mutex> guard(NameSetMutex);
         auto res = NameSet.insert(ByteArray(QByteArray::fromRawData(name, suffixPosition)));
         if (res.second /*The insert succeeded (the type was new)*/) {
             // Make sure that the data in the set is a unique (unshared) copy of the text

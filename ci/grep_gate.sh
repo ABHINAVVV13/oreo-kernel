@@ -36,27 +36,29 @@ PATTERNS=(
     'static_cast<\s*(uint32_t|std::uint32_t)\s*>\s*\(\s*(docId|documentId|id)\s*&'
 )
 
-# File globs excluded from the gate. Update deliberately, never casually.
-EXCLUDES=(
-    ':(exclude)src/core/shape_identity.h'
-    ':(exclude)src/core/shape_identity.cpp'
-    ':(exclude)src/core/shape_identity_v1.h'
-    ':(exclude)src/core/shape_identity_v1.cpp'
-    ':(exclude)src/core/tag_allocator.h'
-    ':(exclude)src/core/tag_allocator.cpp'
-)
+# Files excluded from the gate live in the -g patterns + the grep-v
+# post-filter below, depending on which search engine is available.
+# The list (shape_identity*, tag_allocator*) is sanctioned; update
+# deliberately, never casually.
 
 # Choose the search command. Prefer rg for consistency with the CI
 # config most teams use; fall back to grep -Er -P (PCRE) if rg is
 # unavailable on a developer machine.
+#
+# Note on rg glob ordering: ripgrep resolves overlapping globs with
+# last-match-wins semantics. That means an include glob like
+# `-g 'src/**'` placed AFTER `-g '!src/core/shape_identity*'` will
+# silently override the exclusion and report hits in the allow-listed
+# files. To avoid that trap we pass the search directories as
+# positional arguments (which are not globs and don't interact with
+# -g at all) and use -g only for excludes.
 if command -v rg >/dev/null 2>&1; then
     SEARCH=(rg --no-heading --no-messages --color=never
-            -g '!src/core/shape_identity*.{h,cpp}'
-            -g '!src/core/tag_allocator*.{h,cpp}'
-            -g 'src/**' -g 'include/**')
+            -g '!src/core/shape_identity*'
+            -g '!src/core/tag_allocator*')
     RUNNER() {
         local pat="$1"
-        "${SEARCH[@]}" -n -e "$pat"
+        "${SEARCH[@]}" -n -e "$pat" src include
     }
 else
     echo "grep_gate: ripgrep not found; falling back to grep -Er -P"

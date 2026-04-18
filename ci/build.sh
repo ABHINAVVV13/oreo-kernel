@@ -68,8 +68,16 @@ cmake --build "$BUILD_DIR" --parallel
 # ── Test ───────────────────────────────────────────────────────
 # Sanitizer environment hardens detection without changing behaviour
 # of non-sanitized builds.
+#
+# Suppression files live next to this script and are scoped to the
+# third-party libraries we link against (OCCT in particular). We
+# resolve their absolute path here because ctest launches each test
+# binary with cwd=<build dir>, so a relative suppressions= path
+# wouldn't find them.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=1:abort_on_error=1:halt_on_error=1}
-export UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1:halt_on_error=1}
+export LSAN_OPTIONS=${LSAN_OPTIONS:-suppressions=${SCRIPT_DIR}/lsan.supp:print_suppressions=0}
+export UBSAN_OPTIONS=${UBSAN_OPTIONS:-suppressions=${SCRIPT_DIR}/ubsan.supp:print_stacktrace=1:halt_on_error=1}
 ctest --test-dir "$BUILD_DIR" --output-on-failure
 
 # ── Fuzzers (optional) ─────────────────────────────────────────

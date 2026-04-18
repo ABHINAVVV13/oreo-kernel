@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# LeakSanitizer suppressions for third-party library code.
+#
+# Each entry suppresses leaks whose stack trace contains a matching
+# substring. Suppressions are a cost — they hide real leaks — so
+# every entry must be scoped as narrowly as possible and carry a
+# comment explaining what it covers and why the leak is tolerated.
+#
+# These suppressions are NOT for oreo-kernel code. If a leak you
+# wrote lands here, fix the leak instead.
+#
+# When OCCT is bumped in docker/Dockerfile, re-run the ASan matrix
+# and prune any entries whose target moved or was fixed upstream.
+
+# ── OCCT 7.9 ────────────────────────────────────────────────────────
+#
+# OCCT maintains global plugin registries, message printer lists,
+# and XCAF attribute GUID caches as process-lifetime statics that
+# are never freed. LSan correctly reports them at program exit;
+# OCCT's own ASan CI (and every project that embeds OCCT) suppresses
+# them the same way. Related upstream issues include the XCAF
+# attribute registration leaks from `StdObjMgt_Persistent::Init`
+# and the `Message_Messenger` default printer allocation.
+leak:libTKernel.so
+leak:libTKVCAF.so
+leak:libTKMesh.so
