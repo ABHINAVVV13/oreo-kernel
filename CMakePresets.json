@@ -1,31 +1,121 @@
 {
   "version": 6,
   "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+
+  "_comment": [
+    "Presets for building oreo-kernel inside the oreo-kernel-dev",
+    "container (either CI or a VS Code Dev Container). All presets",
+    "assume OCCT, Boost, Qt6, Eigen, nlohmann-json, and GTest are",
+    "already on the system — that is the dev container's job. None",
+    "of these presets set CMAKE_TOOLCHAIN_FILE because the container",
+    "*is* the toolchain. See docs/deployment.md for the full story.",
+    "",
+    "If you find yourself reaching for vcpkg or a native build, stop:",
+    "oreo-kernel is a Docker-first project. Open the repo in VS Code,",
+    "click 'Reopen in Container', and use these presets from there."
+  ],
+
   "configurePresets": [
     {
-      "name": "default",
-      "displayName": "Default (vcpkg + Ninja)",
+      "name": "debug",
+      "displayName": "Debug (default)",
+      "description": "GCC Debug build with legacy API. Matches VS Code Dev Container auto-configure.",
       "binaryDir": "${sourceDir}/build",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "OREO_ENABLE_LEGACY_API": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release (GCC, legacy API)",
+      "description": "Canonical CI matrix cell: gcc-release with policy gates.",
+      "binaryDir": "${sourceDir}/build_release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "OREO_ENABLE_LEGACY_API": "ON"
+      }
+    },
+    {
+      "name": "no-legacy",
+      "displayName": "Release (server-safe, no legacy API)",
+      "description": "CI matrix cell: gcc-no-legacy. Validates the explicit-context API surface.",
+      "binaryDir": "${sourceDir}/build_nolegacy",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "OREO_ENABLE_LEGACY_API": "OFF"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "Sanitizers (Clang, ASan+UBSan)",
+      "description": "CI matrix cell: clang-asan-ubsan. Slow but catches UB and memory bugs.",
+      "binaryDir": "${sourceDir}/build_san",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "OREO_ENABLE_LEGACY_API": "ON",
+        "OREO_ENABLE_SANITIZER": "address+undefined"
+      }
+    },
+    {
+      "name": "fuzz",
+      "displayName": "Fuzzers (Clang, libFuzzer + ASan+UBSan)",
+      "description": "CI matrix cell: clang-fuzz. Builds libFuzzer harnesses for fuzzers/.",
+      "binaryDir": "${sourceDir}/build_fuzz",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "OREO_ENABLE_LEGACY_API": "ON",
+        "OREO_ENABLE_SANITIZER": "address+undefined",
+        "OREO_BUILD_FUZZERS": "ON"
       }
     }
   ],
+
   "buildPresets": [
-    {
-      "name": "release",
-      "configurePreset": "default",
-      "configuration": "Release"
-    }
+    { "name": "debug",     "configurePreset": "debug",     "configuration": "Debug" },
+    { "name": "release",   "configurePreset": "release",   "configuration": "Release" },
+    { "name": "no-legacy", "configurePreset": "no-legacy", "configuration": "Release" },
+    { "name": "asan",      "configurePreset": "asan",      "configuration": "RelWithDebInfo" },
+    { "name": "fuzz",      "configurePreset": "fuzz",      "configuration": "RelWithDebInfo" }
   ],
+
   "testPresets": [
     {
-      "name": "default",
-      "configurePreset": "default",
+      "name": "debug",
+      "configurePreset": "debug",
       "output": { "outputOnFailure": true },
-      "execution": { "timeout": 60 }
+      "execution": { "timeout": 120 }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true },
+      "execution": { "timeout": 120 }
+    },
+    {
+      "name": "no-legacy",
+      "configurePreset": "no-legacy",
+      "output": { "outputOnFailure": true },
+      "execution": { "timeout": 120 }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "output": { "outputOnFailure": true },
+      "execution": { "timeout": 300 }
     }
   ]
 }

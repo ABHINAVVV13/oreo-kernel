@@ -2,23 +2,34 @@
 #
 # dev-image.yml — Build + push the oreo-kernel-dev container to GHCR.
 #
+# This image is the development environment: toolchain (gcc, clang,
+# cmake, ninja, sanitizers, gdb), source-built OCCT 7.9.3 pinned to
+# match vcpkg, and all third-party deps. It does NOT contain
+# oreo-kernel itself — that's the role of the `release` target (see
+# .github/workflows/release.yml).
+#
 # When it runs:
-#   * Manually via the "Run workflow" button (use this to bootstrap the
-#     image the first time, after which CI can reference it).
-#   * Automatically on any push to main that touches the Dockerfile or
-#     this workflow file (so ci.yml never references a stale image
-#     after a dep bump).
+#   * Manually via the "Run workflow" button — use this to bootstrap
+#     the image the first time, after which CI can reference it.
+#   * Automatically on any push to main that touches docker/Dockerfile
+#     or this workflow file itself, so ci.yml never references a stale
+#     image after a dependency bump.
 #
-# Output: ghcr.io/<owner>/oreo-kernel-dev:latest plus a SHA-tagged
-# variant for reproducibility (ghcr.io/<owner>/oreo-kernel-dev:<sha>).
-# The owner is auto-derived from ${{ github.repository_owner }} so the
-# workflow works across forks without edits.
+# Output (pushed to GHCR under the repo owner):
+#   * oreo-kernel-dev:latest
+#   * oreo-kernel-dev:<commit-sha>   (pinned, for reproducibility)
+#   * oreo-kernel-dev:buildcache     (BuildKit cache, not for consumption)
 #
-# Required repo permissions:
-#   Settings → Actions → General → Workflow permissions → "Read and
+# Required repo settings for publishing:
+#   Settings → Actions → General → Workflow permissions: "Read and
 #   write permissions" (so GITHUB_TOKEN can push to GHCR).
-#   Settings → Packages → make the package public after first push if
-#   you want CI on PRs from forks to be able to pull it.
+#   Settings → Packages → visibility Public so CI on PRs from forks
+#   can pull it without credentials.
+#
+# First-run cost: ~45-60 min (building OCCT from source is the slow
+# step). Subsequent runs re-use the BuildKit cache and complete in
+# ~5-10 min, UNLESS OCCT_TAG or the occt-builder stage change, in
+# which case we pay the OCCT rebuild again (intentional).
 
 name: dev-image
 
@@ -57,11 +68,16 @@ jobs:
           echo "image=ghcr.io/${owner_lower}/oreo-kernel-dev" >> "$GITHUB_OUTPUT"
           echo "owner_lower=${owner_lower}" >> "$GITHUB_OUTPUT"
 
-      - name: Build + push image
+      # Build only the `dev` stage (toolchain + OCCT + deps, no
+      # oreo-kernel sources). Subsequent release.yml runs reuse the
+      # same occt-builder + dev layers via the BuildKit registry
+      # cache, so only the oreo-kernel compile cost is paid on release.
+      - name: Build + push dev image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
+          target: dev
           push: true
           tags: |
             ${{ steps.tags.outputs.image }}:latest
@@ -72,8 +88,11 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### Pushed images" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ steps.tags.outputs.image }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`${{ steps.tags.outputs.image }}:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "ci.yml references the \`:latest\` tag." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Pushed images"
+            echo "- \`${{ steps.tags.outputs.image }}:latest\`"
+            echo "- \`${{ steps.tags.outputs.image }}:${{ github.sha }}\`"
+            echo
+            echo "ci.yml references the \`:latest\` tag."
+            echo "release.yml reuses the \`:buildcache\` layers when building the consumer image."
+          } >> "$GITHUB_STEP_SUMMARY"

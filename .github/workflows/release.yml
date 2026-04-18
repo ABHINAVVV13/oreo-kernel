@@ -1,0 +1,190 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# release.yml — Build + publish the consumer-facing oreo-kernel image
+# on every semver tag push.
+#
+# Fires on:
+#   * push of a tag matching v*.*.* (e.g. v0.9.0, v0.9.0-rc1, v1.0.0).
+#   * manual workflow_dispatch with an explicit `tag` input, for
+#     re-publishing or cutting an out-of-band release.
+#
+# Produces (all pushed to GHCR under the repository owner):
+#   * oreo-kernel:<full-version>    e.g. 0.9.0-rc1
+#   * oreo-kernel:<major>.<minor>   e.g. 0.9  (stable releases only)
+#   * oreo-kernel:latest            (stable releases only)
+#
+# Pre-releases (tags containing a hyphen, like v0.9.0-rc1) only push
+# the exact-version tag — they do NOT update :latest or the :major.minor
+# channel, so users pinning to :0.9 or :latest don't accidentally jump
+# onto an rc build.
+#
+# The image is built from the Dockerfile's `release` target, which
+# composites the source-built OCCT 7.9.3 + toolchain from `dev` with
+# the compiled + installed oreo-kernel tree from `builder`. See
+# docker/Dockerfile for the full stage diagram.
+#
+# Consumer usage, documented in docs/deployment.md:
+#   FROM ghcr.io/<owner>/oreo-kernel:v0.9.0 AS deps
+#   # ... their CMake project, find_package(OreoKernel REQUIRED) ...
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g. v0.9.0). Must already exist on the repo.'
+        required: true
+        type: string
+
+concurrency:
+  # Serialize releases so two concurrent tag pushes don't race to
+  # overwrite :latest with the older one.
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  # Required for generating supply-chain attestations.
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    name: Build + push release image
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          # github.ref_name is "v0.9.0" on tag push; on manual dispatch
+          # we read from the workflow input. Strip leading "v" to get
+          # the bare version used for image tags.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            raw="${{ inputs.tag }}"
+          else
+            raw="${GITHUB_REF_NAME}"
+          fi
+          version="${raw#v}"
+
+          # Detect pre-release: anything with a hyphen (0.9.0-rc1,
+          # 1.2.3-beta.4). Pre-releases skip the :latest and
+          # :major.minor floating tags.
+          if [[ "$version" == *-* ]]; then
+            prerelease=1
+          else
+            prerelease=0
+          fi
+
+          # major.minor for the stable channel tag.
+          major_minor=$(echo "$version" | awk -F. '{print $1"."$2}')
+
+          # Lowercase the owner for GHCR (see ci.yml for the same
+          # rationale — Docker refs must be lowercase).
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/${owner_lc}/oreo-kernel"
+
+          {
+            echo "version=${version}"
+            echo "major_minor=${major_minor}"
+            echo "prerelease=${prerelease}"
+            echo "image=${image}"
+            echo "raw_tag=${raw}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Resolved: image=${image} version=${version} major_minor=${major_minor} prerelease=${prerelease}"
+
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.raw_tag }}
+          # Fetch tags so CMake's version propagation (if it reads git
+          # at build time) sees the correct ref.
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: image_tags
+        run: |
+          image="${{ steps.tag.outputs.image }}"
+          version="${{ steps.tag.outputs.version }}"
+          major_minor="${{ steps.tag.outputs.major_minor }}"
+          prerelease="${{ steps.tag.outputs.prerelease }}"
+
+          # Always publish the exact-version tag (and the commit SHA,
+          # for auditability).
+          tags="${image}:${version}"
+          tags="${tags},${image}:${GITHUB_SHA}"
+
+          # Stable channel tags only for non-prerelease versions.
+          if [ "$prerelease" = "0" ]; then
+            tags="${tags},${image}:${major_minor}"
+            tags="${tags},${image}:latest"
+          fi
+
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+          echo "Pushing image with tags: ${tags}"
+
+      # The release image targets the `release` stage from the
+      # Dockerfile, which composites dev (toolchain + OCCT 7.9.3) with
+      # the compiled + installed oreo-kernel tree. BuildKit reuses the
+      # dev-image.yml cache for the occt-builder and dev layers, so
+      # this step only pays for building oreo-kernel itself (~5-10 min),
+      # not the ~45 min OCCT source build.
+      - name: Build + push release image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: release
+          push: true
+          tags: ${{ steps.image_tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.tag.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/oreo-kernel-dev:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/oreo-kernel:buildcache,mode=max
+          provenance: true
+          sbom: true
+
+      # Generate GitHub-native build provenance attestation so
+      # consumers can verify the image was built by this workflow from
+      # this commit. Discoverable via `gh attestation verify <image>`.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ steps.tag.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summary
+        run: |
+          {
+            echo "## Release published"
+            echo
+            echo "**Version:** ${{ steps.tag.outputs.version }}"
+            echo "**Commit:** ${GITHUB_SHA}"
+            echo
+            echo "### Image tags"
+            echo "${{ steps.image_tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/- `/' | sed 's/$/`/'
+            echo
+            echo "### Consume"
+            echo '```dockerfile'
+            echo "FROM ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.version }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

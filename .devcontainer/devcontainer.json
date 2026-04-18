@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// VS Code Dev Containers config — the canonical way to work on
+// oreo-kernel. When VS Code opens this repo it offers
+// "Reopen in Container"; accepting attaches the editor to a running
+// instance of the `dev` stage from docker/Dockerfile, giving
+// breakpoint-capable debugging, IntelliSense, and a terminal all
+// running inside the same environment CI uses.
+//
+// On first open this pulls ghcr.io/abhinavvv13/oreo-kernel-dev:latest
+// (~3 GB, one-time). To rebuild from the local Dockerfile instead,
+// swap `image` for the `build` block below (commented out).
+{
+    "name": "oreo-kernel",
+
+    // Pinned to the published dev image. Contributors without a local
+    // Dockerfile build get the exact environment CI uses. If you need
+    // to iterate on the Dockerfile itself, comment out `image` and
+    // uncomment the `build` block.
+    "image": "ghcr.io/abhinavvv13/oreo-kernel-dev:latest",
+
+    // "build": {
+    //     "dockerfile": "../docker/Dockerfile",
+    //     "target": "dev",
+    //     "context": ".."
+    // },
+
+    // Mount the repo at /workspace to match the WORKDIR set in the
+    // dev stage. Cached mount gives ~native file I/O on Windows/Mac.
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+    // Run as root inside the container. This matches the image (which
+    // doesn't create a non-root user) and avoids file-ownership
+    // headaches with the bind-mounted source tree on Linux hosts.
+    "remoteUser": "root",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "llvm-vs-code-extensions.vscode-clangd",
+                "vadimcn.vscode-lldb",
+                "twxs.cmake"
+            ],
+            "settings": {
+                "cmake.configureOnOpen": true,
+                "cmake.buildDirectory": "${workspaceFolder}/build",
+                "cmake.generator": "Ninja",
+                "cmake.configureArgs": [
+                    "-DCMAKE_BUILD_TYPE=Debug",
+                    "-DOREO_ENABLE_LEGACY_API=ON"
+                ],
+                "cmake.buildToolArgs": ["--parallel"],
+                "C_Cpp.default.compilerPath": "/usr/bin/g++",
+                "C_Cpp.default.cppStandard": "c++17",
+                "C_Cpp.intelliSenseEngine": "disabled",
+                "clangd.arguments": [
+                    "--background-index",
+                    "--compile-commands-dir=${workspaceFolder}/build"
+                ],
+                "files.watcherExclude": {
+                    "**/build/**": true,
+                    "**/build_*/**": true,
+                    "**/.git/objects/**": true
+                }
+            }
+        }
+    },
+
+    // Auto-configure CMake on first container creation so IntelliSense
+    // and clangd have compile_commands.json from the start. Subsequent
+    // rebuilds use the CMake Tools extension.
+    "postCreateCommand": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DOREO_ENABLE_LEGACY_API=ON",
+
+    // Forward GDB's port range in case contributors want to attach a
+    // remote debugger (e.g. GDB server inside container, frontend
+    // outside). Not needed for the default in-container F5 flow.
+    "forwardPorts": [],
+
+    // Contributor-facing label shown in the VS Code status bar.
+    "remoteEnv": {
+        "OREO_KERNEL_DEV_CONTAINER": "1"
+    }
+}

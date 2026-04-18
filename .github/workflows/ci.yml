@@ -4,20 +4,21 @@
 #
 # Architecture:
 #   * One prebuilt container image (oreo-kernel-dev) carries the entire
-#     toolchain — gcc, clang, OCCT 7.7, Boost, Qt6, Eigen,
-#     nlohmann-json, GTest. Built and pushed by .github/workflows/dev-image.yml.
+#     toolchain — gcc, clang, OCCT 7.9.3 (source-built, pinned), Boost,
+#     Qt6, Eigen, nlohmann-json, GTest. Built and pushed by the
+#     dev-image.yml workflow.
 #   * One workflow job (`build`) runs inside that container.
 #   * One build script (ci/build.sh) takes env vars and does
 #     configure → build → test → optional fuzz/gates.
 #   * The matrix below enumerates the configurations we care about;
 #     adding a new one is one line, not a copy-pasted job block.
 #
-# Windows MSVC is intentionally not in this workflow — the kernel is
-# portable C++ and the Linux container is the authoritative gate.
-# Maintainers verify Windows locally on every push (build_msvc/ +
-# ctest -C Release). If Windows-specific CI is later required, it
-# belongs in its own workflow file with its own toolchain story
-# (Windows containers + prebuilt OCCT, or vcpkg with a primed cache).
+# oreo-kernel is a Docker-first project. All builds happen inside the
+# oreo-kernel-dev container — no native Windows / macOS / Linux host
+# builds. The determinism test suite enforces byte-identical output
+# across all consumers of the image, so using the same OCCT bits
+# everywhere is a correctness requirement, not a convenience. See
+# docs/deployment.md for the full story.
 
 name: ci
 

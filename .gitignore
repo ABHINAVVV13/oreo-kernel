@@ -1,20 +1,29 @@
-# Build artifacts
+# Build artifacts — anything CMake writes out. Everything in this
+# project is meant to be built inside the oreo-kernel-dev container;
+# these patterns exist to catch accidental host-level builds and to
+# keep VS Code's CMake Tools scratch dirs out of git.
 build/
 build_*/
 cmake-build-*/
 out/
 
-# vcpkg installed packages
+# vcpkg artifacts. The project dropped vcpkg in favour of the
+# source-built OCCT in docker/Dockerfile. Kept ignored here so a
+# contributor experimenting with a side vcpkg install doesn't leak
+# 10+ GB of installed packages into the repo.
 vcpkg_installed/
+vcpkg/
 
-# IDE files
+# IDE files. .vscode/ is intentionally ignored — per-contributor
+# overrides belong there, and the canonical shared config lives in
+# .devcontainer/devcontainer.json which IS checked in.
 .vs/
 .vscode/
 .idea/
 *.user
 *.suo
 
-# Compiled objects
+# Compiled objects — anything that escapes a build dir.
 *.obj
 *.o
 *.a
@@ -27,10 +36,18 @@ vcpkg_installed/
 *.pdb
 *.ilk
 
-# Temp files
+# Editor + runtime temp files.
 *.tmp
 *.step.tmp
-build.bat
-test.bat
-test_detail.bat
+
+# Claude Code local session state.
 .claude
+
+# libFuzzer-generated corpus expansion — SHA1-hex-named files that
+# libFuzzer writes to corpora/ as it discovers new coverage. These
+# are local-run artifacts, not curated inputs. Hand-written seeds use
+# the NN_description.ext convention (e.g. 01_empty_tree.json) and
+# remain tracked because the underscore in position 3 breaks this
+# pattern. Promote a fuzzer-found crash to the tracked set by
+# renaming it to a named file before committing.
+corpora/**/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*

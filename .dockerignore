@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Keep the Docker build context lean and deterministic. Without this
+# file, `COPY . /src/oreo-kernel` in docker/Dockerfile would drag every
+# local build artifact into the container, including build/ trees that
+# still hold a CMakeCache pointing at the host's source path — causing
+# the `release` stage's in-container cmake to reject the preconfigured
+# cache ("source ... does not match the source used to generate cache").
+#
+# Keep this list aligned with .gitignore; anything ignored by git
+# generally shouldn't ride into an image either.
+
+# Git metadata — not needed inside the image
+.git/
+.gitignore
+
+# Build artifacts from host-side experiments
+build/
+build_*/
+cmake-build-*/
+out/
+
+# vcpkg leftovers (project no longer uses vcpkg; kept ignored defensively)
+vcpkg_installed/
+vcpkg/
+
+# IDE / editor scratch
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Compiled objects that escape a build dir
+*.obj
+*.o
+*.a
+*.lib
+*.dll
+*.exe
+*.so
+*.dylib
+*.exp
+*.pdb
+*.ilk
+
+# Editor + runtime temp files
+*.tmp
+*.step.tmp
+
+# Claude Code local session state
+.claude/
+
+# Local memory (outside the repo, but guard in case a symlink exists)
+memory/
+
+# Documentation generator outputs (hand-written .md in docs/ still copy)
+docs/_doxygen/
+docs/html/
+docs/xml/
+docs/_build/
+docs/site/
+
+# Docker itself — no reason to recurse into our own metadata
+docker/*.tar
