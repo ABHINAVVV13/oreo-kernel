@@ -193,7 +193,81 @@ OREO_API OreoSolid oreo_ctx_make_sphere(OreoContext ctx, double radius);
 OREO_API OreoSolid oreo_ctx_extrude(OreoContext ctx, OreoSolid base, double dx, double dy, double dz);
 OREO_API OreoSolid oreo_ctx_boolean_union(OreoContext ctx, OreoSolid a, OreoSolid b);
 OREO_API OreoSolid oreo_ctx_boolean_subtract(OreoContext ctx, OreoSolid target, OreoSolid tool);
+OREO_API OreoSolid oreo_ctx_boolean_intersect(OreoContext ctx, OreoSolid a, OreoSolid b);
 OREO_API OreoSolid oreo_ctx_fillet(OreoContext ctx, OreoSolid solid, OreoEdge edges[], int n, double radius);
+
+// ─── Extended ctx-aware primitives (server-safe) ─────────────
+//
+// Parallel to oreo_make_{cone,torus,wedge}; the ctx-aware surface is the
+// only supported path in multi-tenant server builds
+// (-DOREO_ENABLE_LEGACY_API=OFF). See docs/server-safe-api.md.
+OREO_API OreoSolid oreo_ctx_make_cone(OreoContext ctx,
+                                       double r1, double r2, double height);
+OREO_API OreoSolid oreo_ctx_make_torus(OreoContext ctx,
+                                        double major_r, double minor_r);
+OREO_API OreoSolid oreo_ctx_make_wedge(OreoContext ctx,
+                                        double dx, double dy, double dz,
+                                        double ltx);
+
+// ─── Extended ctx-aware geometry operations ──────────────────
+//
+// Each wraps the ctx-aware C++ call in oreo::geometry. Null-handle /
+// range-check failures route diagnostics through `ctx` and return NULL
+// (or 0 for int returns). Exception boundary is the same as the other
+// oreo_ctx_* entry points: any Standard_Failure or std::exception is
+// caught, reported as OREO_OCCT_FAILURE / INTERNAL_ERROR, and the
+// caller receives NULL.
+OREO_API OreoSolid oreo_ctx_revolve(OreoContext ctx, OreoSolid base,
+                                     double ax, double ay, double az,   // axis point
+                                     double dx, double dy, double dz,   // axis direction
+                                     double angle_rad);
+OREO_API OreoSolid oreo_ctx_chamfer(OreoContext ctx, OreoSolid solid,
+                                     OreoEdge edges[], int n, double distance);
+OREO_API OreoSolid oreo_ctx_shell(OreoContext ctx, OreoSolid solid,
+                                   OreoFace faces[], int n, double thickness);
+OREO_API OreoSolid oreo_ctx_loft(OreoContext ctx, OreoWire profiles[], int n,
+                                  int make_solid);
+OREO_API OreoSolid oreo_ctx_sweep(OreoContext ctx, OreoWire profile, OreoWire path);
+OREO_API OreoSolid oreo_ctx_mirror(OreoContext ctx, OreoSolid solid,
+                                    double px, double py, double pz,     // plane point
+                                    double nx, double ny, double nz);    // plane normal
+OREO_API OreoSolid oreo_ctx_pattern_linear(OreoContext ctx, OreoSolid solid,
+                                            double dx, double dy, double dz,
+                                            int count, double spacing);
+OREO_API OreoSolid oreo_ctx_pattern_circular(OreoContext ctx, OreoSolid solid,
+                                              double ax, double ay, double az,
+                                              double dx, double dy, double dz,
+                                              int count, double total_angle_rad);
+OREO_API OreoSolid oreo_ctx_draft(OreoContext ctx, OreoSolid solid,
+                                   OreoFace faces[], int n,
+                                   double angle_deg,
+                                   double pull_dx, double pull_dy, double pull_dz);
+OREO_API OreoSolid oreo_ctx_hole(OreoContext ctx, OreoSolid solid, OreoFace face,
+                                  double cx, double cy, double cz,
+                                  double diameter, double depth);
+OREO_API OreoSolid oreo_ctx_pocket(OreoContext ctx, OreoSolid solid,
+                                    OreoSolid profile, double depth);
+OREO_API OreoSolid oreo_ctx_rib(OreoContext ctx, OreoSolid solid, OreoSolid profile,
+                                 double dx, double dy, double dz, double thickness);
+OREO_API OreoSolid oreo_ctx_offset(OreoContext ctx, OreoSolid solid, double distance);
+OREO_API OreoSolid oreo_ctx_thicken(OreoContext ctx, OreoSolid shell, double thickness);
+OREO_API OreoSolid oreo_ctx_split_body(OreoContext ctx, OreoSolid solid,
+                                        double px, double py, double pz,
+                                        double nx, double ny, double nz);
+OREO_API OreoSolid oreo_ctx_fillet_variable(OreoContext ctx, OreoSolid solid,
+                                             OreoEdge edge,
+                                             double start_radius, double end_radius);
+OREO_API OreoSolid oreo_ctx_make_face_from_wire(OreoContext ctx, OreoWire wire);
+OREO_API OreoSolid oreo_ctx_combine(OreoContext ctx, OreoSolid shapes[], int n);
+
+// ─── Extended ctx-aware queries (server-safe) ────────────────
+//
+// Per-sub-shape access mirrors the legacy oreo_get_{face,edge}. Caller
+// owns the returned handle and must oreo_free_{face,edge} it.
+OREO_API OreoFace   oreo_ctx_get_face(OreoContext ctx, OreoSolid solid, int index);
+OREO_API OreoEdge   oreo_ctx_get_edge(OreoContext ctx, OreoSolid solid, int index);
+OREO_API double     oreo_ctx_measure_distance(OreoContext ctx, OreoSolid a, OreoSolid b);
+OREO_API OreoBBox   oreo_ctx_footprint(OreoContext ctx, OreoSolid before, OreoSolid after);
 
 // ============================================================
 // v2 identity-aware C API (Phase 5 — always available, no legacy gate)
@@ -250,6 +324,43 @@ OREO_API OreoMassProps oreo_ctx_mass_properties(OreoContext ctx, OreoSolid solid
 OREO_API OreoSolid oreo_ctx_import_step(OreoContext ctx, const uint8_t* data, size_t len);
 OREO_API OreoSolid oreo_ctx_import_step_file(OreoContext ctx, const char* path);
 OREO_API int       oreo_ctx_export_step_file(OreoContext ctx, OreoSolid solids[], int n, const char* path);
+
+// ─── Additional interchange formats (ctx-aware) ──────────────
+//
+// STL and IGES ride on OCCT's built-in readers/writers; 3MF export is
+// hand-rolled. 3MF import is intentionally absent — the format's ZIP +
+// XML requirements don't justify in-tree support yet. Callers who need
+// to INGEST 3MF should unpack manually and feed the contained `3D/3dmodel.model`
+// vertex/triangle data to a mesher of their choice.
+//
+// STL: binary by default (stl_format=0). Set stl_format=1 for ASCII.
+// linear_deflection_mm and angular_deflection_deg control tessellation
+// (typical 0.1mm / 20°). heal_before_tessellate=1 runs ShapeFix first
+// (slower but more robust on boolean-retry outputs).
+OREO_API OreoSolid oreo_ctx_import_stl     (OreoContext ctx, const uint8_t* data, size_t len);
+OREO_API OreoSolid oreo_ctx_import_stl_file(OreoContext ctx, const char* path);
+OREO_API int       oreo_ctx_export_stl_file(OreoContext ctx, OreoSolid solid,
+                                             const char* path,
+                                             int stl_format,                   // 0=binary, 1=ASCII
+                                             double linear_deflection_mm,
+                                             double angular_deflection_deg,
+                                             int heal_before_tessellate);
+
+// IGES 5.3; same reader/writer pair as STEP but for IGES geometry.
+OREO_API OreoSolid oreo_ctx_import_iges     (OreoContext ctx, const uint8_t* data, size_t len);
+OREO_API OreoSolid oreo_ctx_import_iges_file(OreoContext ctx, const char* path);
+OREO_API int       oreo_ctx_export_iges_file(OreoContext ctx, OreoSolid solids[], int n, const char* path);
+
+// 3MF export (store-only ZIP over Core 3MF model). `object_name` and
+// `unit` accept NULL to use defaults ("oreo-object", "millimeter").
+// No compressor: files can be large, but store-only gains interop with
+// every slicer we tested.
+OREO_API int       oreo_ctx_export_3mf_file(OreoContext ctx, OreoSolid solid,
+                                             const char* path,
+                                             double linear_deflection_mm,
+                                             double angular_deflection_deg,
+                                             const char* object_name,
+                                             const char* unit);
 
 // ============================================================
 // Context-aware sketch API (always available, no legacy gate)
@@ -345,6 +456,28 @@ OREO_API int oreo_ctx_sketch_line_live_count      (OreoSketch sketch);
 OREO_API int oreo_ctx_sketch_circle_live_count    (OreoSketch sketch);
 OREO_API int oreo_ctx_sketch_arc_live_count       (OreoSketch sketch);
 OREO_API int oreo_ctx_sketch_constraint_live_count(OreoSketch sketch);
+
+// ─── Construction geometry ────────────────────────────────────
+//
+// An entity flagged as construction participates in the solver (so it
+// can be a reference for constraints — e.g. a centerline for a
+// symmetric constraint, or a tangent target for a circle) but is
+// stripped out when the sketch is converted to a wire/face for
+// extrusion, revolve, sweep, or any downstream feature.
+//
+// Only Line / Circle / Arc carry a construction flag; points are never
+// emitted into wires so the notion is meaningless for them.
+//
+// Default: every entity is a real (non-construction) entity on add.
+// Toggle with the setters below. The getter returns 1 for construction,
+// 0 for real, and -1 on error (null handle, unknown id).
+OREO_API int oreo_ctx_sketch_set_line_construction  (OreoSketch sketch, int id, int is_construction);
+OREO_API int oreo_ctx_sketch_set_circle_construction(OreoSketch sketch, int id, int is_construction);
+OREO_API int oreo_ctx_sketch_set_arc_construction   (OreoSketch sketch, int id, int is_construction);
+
+OREO_API int oreo_ctx_sketch_line_is_construction  (OreoSketch sketch, int id);
+OREO_API int oreo_ctx_sketch_circle_is_construction(OreoSketch sketch, int id);
+OREO_API int oreo_ctx_sketch_arc_is_construction   (OreoSketch sketch, int id);
 
 // ============================================================
 // Context-aware feature-edit API (always available, no legacy gate)
@@ -448,7 +581,211 @@ OREO_API int oreo_ctx_feature_tree_set_param_vec   (OreoFeatureTree t,
                                                      const char* paramName,
                                                      double x, double y, double z);
 
+// Geometry-param updates. Mirror the oreo_feature_builder_set_* shape
+// so re-targeting a sketch plane, a hole's centre point, a draft
+// direction, a revolve axis, a mirror frame, or a split plane does
+// not require delete-and-recreate of the feature. All return OREO_OK
+// on success or an OreoErrorCode on missing feature / null arg /
+// invalid input (e.g. zero-magnitude direction).
+OREO_API int oreo_ctx_feature_tree_set_param_pnt(OreoFeatureTree t,
+                                                  const char* featureId,
+                                                  const char* paramName,
+                                                  double x, double y, double z);
+OREO_API int oreo_ctx_feature_tree_set_param_dir(OreoFeatureTree t,
+                                                  const char* featureId,
+                                                  const char* paramName,
+                                                  double x, double y, double z);
+OREO_API int oreo_ctx_feature_tree_set_param_ax1(OreoFeatureTree t,
+                                                  const char* featureId,
+                                                  const char* paramName,
+                                                  double px, double py, double pz,
+                                                  double dx, double dy, double dz);
+OREO_API int oreo_ctx_feature_tree_set_param_ax2(OreoFeatureTree t,
+                                                  const char* featureId,
+                                                  const char* paramName,
+                                                  double px, double py, double pz,
+                                                  double nx, double ny, double nz);
+OREO_API int oreo_ctx_feature_tree_set_param_pln(OreoFeatureTree t,
+                                                  const char* featureId,
+                                                  const char* paramName,
+                                                  double px, double py, double pz,
+                                                  double nx, double ny, double nz);
+
+// Reference-param updates. set_ref overwrites; set_ref_list REPLACES
+// any existing list value (pair set_ref_list + add_ref_list to append
+// incrementally). set_ref_list with n==0 and entries==NULL clears
+// the list to empty.
+//
+// Each entry in the entries/elementNames/elementTypes arrays must be
+// a valid NUL-terminated string; pass NULL in any of the three outer
+// arrays to treat every entry's field as empty.
+OREO_API int oreo_ctx_feature_tree_set_param_ref(OreoFeatureTree t,
+                                                  const char* featureId,
+                                                  const char* paramName,
+                                                  const char* refFeatureId,
+                                                  const char* refElementName,
+                                                  const char* refElementType);
+OREO_API int oreo_ctx_feature_tree_set_param_ref_list(OreoFeatureTree t,
+                                                       const char* featureId,
+                                                       const char* paramName,
+                                                       const char* const* refFeatureIds,
+                                                       const char* const* refElementNames,
+                                                       const char* const* refElementTypes,
+                                                       int n);
+OREO_API int oreo_ctx_feature_tree_add_param_ref_list(OreoFeatureTree t,
+                                                       const char* featureId,
+                                                       const char* paramName,
+                                                       const char* refFeatureId,
+                                                       const char* refElementName,
+                                                       const char* refElementType);
+
+// Replace a param with a ConfigRef pointing at the named config input.
+// Mirrors oreo_feature_builder_set_config_ref but targets an existing
+// feature in the tree.
+OREO_API int oreo_ctx_feature_tree_set_param_config_ref(OreoFeatureTree t,
+                                                         const char* featureId,
+                                                         const char* paramName,
+                                                         const char* configInputName);
+
+// Remove a single param from a feature (makes it "unset"). Returns
+// OREO_OK even if the param wasn't set; OREO_INVALID_INPUT only on
+// null args or missing feature.
+OREO_API int oreo_ctx_feature_tree_unset_param(OreoFeatureTree t,
+                                                const char* featureId,
+                                                const char* paramName);
+
 OREO_API int oreo_ctx_feature_tree_count(OreoFeatureTree t);
+
+// ─── Feature introspection ──────────────────────────────────────
+//
+// Structured read API for the feature tree so the app can render /
+// persist the tree without round-tripping through toJSON/parse. Every
+// index is 0-based in feature-sequence order (same order the tree
+// replays in). Out-of-range indices return OREO_OUT_OF_RANGE.
+//
+// Size-probed string getters follow the same protocol as
+// oreo_ctx_face_name / oreo_merge_result_conflict_* : pass
+// (buf=NULL, buflen=0, needed=&n) to measure, allocate buflen >= n+1,
+// call again.
+
+// Feature lookup by id → 0-based index in the tree's feature list.
+// Returns -1 if the id is unknown.
+OREO_API int  oreo_ctx_feature_tree_index_of(OreoFeatureTree t,
+                                              const char* featureId);
+
+// Feature id (size-probe). Mirrors broken_id's shape.
+OREO_API int  oreo_ctx_feature_tree_feature_id(OreoFeatureTree t, int index,
+                                                char* buf, size_t buflen,
+                                                size_t* needed);
+// Feature type (size-probe), e.g. "Extrude" / "Fillet" / "MakeBox".
+OREO_API int  oreo_ctx_feature_tree_feature_type(OreoFeatureTree t, int index,
+                                                  char* buf, size_t buflen,
+                                                  size_t* needed);
+// Feature's current error message (size-probe). Empty when status == OK.
+OREO_API int  oreo_ctx_feature_tree_feature_error(OreoFeatureTree t, int index,
+                                                   char* buf, size_t buflen,
+                                                   size_t* needed);
+
+// Feature status as integer matching enum FeatureStatus:
+//   0=OK, 1=BrokenReference, 2=ExecutionFailed, 3=Suppressed, 4=NotExecuted.
+// Returns -1 on out-of-range.
+OREO_API int  oreo_ctx_feature_tree_feature_status(OreoFeatureTree t, int index);
+
+// 1 if the feature is user-suppressed, 0 otherwise; -1 on OOB.
+OREO_API int  oreo_ctx_feature_tree_feature_suppressed(OreoFeatureTree t, int index);
+
+// Number of parameters currently set on the feature. Returns -1 on OOB.
+OREO_API int  oreo_ctx_feature_tree_param_count(OreoFeatureTree t, int index);
+
+// Read the i-th parameter's name (0-based; deterministic by map order
+// = lexicographic on ParamName). Size-probe protocol.
+OREO_API int  oreo_ctx_feature_tree_param_name(OreoFeatureTree t,
+                                                int featureIndex, int paramIndex,
+                                                char* buf, size_t buflen,
+                                                size_t* needed);
+
+// Read a parameter's type as integer matching enum ParamType (0=Double,
+// 1=Int, ..., 12=ConfigRef). Returns -1 if the param is absent or the
+// feature index is out of range.
+OREO_API int  oreo_ctx_feature_tree_param_type(OreoFeatureTree t,
+                                                int featureIndex,
+                                                const char* paramName);
+
+// Typed readers. Return OREO_OK on success with *out populated, or an
+// OreoErrorCode on missing-param / type-mismatch / OOB. Pass NULL for
+// any unused out-pointer — each getter always writes every non-null
+// out parameter on success and leaves them untouched on failure.
+OREO_API int  oreo_ctx_feature_tree_get_param_double(OreoFeatureTree t,
+                                                      int featureIndex,
+                                                      const char* paramName,
+                                                      double* out);
+OREO_API int  oreo_ctx_feature_tree_get_param_int(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   int* out);
+OREO_API int  oreo_ctx_feature_tree_get_param_bool(OreoFeatureTree t,
+                                                    int featureIndex,
+                                                    const char* paramName,
+                                                    int* out);
+OREO_API int  oreo_ctx_feature_tree_get_param_string(OreoFeatureTree t,
+                                                      int featureIndex,
+                                                      const char* paramName,
+                                                      char* buf, size_t buflen,
+                                                      size_t* needed);
+OREO_API int  oreo_ctx_feature_tree_get_param_vec(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   double* x, double* y, double* z);
+OREO_API int  oreo_ctx_feature_tree_get_param_pnt(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   double* x, double* y, double* z);
+OREO_API int  oreo_ctx_feature_tree_get_param_dir(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   double* x, double* y, double* z);
+OREO_API int  oreo_ctx_feature_tree_get_param_ax1(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   double* px, double* py, double* pz,
+                                                   double* dx, double* dy, double* dz);
+OREO_API int  oreo_ctx_feature_tree_get_param_ax2(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   double* px, double* py, double* pz,
+                                                   double* nx, double* ny, double* nz);
+OREO_API int  oreo_ctx_feature_tree_get_param_pln(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   double* px, double* py, double* pz,
+                                                   double* nx, double* ny, double* nz);
+
+// ElementRef / ElementRefList / ConfigRef readers.
+// _ref_list_size returns the count (or -1 on error).
+// _ref_list_entry reads one entry's three strings via the size-probe
+// protocol — pass the same `index` for all three calls, plus a
+// `field` selector: 0=featureId, 1=elementName, 2=elementType.
+OREO_API int  oreo_ctx_feature_tree_get_param_ref(OreoFeatureTree t,
+                                                   int featureIndex,
+                                                   const char* paramName,
+                                                   int field,                // 0=featureId, 1=elementName, 2=elementType
+                                                   char* buf, size_t buflen,
+                                                   size_t* needed);
+OREO_API int  oreo_ctx_feature_tree_get_param_ref_list_size(OreoFeatureTree t,
+                                                             int featureIndex,
+                                                             const char* paramName);
+OREO_API int  oreo_ctx_feature_tree_get_param_ref_list_entry(OreoFeatureTree t,
+                                                              int featureIndex,
+                                                              const char* paramName,
+                                                              int entryIndex,
+                                                              int field,     // 0=featureId, 1=elementName, 2=elementType
+                                                              char* buf, size_t buflen,
+                                                              size_t* needed);
+OREO_API int  oreo_ctx_feature_tree_get_param_config_ref(OreoFeatureTree t,
+                                                          int featureIndex,
+                                                          const char* paramName,
+                                                          char* buf, size_t buflen,
+                                                          size_t* needed);
 
 // ─── Topology-change query ─────────────────────────────────────
 //
@@ -505,6 +842,305 @@ OREO_API int oreo_ctx_feature_tree_validate(OreoFeatureTree t);
 // returned handle and must oreo_free_solid it). Returns NULL on
 // failure; query the bound ctx for diagnostics.
 OREO_API OreoSolid oreo_ctx_feature_tree_replay(OreoFeatureTree t);
+
+// ============================================================
+// PartStudio — the pure typed function (v2)
+// ============================================================
+//
+// A PartStudio is a function f(Config) -> Solid with a declared input
+// schema. Configurations become arguments; custom features calling
+// part studios and (later) FeatureScript both compose on top of this
+// ABI. See docs/part-studio-as-function.md.
+//
+// All PartStudio / OreoConfig functions are ctx-aware and always on —
+// no OREO_ENABLE_LEGACY_API gate.
+
+typedef struct OreoPartStudio_T* OreoPartStudio;
+typedef struct OreoConfig_T*     OreoConfig;
+
+// ─── Lifecycle ──────────────────────────────────────────────────
+
+// Create a PartStudio bound to `ctx` with a display `name`. `name` may
+// be NULL (empty name). The caller owns the handle and must free it
+// with oreo_ctx_part_studio_free.
+OREO_API OreoPartStudio oreo_ctx_part_studio_create(OreoContext ctx,
+                                                     const char* name);
+OREO_API void           oreo_ctx_part_studio_free(OreoPartStudio ps);
+
+// Non-owning (borrowed) tree handle. Lifetime bound to `ps`.
+//
+// Ownership:
+//   - The returned handle is owned by `ps`. Do NOT call
+//     oreo_ctx_feature_tree_free on it — the workspace frees it
+//     when `ps` is freed. (The kernel detects a wrongful free call
+//     on a borrowed handle and logs a diagnostic instead of deleting,
+//     but apps should not rely on that guard.)
+//   - Valid only while `ps` is alive. Freeing `ps` invalidates the
+//     returned handle; any subsequent use is undefined behaviour.
+//
+// Safe operations: every oreo_ctx_feature_tree_* accessor
+// (add / remove / suppress / move / replace_reference / set_param_* /
+// get_param_* / replay / validate / count / broken_*).
+OREO_API OreoFeatureTree oreo_ctx_part_studio_tree(OreoPartStudio ps);
+
+// ─── ConfigSchema declaration ───────────────────────────────────
+//
+// Each call declares one typed input. Returns OREO_OK on success, or an
+// OreoErrorCode on a duplicate name / invalid default / bounds failure;
+// diagnostics route through the studio's ctx. `name` must not be NULL.
+OREO_API int oreo_ctx_part_studio_add_input_double(OreoPartStudio ps,
+                                                    const char* name,
+                                                    double default_value);
+OREO_API int oreo_ctx_part_studio_add_input_double_bounded(
+    OreoPartStudio ps, const char* name, double default_value,
+    double min_inclusive, double max_inclusive);
+OREO_API int oreo_ctx_part_studio_add_input_int(OreoPartStudio ps,
+                                                 const char* name,
+                                                 int default_value);
+OREO_API int oreo_ctx_part_studio_add_input_bool(OreoPartStudio ps,
+                                                  const char* name,
+                                                  int default_value);
+OREO_API int oreo_ctx_part_studio_add_input_string(OreoPartStudio ps,
+                                                    const char* name,
+                                                    const char* default_value);
+OREO_API int oreo_ctx_part_studio_add_input_vec(OreoPartStudio ps,
+                                                 const char* name,
+                                                 double dx, double dy, double dz);
+
+OREO_API int oreo_ctx_part_studio_input_count(OreoPartStudio ps);
+
+// ─── Schema fingerprint ─────────────────────────────────────────
+//
+// Stable 64-bit content hash over every input's (name, type, default,
+// min, max) tuple, in declaration order. Two schemas produce the same
+// fingerprint iff they are semantically equal.
+//
+// Used to guard oreo_ctx_part_studio_execute: a config carries the
+// fingerprint of the studio it was created from; execute rejects a
+// config whose fingerprint no longer matches. Apps that cache configs
+// across sessions can call this after fromJSON to verify the studio's
+// schema has not drifted before reusing a persisted config.
+//
+// Returns 0 for a null handle (0 is a valid fingerprint for the empty
+// schema — compare handle != NULL first).
+OREO_API uint64_t oreo_ctx_part_studio_schema_fingerprint(OreoPartStudio ps);
+
+// Fingerprint the OreoConfig was snapshotted with at create time.
+// Used for symmetric debugging + persistence-layer equality checks.
+// Returns 0 for a null handle.
+OREO_API uint64_t oreo_config_schema_fingerprint(OreoConfig cfg);
+
+// ─── Feature builder: bind a param to a config input ────────────
+//
+// Replaces / overwrites the param value with a ConfigRef pointing at
+// the named studio input. Resolution happens inside execute(); the
+// feature's stored param stays as a ConfigRef until then.
+OREO_API int oreo_feature_builder_set_config_ref(OreoFeatureBuilder b,
+                                                  const char* paramName,
+                                                  const char* configInputName);
+
+// ─── ConfigValue (runtime call arguments) ───────────────────────
+
+// Create a ConfigValue populated with every schema input at its
+// declared default. Returns NULL if `ps` is NULL. Free with
+// oreo_config_free.
+OREO_API OreoConfig oreo_config_create(OreoPartStudio ps);
+OREO_API void       oreo_config_free(OreoConfig cfg);
+
+// Override one input's value. Returns OREO_OK on success or an
+// OreoErrorCode on name/type/bound mismatch; diagnostics route
+// through the studio's ctx (the ConfigValue carries a weak ctx ref
+// inherited from its creating studio).
+OREO_API int oreo_config_set_double(OreoConfig cfg,
+                                     const char* name, double v);
+OREO_API int oreo_config_set_int   (OreoConfig cfg,
+                                     const char* name, int v);
+OREO_API int oreo_config_set_bool  (OreoConfig cfg,
+                                     const char* name, int v);
+OREO_API int oreo_config_set_string(OreoConfig cfg,
+                                     const char* name, const char* v);
+OREO_API int oreo_config_set_vec   (OreoConfig cfg, const char* name,
+                                     double x, double y, double z);
+
+// ─── Execute the function ───────────────────────────────────────
+
+// Run the studio with the given config. Returns the final OreoSolid or
+// NULL on failure (query the studio's ctx for diagnostics). The caller
+// owns the returned handle and must oreo_free_solid it.
+OREO_API OreoSolid oreo_ctx_part_studio_execute(OreoPartStudio ps,
+                                                 OreoConfig cfg);
+
+// Convenience: execute with every input at its schema default.
+OREO_API OreoSolid oreo_ctx_part_studio_execute_defaults(OreoPartStudio ps);
+
+// ─── JSON round-trip ────────────────────────────────────────────
+//
+// toJSON returns a heap-allocated NUL-terminated string — caller must
+// oreo_free_string. fromJSON parses the v2 envelope (or v1 / bare
+// tree for back-compat) and returns a new studio; NULL on failure
+// with diagnostics on the ctx.
+OREO_API char*          oreo_ctx_part_studio_to_json(OreoPartStudio ps);
+OREO_API OreoPartStudio oreo_ctx_part_studio_from_json(OreoContext ctx,
+                                                        const char* json);
+
+OREO_API void oreo_free_string(char* s);
+
+// ============================================================
+// Workspace + three-way merge (v2 — branching / merging)
+// ============================================================
+//
+// See docs/branching-merging.md. Workspaces represent branches of a
+// Part Studio; threeWayMerge combines two forks back together.
+
+typedef struct OreoWorkspace_T*   OreoWorkspace;
+typedef struct OreoMergeResult_T* OreoMergeResult;
+
+OREO_API OreoWorkspace oreo_ctx_workspace_create(OreoContext ctx,
+                                                  const char* name);
+OREO_API void          oreo_ctx_workspace_free(OreoWorkspace ws);
+
+// Fork creates a deep copy sharing the parent's ctx (and docId).
+OREO_API OreoWorkspace oreo_ctx_workspace_fork(OreoWorkspace ws,
+                                                const char* newName);
+
+// Non-owning (borrowed) tree handle. Lifetime bound to `ws`.
+//
+// Ownership:
+//   - The returned handle is owned by `ws`. Do NOT call
+//     oreo_ctx_feature_tree_free on it — the workspace frees it
+//     when `ws` is freed.
+//   - Valid only while `ws` is alive. Freeing `ws` invalidates the
+//     returned handle; any subsequent use is undefined behaviour.
+//
+// Safe operations: every oreo_ctx_feature_tree_* accessor.
+OREO_API OreoFeatureTree oreo_ctx_workspace_tree(OreoWorkspace ws);
+
+// Workspace metadata (size-probe strings; same protocol as face_name).
+OREO_API int oreo_ctx_workspace_name(OreoWorkspace ws,
+                                      char* buf, size_t buflen, size_t* needed);
+OREO_API int oreo_ctx_workspace_parent_name(OreoWorkspace ws,
+                                             char* buf, size_t buflen, size_t* needed);
+
+// ─── Workspace JSON round-trip ──────────────────────────────────
+//
+// Serialise a workspace (branch + base snapshot + metadata) to JSON
+// so the app can persist branches outside the kernel and rehydrate
+// them later with oreo_ctx_workspace_from_json. toJSON returns a
+// heap-allocated NUL-terminated string — caller must oreo_free_string.
+// fromJSON parses the envelope and returns a new OreoWorkspace; NULL
+// on failure with diagnostics on the ctx.
+OREO_API char*         oreo_ctx_workspace_to_json(OreoWorkspace ws);
+OREO_API OreoWorkspace oreo_ctx_workspace_from_json(OreoContext ctx,
+                                                     const char* json);
+
+// Three-way merge. `base`, `ours`, `theirs` must share a ctx; base is
+// the common ancestor (typically ours.baseSnapshot or theirs.baseSnapshot).
+// Returns a heap-allocated result the caller owns + must free.
+OREO_API OreoMergeResult oreo_ctx_workspace_merge(OreoWorkspace base,
+                                                   OreoWorkspace ours,
+                                                   OreoWorkspace theirs);
+
+// Result inspection
+OREO_API int             oreo_merge_result_is_clean(OreoMergeResult mr);
+OREO_API int             oreo_merge_result_conflict_count(OreoMergeResult mr);
+
+// Conflict kind as an integer matching enum MergeConflictKind:
+//   0=ParamConflict, 1=SuppressionConflict, 2=AddRemoveConflict,
+//   3=PositionConflict, 4=TypeConflict.
+// Returns -1 on out-of-range index.
+OREO_API int             oreo_merge_result_conflict_kind(OreoMergeResult mr,
+                                                          int index);
+
+// Size-probe string accessors; same protocol as oreo_ctx_face_name.
+OREO_API int             oreo_merge_result_conflict_feature_id(
+    OreoMergeResult mr, int index, char* buf, size_t buflen, size_t* needed);
+OREO_API int             oreo_merge_result_conflict_param_name(
+    OreoMergeResult mr, int index, char* buf, size_t buflen, size_t* needed);
+OREO_API int             oreo_merge_result_conflict_message(
+    OreoMergeResult mr, int index, char* buf, size_t buflen, size_t* needed);
+
+// Non-owning (borrowed) merged-tree handle. Lifetime bound to `mr`.
+//
+// Ownership:
+//   - The returned handle is owned by `mr`. Do NOT call
+//     oreo_ctx_feature_tree_free on it — the merge result frees it
+//     when `mr` is freed.
+//   - Valid only while `mr` is alive. Freeing `mr` invalidates the
+//     returned handle; any subsequent use is undefined behaviour.
+//
+// Safe operations: every oreo_ctx_feature_tree_* accessor (though
+// in practice callers iterate the merged tree read-only before
+// calling oreo_merge_result_apply_resolutions to produce an owned
+// resolved tree).
+OREO_API OreoFeatureTree oreo_merge_result_tree(OreoMergeResult mr);
+
+OREO_API void            oreo_merge_result_free(OreoMergeResult mr);
+
+// ─── Conflict resolution ──────────────────────────────────────
+//
+// Once a user has answered every conflict produced by threeWayMerge,
+// they feed those choices back through a ResolutionSet and apply it
+// to the merge result to produce a final, conflict-free feature tree.
+//
+// A Resolution identifies (featureId, paramName) and picks one of:
+//   0 = Ours, 1 = Theirs, 2 = Base, 3 = Custom (caller-supplied value)
+//
+// For non-ParamConflict kinds (SuppressionConflict / PositionConflict /
+// AddRemoveConflict / TypeConflict) paramName MUST be the empty string
+// — the conflict already carries enough context in its snapshot fields.
+//
+// Build a ResolutionSet by calling oreo_resolution_set_add(...) once
+// per conflict. For Custom choices, follow the add with exactly one of
+// oreo_resolution_set_last_set_{double,int,bool,string,vec} to attach
+// the custom value. Order matters: `_last_set_*` targets the most
+// recently added Resolution in the set.
+//
+// Apply with oreo_merge_result_apply_resolutions(mr, rs). The caller
+// receives a freshly-allocated OreoFeatureTree that it OWNS; free it
+// with oreo_ctx_feature_tree_free. The ResolutionSet itself remains
+// owned by the caller and can be freed independently.
+//
+// Any conflict that has no matching Resolution produces a warning on
+// the bound ctx's diagnostic stream and leaves the feature at its
+// base-state value — that matches the C++ contract in merge.h.
+typedef struct OreoResolutionSet_T* OreoResolutionSet;
+
+OREO_API OreoResolutionSet oreo_resolution_set_create(void);
+OREO_API void              oreo_resolution_set_free(OreoResolutionSet rs);
+OREO_API int               oreo_resolution_set_size(OreoResolutionSet rs);
+
+// Append a resolution. `paramName` may be NULL (treated as "").
+// `choice`: 0=Ours, 1=Theirs, 2=Base, 3=Custom.
+// Returns OREO_OK on success or OREO_INVALID_INPUT on a null set /
+// null featureId / out-of-range choice.
+OREO_API int oreo_resolution_set_add(OreoResolutionSet rs,
+                                      const char* featureId,
+                                      const char* paramName,
+                                      int choice);
+
+// Attach a custom value to the last-added resolution. These succeed
+// only when the last resolution's choice was Custom (3); otherwise
+// they return OREO_INVALID_STATE. Choose the setter that matches the
+// conflict's ParamValue kind — the apply step does a runtime-checked
+// std::get on the ParamValue variant.
+OREO_API int oreo_resolution_set_last_set_double(OreoResolutionSet rs, double v);
+OREO_API int oreo_resolution_set_last_set_int   (OreoResolutionSet rs, int v);
+OREO_API int oreo_resolution_set_last_set_bool  (OreoResolutionSet rs, int v);
+OREO_API int oreo_resolution_set_last_set_string(OreoResolutionSet rs, const char* v);
+OREO_API int oreo_resolution_set_last_set_vec   (OreoResolutionSet rs,
+                                                  double x, double y, double z);
+
+// Apply the supplied resolutions to the merge result and return a
+// fresh owned OreoFeatureTree bound to the merge result's ctx.
+// Returns NULL on failure (e.g. mr or rs null, or an internal error);
+// query the ctx's diagnostic stream for details.
+//
+// The returned tree is independent: mutating or freeing it does not
+// affect `mr`. The merge result's own tree (via oreo_merge_result_tree)
+// remains in its pre-resolution state and is still owned by `mr`.
+OREO_API OreoFeatureTree oreo_merge_result_apply_resolutions(
+    OreoMergeResult mr,
+    OreoResolutionSet rs);
 
 // ============================================================
 // Legacy singleton-context C API
@@ -625,6 +1261,25 @@ OREO_API const char* oreo_edge_name(OreoSolid solid, int index);
 OREO_API OreoSolid oreo_import_step(const uint8_t* data, size_t len);
 OREO_API OreoSolid oreo_import_step_file(const char* path);
 OREO_API int       oreo_export_step_file(OreoSolid solids[], int n, const char* path);
+
+// STL, IGES, 3MF — legacy singleton wrappers. Prefer the oreo_ctx_*
+// variants for server deployments. See the ctx-aware block above for
+// full documentation on the tessellation / format arguments.
+OREO_API OreoSolid oreo_import_stl(const uint8_t* data, size_t len);
+OREO_API OreoSolid oreo_import_stl_file(const char* path);
+OREO_API int       oreo_export_stl_file(OreoSolid solid, const char* path,
+                                         int stl_format,
+                                         double linear_deflection_mm,
+                                         double angular_deflection_deg,
+                                         int heal_before_tessellate);
+OREO_API OreoSolid oreo_import_iges(const uint8_t* data, size_t len);
+OREO_API OreoSolid oreo_import_iges_file(const char* path);
+OREO_API int       oreo_export_iges_file(OreoSolid solids[], int n, const char* path);
+OREO_API int       oreo_export_3mf_file(OreoSolid solid, const char* path,
+                                         double linear_deflection_mm,
+                                         double angular_deflection_deg,
+                                         const char* object_name,
+                                         const char* unit);
 
 // ============================================================
 // Serialization

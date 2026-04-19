@@ -26,7 +26,15 @@
 #pragma warning(disable : 4251)
 #endif
 
+// _USE_MATH_DEFINES unlocks M_PI / M_E / etc. on MSVC's <cmath>. On
+// Linux / macOS builds it is often already defined by another header
+// pulled in earlier in the translation unit, which triggers
+// -Wmacro-redefined. Guarding the define keeps the FreeCAD-derived
+// constraints engine (which requires those math macros) portable
+// without re-poisoning clean CI logs.
+#ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
+#endif
 #include <cmath>
 
 #include <algorithm>

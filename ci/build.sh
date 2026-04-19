@@ -78,6 +78,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=1:abort_on_error=1:halt_on_error=1}
 export LSAN_OPTIONS=${LSAN_OPTIONS:-suppressions=${SCRIPT_DIR}/lsan.supp:print_suppressions=0}
 export UBSAN_OPTIONS=${UBSAN_OPTIONS:-suppressions=${SCRIPT_DIR}/ubsan.supp:print_stacktrace=1:halt_on_error=1}
+# ThreadSanitizer: halt_on_error pairs with the test harness's
+# fail-fast philosophy (one race is enough to fail the suite). The
+# suppressions file handles the narrow set of OCCT global-state uses
+# TSan flags that we have audited and determined are safe.
+# TSan runs the test to completion (halt_on_error=0) so we see the
+# full test result — but exits the process with exitcode=66 if any
+# UNSUPPRESSED race fired, which fails the ctest cell. Suppressions
+# in tsan.supp silence OCCT + TBB false positives (lock-free allocator,
+# parallel boolean engine, global type registry) that TSan's
+# happens-before tracking can't follow. A new race introduced by our
+# own code would not match any suppression and would trip the exit
+# code. report_bugs=1 keeps the warnings visible in the ctest log
+# so maintainers can audit new suppressions when OCCT changes.
+export TSAN_OPTIONS=${TSAN_OPTIONS:-suppressions=${SCRIPT_DIR}/tsan.supp:halt_on_error=0:exitcode=66:second_deadlock_stack=1:report_bugs=1}
 ctest --test-dir "$BUILD_DIR" --output-on-failure
 
 # ── Fuzzers (optional) ─────────────────────────────────────────

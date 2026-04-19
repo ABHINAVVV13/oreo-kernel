@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "geometry/oreo_geometry.h"
 #include "io/oreo_step.h"
 #include "naming/named_shape.h"
@@ -17,7 +17,7 @@ namespace {
 
 oreo::NamedShape makeBoxLocal(oreo::KernelContext& ctx, double x, double y, double z) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, ctx.tags().nextTag());
+    return oreo::NamedShape(box, ctx.tags().nextShapeIdentity());
 }
 
 } // anonymous namespace

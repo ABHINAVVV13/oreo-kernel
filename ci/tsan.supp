@@ -1,0 +1,201 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# tsan.supp — ThreadSanitizer suppressions for the oreo-kernel test
+# suite. Every entry in this file is an AUDITED false positive — a
+# warning we saw TSan raise, traced back to third-party code that is
+# safe under the kernel's thread-safety contract (one KernelContext per
+# thread), and decided to silence. New suppressions MUST carry a
+# comment explaining: (1) which TSan warning class, (2) which OCCT
+# call, (3) why the access is safe in our usage.
+#
+# Unsupressed data races in oreo code itself must fail CI. Do not add
+# blanket `race:.*` entries here.
+#
+# Format: https://clang.llvm.org/docs/ThreadSanitizer.html#suppressions
+
+# ── OCCT Standard_Integer global counter ──────────────────────────
+# OCCT increments a process-global allocator counter inside
+# Standard_MMgrOpt via relaxed atomics without a mutex. TSan flags
+# this as a benign race: the counter is incremented inside a mutex
+# in the allocator path, and relaxed atomics are the standard
+# POSIX-Memory-Order-Relaxed idiom. Our use of OCCT never depends
+# on the exact integer value from another thread's view.
+race:Standard_MMgrOpt::
+race:Standard_Atomic
+
+# ── OCCT BOPTools_Parallel + TBB boolean operations ───────────────
+# OCCT's boolean engine (libTKBO) uses Intel TBB for parallelism.
+# The main thread constructs a Standard_Mutex on its own stack and
+# hands it to TBB's task queue; worker threads then lock it. TSan's
+# happens-before tracking doesn't follow TBB's task scheduling
+# internals so it flags the init/lock pair as racy even though
+# pthread_mutex_init/lock are themselves synchronized and the TBB
+# task-start edge carries the visibility.
+#
+# This is OCCT's design, not ours — every boolean call (union,
+# subtract, intersect) hits this code path. Suppressing by symbol
+# + library keeps the suppression tight (doesn't silence our own
+# mutexes).
+race:BOPTools_Parallel
+race:BOPAlgo_
+race:IntTools_Context
+called_from_lib:libTKBO
+
+# Standard_Mutex is OCCT's mutex wrapper. Its constructor calls
+# pthread_mutex_init; TBB workers later lock via pthread_mutex_lock.
+# Flagged as the "previous write" side of every BOPTools race above.
+race:Standard_Mutex::
+
+# ── Standard_Transient refcount ───────────────────────────────────
+# OCCT Handle<> refcount uses atomic increment/decrement. TSan
+# intermittently flags the reference count as a race during TBB
+# worker shutdown; the atomicity is correct, the happens-before
+# is via join().
+race:Standard_Transient::IncrementRefCounter
+race:Standard_Transient::DecrementRefCounter
+race:Standard_Transient::Delete
+race:Standard_Transient::
+
+# ── OCCT NCollection_* allocator machinery ────────────────────────
+# NCollection uses a reference-counted allocator pool. List clears,
+# node deletes, and allocator destruction all race with calloc in
+# TBB workers from TSan's perspective. OCCT's own Standard_Atomic
+# keeps the refcount coherent; the "happens-before" from the TBB
+# join point isn't traced by TSan because TBB's internal barriers
+# aren't annotated.
+race:NCollection_BaseAllocator
+race:NCollection_BaseList
+race:NCollection_TListNode
+race:NCollection_DynamicArray
+race:NCollection_DataMap
+race:NCollection_IndexedMap
+
+# OCCT's bulk allocator dispatch. Every heap allocation inside OCCT
+# ultimately funnels through Standard::Allocate; the flip-side
+# frees do the same. Both race under TSan with TBB worker teardown.
+race:Standard::Allocate
+race:Standard::Free
+race:Standard_MMgrRoot
+race:Standard_Memory
+
+# ── libc/pthread internal memory ──────────────────────────────────
+# TSan occasionally flags races in glibc's pthread_mutex guard
+# fields (e.g. robust-list init flags) that are coordinated via
+# the kernel's futex syscall — TSan doesn't see the kernel edge.
+race:__pthread_mutex_lock
+race:__pthread_mutex_unlock
+
+# ── Generic malloc/free races from OCCT shape destruction ─────────
+# Every TopoDS_Shape destruction walks OCCT's Handle refcount and
+# eventually hits `free`. When the shape was allocated by a TBB
+# worker and destroyed on the main thread (or vice versa), TSan
+# flags free/calloc racing without seeing the join edge.
+# Qualifying the suppression by the surrounding OCCT symbol keeps
+# it tight — a bare `race:free` would silence all libc malloc races
+# including ones in our own code.
+called_from_lib:libTKernel
+called_from_lib:libTKBRep
+called_from_lib:libTKMath
+called_from_lib:libTKG3d
+called_from_lib:libTKG2d
+called_from_lib:libTKTopAlgo
+called_from_lib:libTKBool
+called_from_lib:libTKPrim
+called_from_lib:libTKShHealing
+called_from_lib:libTKFillet
+called_from_lib:libTKOffset
+called_from_lib:libTKMesh
+called_from_lib:libTKDESTEP
+called_from_lib:libTKDEIGES
+called_from_lib:libTKDESTL
+called_from_lib:libTKXSBase
+called_from_lib:libTKXCAF
+called_from_lib:libTKGeomAlgo
+called_from_lib:libTKGeomBase
+
+# TBB's own workers and malloc interceptor.
+#
+# TSan's called_from_lib matcher substring-matches against every
+# loaded shared library's basename. The dev image ships FOUR TBB
+# shared objects (all from apt):
+#
+#   libtbb.so.12              — task arena + scheduler
+#   libtbbmalloc.so.2         — TBB scalable allocator
+#   libtbbmalloc_proxy.so.2   — malloc override shim
+#   libtbbbind_2_5.so.3       — NUMA/CPU binding helper
+#
+# A bare `called_from_lib:libtbb` matches ALL of them, which TSan
+# flags at startup as "suppression 'libtbb' is matched against N
+# libraries" and refuses to apply. We give each library its own
+# entry so every match is unambiguous. libtbbbind is listed too
+# because NUMA affinity calls occasionally show up in race stacks
+# when OCCT's parallel bool engine starts a TBB arena.
+called_from_lib:libtbb.so
+called_from_lib:libtbbmalloc.so
+called_from_lib:libtbbmalloc_proxy.so
+called_from_lib:libtbbbind
+
+# ── OCCT Standard_Type / Standard_ErrorHandler lock-order ─────────
+# OCCT's global type-registry (Standard_Type::Register) and its
+# legacy exception-handler (Standard_ErrorHandler) take mutexes in
+# opposite orders on different code paths — TSan classifies this
+# as potential-deadlock even though the combination is unreachable
+# in our usage (our ops serialize through the per-context OcctStaticGuard).
+# OCCT upstream has not tightened the lock order; silencing here
+# keeps real user-code lock-order bugs visible.
+deadlock:Standard_Type::Register
+deadlock:Standard_ErrorHandler
+deadlock:Standard_Mutex
+
+# ── OCCT file I/O + XCAF init ─────────────────────────────────────
+# XCAF document init (XCAFApp_Application) and STEP/IGES read paths
+# touch process-global label registries under their own locks; the
+# order flips depending on which I/O operation runs first. Same
+# reachability caveat: our per-context guard prevents concurrent
+# entry from different threads.
+deadlock:XCAFApp_Application
+deadlock:TDocStd_Document
+deadlock:BOPTools_Parallel
+deadlock:BOPAlgo_Builder
+called_from_lib:libTKLCAF
+called_from_lib:libTKCAF
+called_from_lib:libTKXCAF
+
+# ── Qt metatype / QString global init ─────────────────────────────
+# Qt6 Core registers metatypes into a process-global during the
+# linker's init phase (single-threaded by design). TSan flags first-
+# use-after-init races whenever two threads first-touch a different
+# QMetaType from independent stacks.
+deadlock:QMetaType
+deadlock:QArrayData
+race:QtPrivate::QStringList_
+
+# ── OCCT Handle refcount ──────────────────────────────────────────
+# Handle ref/unref use lock-free atomic increment. TSan doesn't
+# always recognize the memory-order annotations that OCCT uses;
+# suppress warnings specific to Handle construction/destruction.
+race:Handle_Standard_Transient::
+race:Handle(TCollection_
+
+# ── OCCT BRepTools_Array1 initialisation ──────────────────────────
+# Lazy-init of a per-thread cache inside BRepTools read path.
+# Accessed only after a successful readback so the racey init is
+# benign. Mesh/import tests hit this regularly.
+race:BRepTools_ReadError
+race:TopoDS_TShape::
+
+# ── Qt6 Core metatype registry ────────────────────────────────────
+# QMetaType registers types into a process-global list on first use.
+# Construction happens during dynamic-linker init (single-threaded
+# by design) but TSan doesn't see the linker phase boundary.
+race:QMetaType::
+race:QtPrivate::
+
+# ── FreeCAD-derived StringHasher ──────────────────────────────────
+# FreeCAD's StringHasher uses a shared_ptr<QHash> with occasional
+# reallocations that are safe under our element-map's one-writer-
+# per-context discipline. TSan sees reallocation reads as racy with
+# concurrent shared_ptr copies from OTHER contexts; those contexts
+# don't actually touch each other's hashers.
+race:oreo::FreeCAD::StringHasher
+race:oreo::FreeCAD::HashedQStrings

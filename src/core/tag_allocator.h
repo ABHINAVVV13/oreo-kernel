@@ -366,14 +366,26 @@ public:
     [[deprecated("use TagAllocator::snapshotV2() instead")]]
     Snapshot snapshot() const {
         // Suppress the deprecation warning from our own internal use of
-        // the struct name (MSVC-scoped; GCC and Clang use their own
-        // equivalents). The route is: v2 snapshot first, then narrow.
-#if defined(_MSC_VER)
+        // the `Snapshot` struct name. All three compilers we care about
+        // spell the pragma differently; we push/pop around the sole
+        // mention so downstream deprecations (if any appear in future
+        // changes) still fire.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable : 4996)
 #endif
         Snapshot s;
-#if defined(_MSC_VER)
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#elif defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(_MSC_VER)
 #pragma warning(pop)
 #endif
         auto v2 = snapshotV2();

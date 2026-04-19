@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "geometry/oreo_geometry.h"
 #include "naming/named_shape.h"
 #include "query/oreo_query.h"
@@ -19,17 +19,17 @@ namespace {
 
 oreo::NamedShape makeTestBox(oreo::KernelContext& ctx, double x, double y, double z, double ox = 0, double oy = 0, double oz = 0) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(gp_Pnt(ox, oy, oz), x, y, z).Shape();
-    return oreo::NamedShape(box, ctx.tags().nextTag());
+    return oreo::NamedShape(box, ctx.tags().nextShapeIdentity());
 }
 
 oreo::NamedShape makeTestSphere(oreo::KernelContext& ctx, double r, double cx = 0, double cy = 0, double cz = 0) {
     TopoDS_Shape sphere = BRepPrimAPI_MakeSphere(gp_Pnt(cx, cy, cz), r).Shape();
-    return oreo::NamedShape(sphere, ctx.tags().nextTag());
+    return oreo::NamedShape(sphere, ctx.tags().nextShapeIdentity());
 }
 
 oreo::NamedShape makeTestCylinder(oreo::KernelContext& ctx, double r, double h) {
     TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(r, h).Shape();
-    return oreo::NamedShape(cyl, ctx.tags().nextTag());
+    return oreo::NamedShape(cyl, ctx.tags().nextShapeIdentity());
 }
 
 } // anonymous namespace

@@ -46,6 +46,36 @@ else()
 endif()
 message(STATUS "OCCT STEP libraries: ${OCCT_STEP_LIBS}")
 
+# ── OCCT IGES-library layout detection ───────────────────────────────────────
+#
+# Same split-vs-consolidated story as STEP: 7.7+ introduces TKDEIGES
+# which subsumes both the basic IGESControl_* and the XDE-aware
+# IGESCAFControl_* readers/writers. Older OCCT keeps them separate:
+#   * IGESControl_Reader/Writer     → TKIGES
+#   * IGESCAFControl_Reader/Writer  → TKXDEIGES
+#
+# Both reader families live under the detected target set, which feeds
+# into the PUBLIC link interface below.
+if(TARGET TKDEIGES)
+    set(OCCT_IGES_LIBS TKDEIGES)
+else()
+    set(OCCT_IGES_LIBS TKIGES TKXDEIGES)
+endif()
+message(STATUS "OCCT IGES libraries: ${OCCT_IGES_LIBS}")
+
+# ── OCCT STL-library layout detection ────────────────────────────────────────
+#
+# OCCT 7.7+ ships the mesh-interchange stack in TKDESTL (consolidated);
+# pre-7.7 split it into TKSTL (basic StlAPI) + older mesh helpers. Both
+# forms carry StlAPI_Reader / StlAPI_Writer, so the consumer of our
+# public API sees no difference — this is purely a link-interface knob.
+if(TARGET TKDESTL)
+    set(OCCT_STL_LIBS TKDESTL)
+else()
+    set(OCCT_STL_LIBS TKSTL)
+endif()
+message(STATUS "OCCT STL libraries: ${OCCT_STL_LIBS}")
+
 # ── Build options ─────────────────────────────────────────────────────────────
 #
 # OREO_ENABLE_LEGACY_API (default ON):
@@ -189,9 +219,7 @@ set(OREO_SOURCES
     src/core/kernel_context.cpp
     src/core/localization.cpp
     src/core/occt_scope_guard.cpp
-    src/core/oreo_error.cpp
     src/core/oreo_init.cpp
-    src/core/oreo_tolerance.cpp
     src/core/schema.cpp
     src/core/shape_identity_v1.cpp
     src/core/units.cpp
@@ -226,17 +254,23 @@ set(OREO_SOURCES
     src/geometry/oreo_surface.cpp
     # ── query/ — measurements + queries.
     src/query/oreo_query.cpp
-    # ── io/ — STEP / serialize / shape fix.
+    # ── io/ — STEP / IGES / STL + 3MF / serialize / shape fix.
+    src/io/oreo_iges.cpp
+    src/io/oreo_mesh_io.cpp
     src/io/oreo_serialize.cpp
     src/io/oreo_step.cpp
     src/io/shape_fix.cpp
     # ── capi/ — flat C ABI.
     src/capi/oreo_capi.cpp
-    # ── feature/ — feature tree + replay + schema + Part Studio.
+    # ── feature/ — feature tree + replay + schema + Part Studio + Workspace.
     src/feature/feature.cpp
     src/feature/feature_schema.cpp
     src/feature/feature_tree.cpp
     src/feature/part_studio.cpp
+    src/feature/config.cpp
+    src/feature/param_json.cpp
+    src/feature/workspace.cpp
+    src/feature/merge.cpp
     # ── mesh/ — tessellation + GLB export.
     src/mesh/oreo_mesh.cpp
     src/mesh/oreo_mesh_export.cpp
@@ -278,6 +312,10 @@ function(_oreo_kernel_configure_common target)
             TKMesh
             # OCCT STEP I/O — see OCCT_STEP_LIBS detection above
             ${OCCT_STEP_LIBS}
+            # OCCT IGES I/O — see OCCT_IGES_LIBS detection above
+            ${OCCT_IGES_LIBS}
+            # OCCT STL I/O — see OCCT_STL_LIBS detection above
+            ${OCCT_STL_LIBS}
             TKXSBase
             TKXCAF
             TKLCAF
@@ -377,12 +415,23 @@ oreo_add_test(test_geometry  tests/test_unit/test_geometry.cpp)
 # Topo naming regression
 oreo_add_test(test_topo_naming tests/test_naming/test_topo_naming.cpp)
 
+# Topo naming edge cases (face split on boolean, face merge / adjacent
+# face preservation on fillet, feature-reorder broken-ref recovery).
+# Closes the "Face split / merge / feature-reorder untested" gap
+# flagged in the April 2026 audit.
+oreo_add_test(test_naming_edge_cases tests/test_naming/test_naming_edge_cases.cpp)
+
 # Sketch solver battery
 oreo_add_test(test_sketch_solver tests/test_sketch/test_sketch_solver.cpp)
 
 # Sketch persistence — stable IDs across delete/edit + cascade.
 # Closes the auditor's "persistent sketch IDs" gap (Phase D6).
 oreo_add_test(test_sketch_persistence tests/test_sketch/test_sketch_persistence.cpp)
+
+# Construction-geometry flag: entity-level toggle for guide lines /
+# centerlines that participate in the solver but are stripped from
+# the emitted wire.
+oreo_add_test(test_construction_geometry tests/test_sketch/test_construction_geometry.cpp)
 
 # Boolean stress tests
 oreo_add_test(test_boolean_stress tests/test_boolean/test_boolean_stress.cpp)
@@ -406,6 +455,36 @@ oreo_add_test(test_feature_tree tests/test_feature/test_feature_tree.cpp)
 
 # Feature parameter schemas + pre-execution validator
 oreo_add_test(test_feature_schema tests/test_feature/test_feature_schema.cpp)
+
+# Extended feature-tree coverage (MakeCone / MakeTorus / MakeWedge /
+# Loft / Sweep / BooleanIntersect — the ops that used to live only
+# in the legacy singleton C API and are now first-class feature types).
+oreo_add_test(test_feature_extended tests/test_feature/test_feature_extended.cpp)
+
+# Part Studio as pure typed function (P1) — ConfigSchema / ConfigValue /
+# ConfigRef resolution / execute determinism / JSON v2 round-trip / v1
+# backward compatibility. Acceptance gate for docs/part-studio-as-function.md.
+oreo_add_test(test_part_studio_function
+              tests/test_feature/test_part_studio_function.cpp)
+
+# Workspace branching + three-way merge (P2) — fork / diff / merge /
+# conflict kinds / applyResolutions / identity coherence across branches.
+# Acceptance gate for docs/branching-merging.md §5.1–§5.4.
+oreo_add_test(test_branch_merge
+              tests/test_feature/test_branch_merge.cpp)
+
+# 2026-04-19 audit fixes: feature-tree in-place param updates + read/
+# introspection API, OreoConfig schema-fingerprint guard, strict JSON
+# decode of ConfigSchema defaults, ROOT whole-shape ref rejection on
+# sub-shape specs (validator + resolver), Workspace JSON via C ABI.
+oreo_add_test(test_audit_2026_04_19
+              tests/test_feature/test_audit_2026_04_19.cpp)
+
+# Interchange format round-trips — STL (binary + ASCII), IGES 5.3, 3MF
+# Core export. Locks the OCCT-native STL/IGES paths and the hand-rolled
+# 3MF writer against format-level regressions (ZIP magic, XML core
+# namespace, CRC-32 integrity).
+oreo_add_test(test_mesh_iges_io tests/test_io/test_mesh_iges_io.cpp)
 
 # Foundation (context, diagnostics, units, schema, validation, determinism)
 oreo_add_test(test_foundation tests/test_foundation/test_foundation.cpp)
@@ -528,6 +607,12 @@ oreo_add_test(bench_identity tests/test_perf/bench_identity.cpp)
 # de-dup, SchemaRegistry freeze enforcement, ConfigLoader uint64 docId, TagAllocator
 # low-32 collision detection, DiagnosticCollector hard cap)
 oreo_add_test(test_foundation_audit_fixes tests/test_foundation/test_foundation_audit_fixes.cpp)
+
+# Kernel hardening sprint 2026-04-18: lock-down tests for the 10 audit
+# findings addressed on that date. One test per finding (or close to);
+# see tests/test_foundation/test_hardening_2026_04_18.cpp for the
+# cross-references back to docs/PROTOTYPE-V0.md.
+oreo_add_test(test_hardening_2026_04_18 tests/test_foundation/test_hardening_2026_04_18.cpp)
 
 # Tessellation / Meshing
 oreo_add_test(test_mesh tests/test_mesh/test_mesh.cpp)

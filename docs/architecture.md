@@ -156,14 +156,22 @@ locks down the v1↔v3 compatibility contract.
 
 ## CI matrix
 
-`.github/workflows/ci.yml` runs five jobs on every push:
+`.github/workflows/ci.yml` runs five jobs on every push, all inside the
+`ghcr.io/abhinavvv13/oreo-kernel-dev:latest` container (Ubuntu 24.04 +
+OCCT 7.9.3 + deps pinned):
 
-1. **linux-gcc-release** — full build + ctest + grep_gate.
-2. **linux-gcc-nolegacy** — `OREO_ENABLE_LEGACY_API=OFF` acceptance.
-3. **linux-clang-asan-ubsan** — sanitizer-instrumented test run.
-4. **linux-clang-fuzz** — 60s libFuzzer smoke per harness.
-5. **windows-msvc** — matches the developer build.
+1. **gcc-release** — full build + ctest + `grep_gate.sh` + `spdx_check.sh --strict`.
+2. **gcc-no-legacy** — `OREO_ENABLE_LEGACY_API=OFF` acceptance gate.
+3. **clang-asan-ubsan** — AddressSanitizer + UndefinedBehaviorSanitizer test run.
+4. **clang-tsan** — ThreadSanitizer on the concurrency + feature-tree test set.
+5. **clang-fuzz** — 60s libFuzzer smoke per harness (deserialize, step_import,
+   feature_tree_json).
 
-`ci/grep_gate.sh` blocks the v1 documentId-squeeze idiom from
-re-entering the codebase. `ci/spdx_check.sh` reports SPDX header
-coverage.
+Windows is intentionally not in the matrix: the determinism suite enforces
+byte-identical output across consumers, and pinning the entire toolchain at
+the image layer is the only honest way to guarantee that. Windows is verified
+locally by maintainers. See `docs/deployment.md` for the full rationale.
+
+`ci/grep_gate.sh` blocks the v1 documentId-squeeze idiom from re-entering
+the codebase. `ci/spdx_check.sh` reports SPDX header coverage. TSan
+suppressions live in `ci/tsan.supp`.

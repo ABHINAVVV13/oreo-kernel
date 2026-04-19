@@ -88,25 +88,49 @@ Built from a single multi-stage [docker/Dockerfile](docker/Dockerfile):
 
 Everything is pinned. Rebuilds from scratch are deterministic.
 
-## Test suite (39 ctest targets, all required green on every PR)
+## Test suite (47 ctest targets in the default Release build, all required green on every PR)
+
+Exact counts (verifiable in CI): **47** ctest targets in the legacy
+Release build (`linux-gcc-release`), **43** in the server-safe no-
+legacy build (`linux-gcc-nolegacy`). The 4-test delta is the legacy-
+gated suite: `test_integration`, `test_doc_identity`, `test_perf`,
+`test_foundation_battle2`.
 
 **Unit / geometry**
 
 - `test_smoke` — basic lifecycle and primitive creation
 - `test_geometry` — extrude, revolve, fillet, chamfer, booleans, patterns
 - `test_mesh`, `test_mesh_export` — tessellation / meshing (incl. GLB export)
+- `test_mesh_iges_io` — STL / IGES / 3MF interchange round-trips
 
 **Subsystems**
 
-- `test_topo_naming` — topological naming stability across edits
-- `test_sketch_solver` — 2D constraint solver (41 constraint types)
+- `test_topo_naming`, `test_naming_edge_cases` — topological naming
+  stability across edits; FreeCAD-derived element-map corner cases
+- `test_sketch_solver`, `test_sketch_persistence`, `test_construction_geometry`
+  — 2D constraint solver (34 public constraint types), stable entity
+  IDs across edits, construction-geometry flag behaviour
 - `test_boolean_stress` — heavy boolean operation sequences
-- `test_step_roundtrip` — STEP import/export fidelity
-- `test_serialize` — binary serialization round-trip
+- `test_step_roundtrip`, `test_step_identity` — STEP import/export
+  fidelity + v2-identity on imported sub-shapes
+- `test_serialize`, `test_serialize_migration` — binary serialization
+  round-trip + v1/v2/v3 wire-format compatibility corpus
 - `test_robustness` — crash resistance with malformed inputs
-- `test_feature_tree` — parametric replay, parameter edits, broken refs
 
-**Foundation (8 binaries, ~402 cases)**
+**Feature tree + Part Studio + branching**
+
+- `test_feature_tree` — parametric replay, parameter edits, broken
+  refs, JSON round-trip
+- `test_feature_schema`, `test_feature_extended` — schema validator;
+  MakeCone / MakeTorus / MakeWedge / Loft / Sweep / BooleanIntersect
+- `test_part_studio_function` — PartStudio-as-function acceptance
+  (ConfigSchema / ConfigValue / ConfigRef / v2 JSON envelope)
+- `test_branch_merge` — Workspace branching + three-way merge
+- `test_audit_2026_04_19` — app-readiness audit acceptance (C ABI
+  parametric edits + read API, config fingerprint guard, strict
+  JSON decode, ROOT-ref rejection, workspace JSON)
+
+**Foundation (13 binaries under `tests/test_foundation/`)**
 
 - `test_foundation` — context, diagnostics, units, schema, validation, determinism
 - `test_foundation_hardened` — NaN/Inf, fail-closed paths, composable diagnostics
@@ -116,35 +140,66 @@ Everything is pinned. Rebuilds from scratch are deterministic.
 - `test_foundation_modules` — standalone modules: cancellation, feature flags, localization, RNG, profile/metrics, arena, assertion framework
 - `test_foundation_obs` — config loader (env + JSON overlay), logging sink interface, resource-quota enforcement, diagnostic metadata
 - `test_foundation_new_features` — KernelContext clone/merge/safeReset, progress callback, OperationResult combinators, `occtSafeCall`, validation helpers, schema introspection
+- `test_foundation_audit_fixes`, `test_hardening_2026_04_18` — post-0.9.0-rc1 audit regressions
+- `test_shape_identity`, `test_tag_allocator_v2`, `test_naming_v2` —
+  v2 identity model (Phases 1-3)
+
+**Integration + C ABI surface**
+
+- `test_integration` — end-to-end (legacy-gated)
+- `test_doc_identity`, `test_doc_identity_nolegacy` — 64-bit
+  documentId survives every layer in both build configurations
+- `test_ctx_apis` — ctx-aware sketch + feature-edit C API
+- `test_concurrency` — per-context state isolation across N parallel
+  contexts (NOT a proof of OCCT in-process thread-safety; see
+  [docs/process-model.md](docs/process-model.md))
+- `test_replay_golden` — deterministic golden replay, server/client parity
+- `test_transaction_api` — per-type setters, broken-feature query,
+  move, replace-reference
+- `test_capi_consumer` — pure-C99 consumer of the public `oreo_kernel.h`
 
 ## API overview
 
-The public API is a single C header: `include/oreo_kernel.h` (~91 exported functions).
+The public API is a single C header: `include/oreo_kernel.h`
+(**307 OREO_API-exported declarations** as of v0.9.0-rc1;
+`grep -c '^OREO_API' include/oreo_kernel.h` is the canonical count).
 
 Two parallel surfaces are exposed:
 
-- **Context-aware API** (`oreo_ctx_`*, `OreoContext`) — per-call context holds error state, diagnostics, and tolerance config. Thread-safe and composable; this is the preferred surface.
-- **Legacy global API** (`oreo_make_box`, etc.) — uses a process-global context. Retained for FFI bindings that haven't migrated yet.
+- **Context-aware API** (`oreo_ctx_`*, `OreoContext`) — per-call
+  context holds error state, diagnostics, tolerance config, quotas,
+  document identity. **The only surface supported for multi-tenant
+  server deployments.** Always on (no build gate).
+- **Legacy singleton API** (`oreo_init`, `oreo_make_box`,
+  `oreo_sketch_*`, `oreo_ctx_sketch_*`'s legacy counterparts, etc.)
+  — routes through a process-global `KernelContext`. Gated behind
+  `OREO_ENABLE_LEGACY_API=ON` (the build default) and compiled OUT
+  of server-safe builds. Retained for CLIs, offline tools, and
+  language bindings that haven't migrated yet.
 
+| Category           | Representative functions                                                                                                                                                                                                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library identity   | `oreo_kernel_version`                                                                                                                                                                                                                                                                                                               |
+| Context            | `oreo_context_create`, `oreo_context_create_with_doc`, `oreo_context_free`, `oreo_context_document_id`, `oreo_context_has_errors/warnings`, `oreo_context_diagnostic_count/code/message`, `oreo_context_last_error_message`                                                                                                         |
+| Ctx primitives     | `oreo_ctx_make_box/cylinder/sphere/cone/torus/wedge`                                                                                                                                                                                                                                                                                |
+| Ctx geometry       | `oreo_ctx_extrude/revolve/fillet/chamfer`, `oreo_ctx_boolean_union/subtract/intersect`, `oreo_ctx_shell/loft/sweep/mirror`, `oreo_ctx_pattern_linear/circular`, `oreo_ctx_draft/hole/pocket/rib`, `oreo_ctx_offset/thicken/split_body/fillet_variable/make_face_from_wire/combine`                                                   |
+| Ctx queries        | `oreo_ctx_aabb/face_count/edge_count/get_face/get_edge/measure_distance/footprint/mass_properties`                                                                                                                                                                                                                                  |
+| Ctx identity v2    | `oreo_face_shape_id`, `oreo_edge_shape_id`, `oreo_ctx_face_name`, `oreo_ctx_edge_name`, `oreo_ctx_serialize`, `oreo_ctx_deserialize`                                                                                                                                                                                                |
+| Ctx interchange    | `oreo_ctx_import_step/stl/iges`, `oreo_ctx_export_step_file/stl_file/iges_file/3mf_file`                                                                                                                                                                                                                                            |
+| Ctx sketch         | `oreo_ctx_sketch_create/free/add_*/solve/dof/get_*/to_wire`, stable entity IDs, construction-geometry flags                                                                                                                                                                                                                         |
+| Feature edit       | `oreo_feature_builder_*` (create/reset + 10 typed setters for double/int/bool/string/vec/pnt/dir/ax1/ax2/pln, single+list ref, config ref), `oreo_ctx_feature_tree_*` (add/remove/suppress/move, per-type param updates, introspection/readers by feature+param index, broken-feature query, replay, JSON)                          |
+| PartStudio         | `oreo_ctx_part_studio_create/free/tree/input_count`, `oreo_ctx_part_studio_add_input_*`, `oreo_ctx_part_studio_execute/_defaults/_to_json/_from_json`, `oreo_ctx_part_studio_schema_fingerprint`, `oreo_config_create/free/set_*/schema_fingerprint`                                                                                |
+| Workspace / merge  | `oreo_ctx_workspace_create/fork/free/tree/name/parent_name/merge`, `oreo_ctx_workspace_to_json/from_json`, `oreo_merge_result_*`, `oreo_resolution_set_*`, `oreo_merge_result_apply_resolutions`                                                                                                                                    |
+| Tessellation       | `oreo_ctx_tessellate`, `oreo_mesh_*` (vertex/triangle/face-group accessors)                                                                                                                                                                                                                                                         |
+| Memory             | `oreo_free_solid/wire/edge/face/string/buffer`                                                                                                                                                                                                                                                                                      |
+| Legacy (LEGACY=ON) | `oreo_init`, `oreo_shutdown`, `oreo_last_error`, `oreo_make_*`, `oreo_extrude/revolve/…`, `oreo_sketch_*`, `oreo_serialize`, `oreo_deserialize`, `oreo_free_buffer`, `oreo_tessellate`                                                                                                                                              |
 
-| Category      | Functions                                                                                                                                                                                      |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Context       | `oreo_context_create/free`, diagnostic count/iteration, `oreo_context_last_error_message`                                                                                                      |
-| Context API   | `oreo_ctx_make_box/cylinder/sphere`, `oreo_ctx_extrude`, `oreo_ctx_boolean_union/subtract`, `oreo_ctx_fillet`, `oreo_ctx_aabb`, `oreo_ctx_face_count`, `oreo_ctx_edge_count`, `oreo_ctx_mass_properties`, `oreo_ctx_import_step`, `oreo_ctx_import_step_file`, `oreo_ctx_export_step_file`, `oreo_ctx_serialize/deserialize`, `oreo_ctx_tessellate` |
-| Lifecycle     | `oreo_init`, `oreo_shutdown`, `oreo_last_error`                                                                                                                                                |
-| Primitives    | `oreo_make_box`, `oreo_make_cylinder`, `oreo_make_sphere`, `oreo_make_cone`, `oreo_make_torus`, `oreo_make_wedge`                                                                              |
-| Geometry      | `oreo_extrude`, `oreo_revolve`, `oreo_fillet`, `oreo_chamfer`, `oreo_boolean_union/subtract/intersect`, `oreo_shell`, `oreo_loft`, `oreo_sweep`, `oreo_mirror`, `oreo_pattern_linear/circular` |
-| Manufacturing | `oreo_draft`, `oreo_hole`, `oreo_pocket`, `oreo_rib`                                                                                                                                           |
-| Surfaces      | `oreo_offset`, `oreo_thicken`, `oreo_split_body`, `oreo_fillet_variable`, `oreo_make_face_from_wire`, `oreo_combine`                                                                           |
-| Queries       | `oreo_aabb`, `oreo_footprint`, `oreo_face_count`, `oreo_edge_count`, `oreo_get_face/edge`, `oreo_measure_distance`, `oreo_mass_properties`                                                     |
-| Naming        | `oreo_face_name`, `oreo_edge_name`                                                                                                                                                             |
-| I/O           | `oreo_import_step`, `oreo_import_step_file`, `oreo_export_step_file`                                                                                                                           |
-| Serialization | `oreo_serialize`, `oreo_deserialize`, `oreo_free_buffer`                                                                                                                                       |
-| Sketch        | `oreo_sketch_create/free`, `oreo_sketch_add_point/line/circle/arc`, `oreo_sketch_add_constraint`, `oreo_sketch_solve`, `oreo_sketch_dof`, `oreo_sketch_get_point/line`, `oreo_sketch_to_wire`  |
-| Memory        | `oreo_free_solid/wire/edge/face`                                                                                                                                                               |
-
-
-41 constraint types are supported in the sketch solver (distances, angles, coincidence, tangency, symmetry, equal, perpendicular, parallel, etc.).
+34 constraint types are exposed by the public sketch API (distances, angles,
+coincidence, tangency, symmetry, equal, perpendicular, parallel, etc.) — see
+`ConstraintType` in [src/sketch/oreo_sketch.h](src/sketch/oreo_sketch.h). The
+underlying PlaneGCS solver implements 37 low-level primitives; a handful are
+internal-only (elliptical-arc range, internal-alignment-point, Snell, B-spline
+parametric constraints) and are not currently reachable from the public API.
 
 
 
@@ -168,7 +223,10 @@ oreo-kernel/
     mesh/                  # Tessellation / meshing
     capi/                  # C API implementation (bridges C calls to C++ internals)
     worker/                # (reserved, not yet implemented)
-  tests/                   # GTest suite (19 test executables, ~580 cases total)
+  tests/                   # GTest suite — 47 ctest targets in the default Release build
+                           #   (43 in the server-safe no-legacy build); each ctest entry is its
+                           #   own executable, plus glb_smoke (manual-run mesh dump) and the 3
+                           #   fuzzer harnesses under fuzzers/.
 ```
 
 ### Layer dependencies

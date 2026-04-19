@@ -155,13 +155,13 @@ TEST(Concurrency, ParallelFeatureTreeReplay) {
                 box.id = "F1";
                 box.type = "MakeBox";
                 box.params["dimensions"] = gp_Vec(10.0 + t, 10.0, 10.0);
-                tree.addFeature(box);
+                (void)tree.addFeature(box);
 
                 oreo::Feature off;
                 off.id = "F2";
                 off.type = "Offset";
                 off.params["distance"] = 0.5;
-                tree.addFeature(off);
+                (void)tree.addFeature(off);
 
                 auto result = tree.replay();
                 return !result.isNull();

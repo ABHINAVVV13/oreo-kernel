@@ -71,6 +71,12 @@ feature persisted with extra fields can still be loaded by v1.0.
 | `MakeFace`        | (none)                                                       | Converts the wire base into a face             |
 | `Combine`         | `shapes: ElemRefList` (any kind)                             | Compound build                                 |
 | `Rib`             | `direction: Dir`, `thickness: Double > 0`, `profile: ElemRef`|                                                |
+| `MakeCone`        | `radius1: Double > 0`, `radius2: Double >= 0`, `height: Double > 0` | Primitive. `radius2 == 0` gives a point cone |
+| `MakeTorus`       | `majorRadius: Double > 0`, `minorRadius: Double > 0`         | Primitive                                      |
+| `MakeWedge`       | `dimensions: Vec` (each > 0), `ltx: Double >= 0`             | Primitive. `ltx == 0` collapses to a pyramid   |
+| `Loft`            | `profiles: ElemRefList` (any kind, >=2), `makeSolid: Bool?`  | Multi-profile sweep; skips `currentShape`      |
+| `Sweep`           | `profile: ElemRef`, `path: ElemRef`                          | Skips `currentShape`                           |
+| `BooleanIntersect`| `tool: ElemRef`                                              | Shared volume of base + tool                   |
 
 ## Adding a new feature type
 

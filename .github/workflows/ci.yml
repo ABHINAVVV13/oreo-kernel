@@ -48,6 +48,16 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      # ThreadSanitizer calls `personality(ADDR_NO_RANDOMIZE)` at startup
+      # to disable ASLR (its shadow-memory layout depends on fixed
+      # addresses). The Docker default seccomp profile blocks that
+      # syscall, so TSan-instrumented binaries crash at launch with
+      # "CHECK failed: tsan_platform_linux.cpp:282". Adding SYS_PTRACE +
+      # unconfined seccomp is the documented fix. ASan / UBSan / GCC
+      # builds don't need it but the option is harmless for them, and
+      # GitHub Actions' `container:` block can't vary options per matrix
+      # cell without a wrapper script.
+      options: --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
 
     strategy:
       # Surface every failing config in one run instead of bailing on
@@ -94,6 +104,44 @@ jobs:
             run_gates: 0
             build_dir: build_san
 
+          # Clang ThreadSanitizer. Catches races on shared state that
+          # the unsanitized test_concurrency suite walks right past —
+          # the 8-thread + parallel-context tests exercise the tag
+          # allocator, diagnostic collector, OCCT static guard, and
+          # identity registry all at once, which is exactly where a
+          # data race is most likely to ship unnoticed. TSan and ASan
+          # are mutually exclusive so this is its own CI cell rather
+          # than piggy-backing on the ASan+UBSan one.
+          #
+          # Hard gate as of 2026-04-19: the cell is fully green end-to-
+          # end. Historically it was advisory because OCCT 7.9's TBB-
+          # backed boolean engine produced unsuppressed races (TSan
+          # can't follow TBB's task-queue internals) and a single
+          # `libtbb` suppression collided with four loaded TBB shared
+          # objects. Both issues are resolved:
+          #   * ci/tsan.supp now lists libtbb / libtbbmalloc /
+          #     libtbbmalloc_proxy / libtbbbind separately so every
+          #     match is unambiguous (TSan's "matched against N
+          #     libraries" warning no longer fires).
+          #   * A vector<bool> race in test_foundation_battle (bit-
+          #     packed storage shared across threads) was replaced
+          #     with vector<char>.
+          # Treat a red TSan cell as a real regression — either a new
+          # OCCT allocator path surfaced (add a narrow called_from_lib
+          # entry after auditing) or new oreo code shipped an actual
+          # race (fix the code, not the suppression). Do not add
+          # blanket `race:.*` entries to tsan.supp; every entry must
+          # name a specific symbol / library from an audited report.
+          - name: clang-tsan
+            cc: clang
+            cxx: clang++
+            build_type: RelWithDebInfo
+            sanitizer: thread
+            legacy_api: ON
+            build_fuzzers: OFF
+            run_gates: 0
+            build_dir: build_tsan
+
           # libFuzzer 60s-per-harness smoke run on the seed corpora.
           # Inherits ASan+UBSan so any crash report is a real bug.
           - name: clang-fuzz
@@ -110,6 +158,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build + test (${{ matrix.name }})
+        # Every cell is a hard gate. `advisory` is retained as an
+        # opt-in escape hatch (set `advisory: 1` on a matrix entry to
+        # stop it from failing the job) but no current cell uses it —
+        # promote a red advisory cell back to hard only after the
+        # underlying race / leak has a known, audited root cause and
+        # the suppression is scoped to that root cause.
+        continue-on-error: ${{ matrix.advisory == 1 }}
         env:
           BUILD_DIR:     ${{ matrix.build_dir }}
           CC:            ${{ matrix.cc }}

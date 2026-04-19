@@ -9,6 +9,20 @@
 //   - DiagnosticScope composes without clearing parent diagnostics
 //   - OperationResult carries diagnostics with the value
 //   - std::call_once for OCCT init is safe to call from multiple contexts
+//
+// This suite intentionally exercises the deprecated v1 scalar tag API
+// (`TagAllocator::nextTag()`) to lock the v1 compatibility contract.
+// File-scope suppression keeps CI logs clean; each v1 call site is
+// load-bearing — migrating it to nextShapeIdentity() would drop
+// coverage of the scalar contract documents persisted before v2
+// landed still depend on.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include <gtest/gtest.h>
 
@@ -18,7 +32,7 @@
 #include "core/schema.h"
 #include "core/operation_result.h"
 #include "core/diagnostic_scope.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "naming/named_shape.h"
 #include "geometry/oreo_geometry.h"
 #include "query/oreo_query.h"

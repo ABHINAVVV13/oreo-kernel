@@ -3,7 +3,7 @@
 // oreo_serialize.cpp — Binary serialization implementation.
 
 #include "oreo_serialize.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "core/operation_result.h"
 #include "core/diagnostic_scope.h"
 #include "core/occt_try.h"

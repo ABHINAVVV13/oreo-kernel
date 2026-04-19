@@ -11,7 +11,7 @@
 
 #include "oreo_sketch.h"
 #include "GCS.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "core/operation_result.h"
 #include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"

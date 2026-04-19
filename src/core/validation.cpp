@@ -9,7 +9,7 @@
 #include "units.h"
 #include "kernel_context.h"
 #include "diagnostic.h"
-#include "oreo_error.h"
+#include "diagnostic.h"
 #include "naming/named_shape.h"
 
 #include <Precision.hxx>

@@ -70,13 +70,13 @@ oreo::FeatureTree buildBoxThenOffset(std::shared_ptr<oreo::KernelContext> ctx) {
     box.id = "F1";
     box.type = "MakeBox";
     box.params["dimensions"] = gp_Vec(10, 20, 30);
-    tree.addFeature(box);
+    (void)tree.addFeature(box);
 
     oreo::Feature off;
     off.id = "F2";
     off.type = "Offset";
     off.params["distance"] = 1.0;
-    tree.addFeature(off);
+    (void)tree.addFeature(off);
     return tree;
 }
 
@@ -172,7 +172,7 @@ TEST(ReplayGolden, PartStudioJsonRoundTripPreservesIdentity) {
     oreo::Feature box;
     box.id = "F1"; box.type = "MakeBox";
     box.params["dimensions"] = gp_Vec(15, 25, 5);
-    studio.tree().addFeature(box);
+    (void)studio.tree().addFeature(box);
 
     auto bag1 = snapshot(studio.replay());
     auto json = studio.toJSON();

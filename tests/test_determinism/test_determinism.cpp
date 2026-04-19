@@ -15,6 +15,21 @@
 // somewhere in the kernel — most likely a non-deterministic map iteration,
 // a `double`→string format that varies by libc, or OCCT configuration
 // differences.
+//
+// This file intentionally exercises the deprecated v1 scalar tag API
+// (`TagAllocator::nextTag()` returning int64_t). The v1 API is retained
+// as the wire-format bridge for documents persisted before v2 landed;
+// if these tests migrated to `nextShapeIdentity()` we would lose
+// coverage of the v1 determinism contract — which is exactly what the
+// determinism suite exists to lock down. File-scope deprecation
+// suppression is therefore load-bearing; each call site is v1 ON PURPOSE.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include <gtest/gtest.h>
 

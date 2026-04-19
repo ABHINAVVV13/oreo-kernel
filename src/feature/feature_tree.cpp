@@ -13,9 +13,11 @@
 //   8. Continue to next feature
 
 #include "feature_tree.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "core/schema.h"
 #include "core/units.h"
+#include "feature/feature_schema.h"
+#include "feature/param_json.h"
 #include "naming/element_map.h"
 
 #include <TopExp.hxx>
@@ -27,21 +29,42 @@
 
 #include <algorithm>
 #include <sstream>
+#include <unordered_set>
 
 namespace oreo {
 
 // ── Feature management ───────────────────────────────────────
 
-void FeatureTree::addFeature(const Feature& feature) {
+bool FeatureTree::addFeature(const Feature& feature) {
+    if (findIndex(feature.id) >= 0) {
+        // Core invariant: featureId must be unique within a tree. The
+        // C ABI checks at the boundary, but any direct C++ caller
+        // (fromJSON replay, Workspace::fork, merge resolver) can hit
+        // this path too. Fail-closed with a diagnostic instead of
+        // silently double-inserting, which would corrupt dirty_ and
+        // cache_ which both key on id.
+        ctx_->diag().error(ErrorCode::INVALID_STATE,
+            "FeatureTree::addFeature rejected duplicate id '"
+            + feature.id + "'");
+        return false;
+    }
     features_.push_back(feature);
     dirty_[feature.id] = true;
+    return true;
 }
 
-void FeatureTree::insertFeature(int index, const Feature& feature) {
+bool FeatureTree::insertFeature(int index, const Feature& feature) {
+    if (findIndex(feature.id) >= 0) {
+        ctx_->diag().error(ErrorCode::INVALID_STATE,
+            "FeatureTree::insertFeature rejected duplicate id '"
+            + feature.id + "'");
+        return false;
+    }
     if (index < 0) index = 0;
     if (index > static_cast<int>(features_.size())) index = static_cast<int>(features_.size());
     features_.insert(features_.begin() + index, feature);
     markDirtyFrom(index);
+    return true;
 }
 
 bool FeatureTree::removeFeature(const std::string& featureId) {
@@ -213,21 +236,66 @@ NamedShape FeatureTree::replayFrom(const std::string& dirtyFromId) {
             }
         }
 
-        // Execute the feature using the tree's context
-        auto result = executeFeature(*ctx_, feature, currentShape, resolver);
+        // If a transformer is installed (e.g. from PartStudio::execute
+        // resolving ConfigRef placeholders), run it first. The stored
+        // feature is NOT mutated — we dispatch on the transformed copy.
+        // status + errorMessage are mirrored back after dispatch so
+        // getBrokenFeatures() reflects the actual execution outcome.
+        //
+        // executeFeatureWith produces the OperationResult via the
+        // factory API (OperationResult has a private default ctor), so
+        // we avoid declaring an uninitialised `result` local.
+        auto executeFeatureWith =
+            [&](Feature& target) -> OperationResult<NamedShape> {
+                return executeFeature(*ctx_, target, currentShape, resolver);
+            };
 
-        if (result.ok() && feature.status == FeatureStatus::OK && !result.value().isNull()) {
-            currentShape = result.value();
-            cache_[feature.id] = currentShape;
-        } else {
-            // Feature failed — keep the previous shape and mark as broken
-            if (feature.status == FeatureStatus::OK) {
-                feature.status = FeatureStatus::ExecutionFailed;
-                feature.errorMessage = result.ok() ? "Operation returned null shape" : result.errorMessage();
+        if (featureTransformer_) {
+            Feature transformed = featureTransformer_(feature);
+            if (transformed.status == FeatureStatus::BrokenReference ||
+                transformed.status == FeatureStatus::ExecutionFailed) {
+                feature.status       = transformed.status;
+                feature.errorMessage = transformed.errorMessage;
+                ctx_->diag().error(ErrorCode::INVALID_INPUT,
+                                   "Feature '" + feature.id + "' (type="
+                                   + feature.type + "): "
+                                   + transformed.errorMessage);
+                cache_[feature.id] = currentShape;
+                dirty_[feature.id] = false;
+                continue;
             }
-            // Cache the current (unchanged) shape so downstream features
-            // can still reference elements from before the broken feature
-            cache_[feature.id] = currentShape;
+            auto result = executeFeatureWith(transformed);
+            feature.status       = transformed.status;
+            feature.errorMessage = transformed.errorMessage;
+
+            if (result.ok() && feature.status == FeatureStatus::OK
+                && !result.value().isNull()) {
+                currentShape = result.value();
+                cache_[feature.id] = currentShape;
+            } else {
+                if (feature.status == FeatureStatus::OK) {
+                    feature.status = FeatureStatus::ExecutionFailed;
+                    feature.errorMessage = result.ok()
+                        ? "Operation returned null shape"
+                        : result.errorMessage();
+                }
+                cache_[feature.id] = currentShape;
+            }
+        } else {
+            auto result = executeFeatureWith(feature);
+            if (result.ok() && feature.status == FeatureStatus::OK
+                && !result.value().isNull()) {
+                currentShape = result.value();
+                cache_[feature.id] = currentShape;
+            } else {
+                if (feature.status == FeatureStatus::OK) {
+                    feature.status = FeatureStatus::ExecutionFailed;
+                    feature.errorMessage = result.ok()
+                        ? "Operation returned null shape"
+                        : result.errorMessage();
+                }
+                cache_[feature.id] = currentShape;
+            }
         }
 
         dirty_[feature.id] = false;
@@ -306,159 +374,9 @@ bool FeatureTree::hasBrokenFeatures() const {
 // Geometric types (gp_Pnt, gp_Vec, gp_Dir, gp_Ax1, gp_Ax2, gp_Pln)
 // are tagged with a "type" field so they round-trip without loss.
 
-namespace {
-
-// Convert a ParamValue to a nlohmann::json value.
-// Geometric types get a discriminated-union object with a "type" field.
-nlohmann::json paramToJson(const ParamValue& val) {
-    return std::visit([](auto&& arg) -> nlohmann::json {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, double>) {
-            return arg;
-        } else if constexpr (std::is_same_v<T, int>) {
-            return arg;
-        } else if constexpr (std::is_same_v<T, bool>) {
-            return arg;
-        } else if constexpr (std::is_same_v<T, std::string>) {
-            return arg;  // nlohmann::json handles escaping
-        } else if constexpr (std::is_same_v<T, gp_Pnt>) {
-            return {{"type", "point"},
-                    {"x", arg.X()}, {"y", arg.Y()}, {"z", arg.Z()}};
-        } else if constexpr (std::is_same_v<T, gp_Vec>) {
-            return {{"type", "vec"},
-                    {"x", arg.X()}, {"y", arg.Y()}, {"z", arg.Z()}};
-        } else if constexpr (std::is_same_v<T, gp_Dir>) {
-            return {{"type", "dir"},
-                    {"x", arg.X()}, {"y", arg.Y()}, {"z", arg.Z()}};
-        } else if constexpr (std::is_same_v<T, gp_Ax1>) {
-            auto loc = arg.Location();
-            auto dir = arg.Direction();
-            return {{"type", "ax1"},
-                    {"px", loc.X()}, {"py", loc.Y()}, {"pz", loc.Z()},
-                    {"dx", dir.X()}, {"dy", dir.Y()}, {"dz", dir.Z()}};
-        } else if constexpr (std::is_same_v<T, gp_Ax2>) {
-            auto loc = arg.Location();
-            auto dir = arg.Direction();
-            auto xdir = arg.XDirection();
-            return {{"type", "ax2"},
-                    {"px", loc.X()},  {"py", loc.Y()},  {"pz", loc.Z()},
-                    {"dx", dir.X()},  {"dy", dir.Y()},  {"dz", dir.Z()},
-                    {"xx", xdir.X()}, {"xy", xdir.Y()}, {"xz", xdir.Z()}};
-        } else if constexpr (std::is_same_v<T, gp_Pln>) {
-            auto loc = arg.Location();
-            auto axis = arg.Axis().Direction();
-            return {{"type", "pln"},
-                    {"px", loc.X()}, {"py", loc.Y()}, {"pz", loc.Z()},
-                    {"dx", axis.X()}, {"dy", axis.Y()}, {"dz", axis.Z()}};
-        } else if constexpr (std::is_same_v<T, ElementRef>) {
-            return {{"featureId",   arg.featureId},
-                    {"elementName", arg.elementName},
-                    {"elementType", arg.elementType}};
-        } else if constexpr (std::is_same_v<T, std::vector<ElementRef>>) {
-            nlohmann::json arr = nlohmann::json::array();
-            for (auto& r : arg) {
-                arr.push_back({{"featureId",   r.featureId},
-                               {"elementName", r.elementName},
-                               {"elementType", r.elementType}});
-            }
-            return arr;
-        } else {
-            return nullptr;
-        }
-    }, val);
-}
-
-// Parse a JSON value back into a ParamValue.
-// Dispatches on the "type" tag for geometric objects.
-ParamValue jsonToParam(const nlohmann::json& val) {
-    if (val.is_number_float()) {
-        return val.get<double>();
-    } else if (val.is_number_integer()) {
-        return val.get<int>();
-    } else if (val.is_boolean()) {
-        return val.get<bool>();
-    } else if (val.is_string()) {
-        return val.get<std::string>();
-    } else if (val.is_object()) {
-        if (val.contains("type") && val["type"].is_string()) {
-            std::string t = val["type"].get<std::string>();
-            if (t == "point") {
-                return gp_Pnt(val.value("x", 0.0),
-                              val.value("y", 0.0),
-                              val.value("z", 0.0));
-            } else if (t == "vec") {
-                return gp_Vec(val.value("x", 0.0),
-                              val.value("y", 0.0),
-                              val.value("z", 0.0));
-            } else if (t == "dir") {
-                return gp_Dir(val.value("x", 0.0),
-                              val.value("y", 1.0),
-                              val.value("z", 0.0));
-            } else if (t == "ax1") {
-                return gp_Ax1(
-                    gp_Pnt(val.value("px", 0.0),
-                           val.value("py", 0.0),
-                           val.value("pz", 0.0)),
-                    gp_Dir(val.value("dx", 0.0),
-                           val.value("dy", 0.0),
-                           val.value("dz", 1.0)));
-            } else if (t == "ax2") {
-                return gp_Ax2(
-                    gp_Pnt(val.value("px", 0.0),
-                           val.value("py", 0.0),
-                           val.value("pz", 0.0)),
-                    gp_Dir(val.value("dx", 0.0),
-                           val.value("dy", 0.0),
-                           val.value("dz", 1.0)),
-                    gp_Dir(val.value("xx", 1.0),
-                           val.value("xy", 0.0),
-                           val.value("xz", 0.0)));
-            } else if (t == "pln") {
-                return gp_Pln(
-                    gp_Pnt(val.value("px", 0.0),
-                           val.value("py", 0.0),
-                           val.value("pz", 0.0)),
-                    gp_Dir(val.value("dx", 0.0),
-                           val.value("dy", 0.0),
-                           val.value("dz", 1.0)));
-            }
-        }
-        // No "type" field — try ElementRef
-        if (val.contains("featureId")) {
-            ElementRef ref;
-            ref.featureId   = val.value("featureId", "");
-            ref.elementName = val.value("elementName", "");
-            ref.elementType = val.value("elementType", "");
-            return ref;
-        }
-        // Unknown object — store as empty string fallback
-        return std::string{};
-    } else if (val.is_array()) {
-        // Array of ElementRef objects
-        if (!val.empty() && val[0].is_object() && val[0].contains("featureId")) {
-            std::vector<ElementRef> refs;
-            for (auto& item : val) {
-                ElementRef ref;
-                ref.featureId   = item.value("featureId", "");
-                ref.elementName = item.value("elementName", "");
-                ref.elementType = item.value("elementType", "");
-                refs.push_back(ref);
-            }
-            return refs;
-        }
-        // Fallback: legacy [x,y,z] arrays → gp_Vec for backwards compatibility
-        if (val.size() == 3 && val[0].is_number()) {
-            return gp_Vec(val[0].get<double>(),
-                          val[1].get<double>(),
-                          val[2].get<double>());
-        }
-        return std::string{};
-    }
-    // null or unrecognised
-    return std::string{};
-}
-
-} // anonymous namespace
+// Encoding of ParamValue ⇄ JSON is centralised in feature/param_json.{h,cpp}.
+// PartStudio, Workspace, and MergeResult use the same helpers so the
+// wire format cannot drift between subsystems.
 
 std::string FeatureTree::toJSON() const {
     nlohmann::json doc;
@@ -472,7 +390,7 @@ std::string FeatureTree::toJSON() const {
 
         nlohmann::json params = nlohmann::json::object();
         for (auto& [name, val] : f.params) {
-            params[name] = paramToJson(val);
+            params[name] = paramValueToJson(val);
         }
         jf["params"] = params;
         arr.push_back(jf);
@@ -505,11 +423,72 @@ FeatureTreeFromJsonResult FeatureTree::fromJSON(const std::string& json) {
             out.error = "FeatureTree JSON root must be an object";
             return out;
         }
+        // Fail-closed schema gate. Three admissible shapes:
+        //   (A) no header at all       — pre-versioning legacy, accept.
+        //   (B) _schema but no _version — pre-versioning legacy with only
+        //       a type tag (observed in the wild from early kernel
+        //       snapshots). Accept if the type matches; reject a wrong type.
+        //   (C) both _schema and _version — full header; type must match
+        //       AND version must be loadable (current-major, or migratable).
+        //
+        // The "fail-closed" half is shapes that DO carry a header but
+        // don't match — those cannot be silently treated as "maybe for
+        // us." A FeatureTree loader that cheerfully swallows an
+        // oreo.workspace blob is exactly what the audit flagged.
+        const bool hasSchema  = doc.contains("_schema");
+        const bool hasVersion = doc.contains("_version");
+        if (hasSchema && !hasVersion) {
+            // Shape (B): legacy header. Match the type; no version check.
+            if (!doc["_schema"].is_string()) {
+                out.error = "FeatureTree JSON has non-string _schema";
+                return out;
+            }
+            const std::string schemaStr = doc["_schema"].get<std::string>();
+            if (schemaStr != schema::TYPE_FEATURE_TREE) {
+                out.error = "FeatureTree JSON has wrong _schema: expected '"
+                          + std::string(schema::TYPE_FEATURE_TREE)
+                          + "', got '" + schemaStr + "'";
+                return out;
+            }
+            // no _version: accept as pre-versioning legacy.
+        } else if (hasSchema && hasVersion) {
+            // Shape (C): full header.
+            auto header = SchemaRegistry::readHeader(doc);
+            if (!header.valid) {
+                out.error = "FeatureTree JSON has malformed _schema/_version header";
+                return out;
+            }
+            if (header.type != schema::TYPE_FEATURE_TREE) {
+                out.error = "FeatureTree JSON has wrong _schema: expected '"
+                          + std::string(schema::TYPE_FEATURE_TREE)
+                          + "', got '" + header.type + "'";
+                return out;
+            }
+            SchemaRegistry reg;
+            if (!reg.canLoad(schema::TYPE_FEATURE_TREE, header.version)) {
+                out.error = "FeatureTree version " + header.version.toString()
+                          + " is not loadable by this kernel (current: "
+                          + reg.currentVersion(schema::TYPE_FEATURE_TREE).toString()
+                          + ")";
+                return out;
+            }
+        } else if (!hasSchema && hasVersion) {
+            out.error = "FeatureTree JSON has _version but no _schema";
+            return out;
+        }
+        // else: shape (A), no header at all, accept.
         if (!doc.contains("features") || !doc["features"].is_array()) {
             out.error = "FeatureTree JSON missing required 'features' array";
             return out;
         }
         out.tree.setRollbackIndex(doc.value("rollbackIndex", -1));
+
+        // Track seen ids so we can reject duplicates before they
+        // poison cache_ / dirty_ / allocatorSnapshotsBefore_ (all
+        // keyed on feature id — a duplicate would alias two
+        // entries into one map slot and corrupt updates / replays).
+        std::unordered_set<std::string> seenIds;
+        seenIds.reserve(doc["features"].size());
 
         for (auto& jf : doc["features"]) {
             if (!jf.is_object()) {
@@ -532,17 +511,59 @@ FeatureTreeFromJsonResult FeatureTree::fromJSON(const std::string& json) {
                 out.tree = FeatureTree{};
                 return out;
             }
+            if (!seenIds.insert(f.id).second) {
+                out.error = "Duplicate feature id '" + f.id
+                          + "' in FeatureTree JSON — ids must be unique";
+                out.tree = FeatureTree{};
+                return out;
+            }
 
             if (jf.contains("params") && jf["params"].is_object()) {
+                // Schema-guided strict decode. The schema registry knows
+                // the declared ParamType for every (featureType, paramName)
+                // pair; feed each JSON value through paramValueFromJsonStrict
+                // so a malformed document cannot silently coerce a missing
+                // field into a default (the legacy paramValueFromJson path
+                // would do exactly that). Unknown params are kept, but
+                // with a lenient decode so forward-compat documents still
+                // load — validateFeature will then reject unused extras
+                // as warnings per the schema's own contract.
+                const auto& reg = FeatureSchemaRegistry::instance();
+                const auto* sch = reg.find(f.type);
                 for (auto& [key, val] : jf["params"].items()) {
-                    f.params[key] = jsonToParam(val);
+                    const ParamSpec* spec = sch ? sch->find(key) : nullptr;
+                    if (spec) {
+                        std::string reason;
+                        auto decoded = paramValueFromJsonStrict(val, spec->type, &reason);
+                        if (!decoded) {
+                            out.error = "Feature '" + f.id + "' param '" + key
+                                      + "' (expected " + paramTypeToString(spec->type)
+                                      + "): " + reason;
+                            out.tree = FeatureTree{};
+                            return out;
+                        }
+                        f.params[key] = std::move(*decoded);
+                    } else {
+                        // Unknown type or unknown param name — keep the
+                        // lenient decode so future fields survive round-trip.
+                        // validateFeature will flag unexpected params.
+                        f.params[key] = paramValueFromJson(val);
+                    }
                 }
             } else if (jf.contains("params") && !jf["params"].is_null()) {
                 out.error = "Feature '" + f.id + "': 'params' must be an object";
                 out.tree = FeatureTree{};
                 return out;
             }
-            out.tree.addFeature(f);
+            if (!out.tree.addFeature(f)) {
+                // seenIds already caught duplicates above; if addFeature
+                // rejects here, the invariant is broken inside the tree.
+                // Fail closed with the captured diagnostic.
+                out.error = "FeatureTree::addFeature rejected id '"
+                          + f.id + "' during fromJSON replay";
+                out.tree = FeatureTree{};
+                return out;
+            }
         }
         out.ok = true;
         return out;
@@ -608,11 +629,69 @@ ResolvedRef FeatureTree::resolveReference(const ElementRef& ref) const {
 
     if (ref.isNull()) return result;
 
+    // Suppressed features are a special case: during replay we do cache
+    // the pass-through shape under their id (so callers observing the
+    // timeline see the correct "visible" shape at that step), but a
+    // downstream ElementRef against a suppressed feature MUST NOT
+    // resolve — the ref was stable against the suppressed feature's
+    // OWN topology, and binding it to the upstream pass-through shape
+    // would silently re-target the same MappedName onto unrelated
+    // geometry. Fail closed: the downstream feature gets
+    // BrokenReference, which the user can fix by unsuppressing or by
+    // retargeting the ref.
+    int refIdx = findIndex(ref.featureId);
+    if (refIdx >= 0 && features_[refIdx].suppressed) return result;
+
     // Find the cached shape for the referenced feature
     auto it = cache_.find(ref.featureId);
     if (it == cache_.end() || it->second.isNull()) return result;
 
     const auto& shape = it->second;
+
+    // ─── Whole-shape reference ────────────────────────────────────
+    //
+    // Before v2, only Face / Edge / Vertex resolved. Boolean / Combine /
+    // any "tool" or "profile" style feature that wants to consume
+    // another feature's ENTIRE body had no way to say so — the only
+    // legal elementName patterns were sub-shape lookups. This was the
+    // reason feature-tree BooleanUnion / Subtract / Intersect could
+    // not be exercised end-to-end.
+    //
+    // The whole-shape contract:
+    //   ElementRef{ featureId, elementName="ROOT",
+    //               elementType="Solid" | "Shape" | "Wire" | "" }
+    //
+    // On such a ref we return the cached NamedShape's top-level shape,
+    // with a synthetic IndexedName("Shape", 1) so downstream code still
+    // sees a real identity.
+    //
+    // elementType="Face"|"Edge"|"Vertex" is rejected here as a
+    // defence-in-depth against a bypass of the schema validator: a
+    // ROOT ref declaring a sub-shape type is contradictory (ROOT
+    // returns the whole body, not a sub-shape), and silently handing
+    // back the whole solid to a face/edge/vertex-expecting consumer
+    // is the exact trap the 2026-04-19 audit flagged. The schema
+    // validator (feature_schema.cpp:checkElementRef) rejects the same
+    // combination earlier for a clearer diagnostic; this is the
+    // belt-and-suspenders check for any caller that reaches the
+    // resolver without going through validateFeature first.
+    if (ref.elementName == "ROOT") {
+        if (ref.elementType == "Face" ||
+            ref.elementType == "Edge" ||
+            ref.elementType == "Vertex") {
+            return result;  // refuse — ROOT can't be a sub-shape
+        }
+        result.shape         = shape.shape();
+        result.namedShape    = shape;
+        result.isWholeShape  = true;
+        // Represent the whole-shape identity as IndexedName("Shape", 1).
+        // Consumers that care about sub-shape semantics inspect the
+        // actual TopoDS_Shape; the IndexedName is informational.
+        result.indexedName   = IndexedName("Shape", 1);
+        result.resolved      = !result.shape.IsNull();
+        return result;
+    }
+
     if (!shape.elementMap()) return result;
 
     // Look up the MappedName in the element map

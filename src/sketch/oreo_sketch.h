@@ -20,11 +20,18 @@
 namespace oreo {
 
 // ── Sketch primitive types ───────────────────────────────────
-
+//
+// `construction` flags an entity as a reference/guide that participates
+// in the constraint solver but is skipped when the sketch is converted
+// to a wire/face for extrusion, revolve, etc. This mirrors Onshape's
+// "construction" toggle and SolidWorks' "For Construction" flag — a
+// centerline that a pattern axis references but should not appear in
+// the final body. Points are never emitted into wires, so the flag is
+// only meaningful on curve types (Line / Circle / Arc).
 struct SketchPoint { double x, y; };
-struct SketchLine { SketchPoint p1, p2; };
-struct SketchCircle { SketchPoint center; double radius; };
-struct SketchArc { SketchPoint center, start, end; double radius; };
+struct SketchLine   { SketchPoint p1, p2;         bool construction = false; };
+struct SketchCircle { SketchPoint center; double radius; bool construction = false; };
+struct SketchArc    { SketchPoint center, start, end; double radius; bool construction = false; };
 
 // ── Constraint types ─────────────────────────────────────────
 

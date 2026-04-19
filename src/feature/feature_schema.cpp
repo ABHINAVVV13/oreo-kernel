@@ -52,7 +52,29 @@ bool isPlnValid(const gp_Pln& pln) {
     return isAx2Valid(pln.Position().Ax2());
 }
 
+// Sub-shape refKinds: those whose element is a strict sub-shape of the
+// producing feature's output (a face, an edge, a vertex). A whole-shape
+// ROOT ref cannot satisfy these, because the resolver would hand back
+// the producing feature's entire cached solid regardless of the stated
+// elementType — and then the consumer (fillet edges, shell faces, hole
+// face) would see a solid instead of a sub-shape.
+bool isSubShapeRefKind(const std::string& kind) {
+    return kind == "Face" || kind == "Edge" || kind == "Vertex";
+}
+
 // Validate a single ElementRef instance. shapeKindAllowed = "" means any.
+//
+// Special case: elementName == "ROOT" is the whole-shape sentinel (see
+// feature_tree.cpp:resolveReference). It resolves to the producing
+// feature's entire cached NamedShape, so it is ONLY valid when the
+// consuming spec accepts whole-shape input — i.e. refKind is empty or
+// one of the whole-shape kinds (Solid/Shape/Wire). Face/Edge/Vertex
+// specs MUST reject ROOT refs or the resolver would silently supply a
+// whole solid in place of a sub-shape, turning a face-only consumer
+// (hole, shell, draft, face-filter) into a consumer of the entire body.
+// Prior to 2026-04-19 the schema only matched elementType as a string,
+// which let ElementRef{"F1","ROOT","Face"} pass a face-only check —
+// audit finding #P2.
 bool checkElementRef(const ElementRef& ref, const std::string& shapeKindAllowed,
                      std::string& reasonOut) {
     if (ref.featureId.empty()) {
@@ -61,6 +83,13 @@ bool checkElementRef(const ElementRef& ref, const std::string& shapeKindAllowed,
     }
     if (ref.elementName.empty()) {
         reasonOut = "ElementRef has empty elementName";
+        return false;
+    }
+    if (ref.elementName == "ROOT" && isSubShapeRefKind(shapeKindAllowed)) {
+        reasonOut = "ElementRef uses whole-shape sentinel elementName=\"ROOT\" "
+                    "but spec requires a sub-shape of kind '" + shapeKindAllowed
+                  + "'. Whole-shape refs are only valid on specs that accept "
+                    "an entire body (empty/Solid/Shape/Wire refKind).";
         return false;
     }
     if (!shapeKindAllowed.empty() && ref.elementType != shapeKindAllowed) {
@@ -106,6 +135,7 @@ const char* paramTypeName(ParamType t) {
         case ParamType::Pln:         return "Pln";
         case ParamType::ElemRef:     return "ElementRef";
         case ParamType::ElemRefList: return "ElementRefList";
+        case ParamType::ConfigRef:   return "ConfigRef";
     }
     return "Unknown";
 }
@@ -146,6 +176,12 @@ ParamSpec intMin(const std::string& name, int minVal) {
     ParamSpec s;
     s.name = name; s.type = ParamType::Int;
     s.minInclusive = static_cast<double>(minVal);
+    return s;
+}
+ParamSpec boolOptional(const std::string& name) {
+    ParamSpec s;
+    s.name = name; s.type = ParamType::Bool;
+    s.required = false;
     return s;
 }
 ParamSpec vec(const std::string& name, bool componentsPositive = false) {
@@ -203,6 +239,33 @@ FeatureSchemaRegistry::FeatureSchemaRegistry() {
          false,
          "Sphere centred at origin."});
 
+    // ── Extended primitives (complete the legacy-only primitive set) ──
+    //
+    // radius2 == 0 is legal for a point cone (OCCT accepts this); ltx ≥ 0
+    // covers the degenerate wedge / pyramid. Schema permissiveness lets
+    // OCCT reject impossible geometry with a proper GeomResult failure
+    // rather than pre-emptively excluding valid edge cases.
+    add({"MakeCone",
+         { dblPositive("radius1"),
+           dbl("radius2", 0.0),
+           dblPositive("height") },
+         false,
+         "Right circular cone along +Z. radius2==0 yields a point cone."});
+
+    add({"MakeTorus",
+         { dblPositive("majorRadius"), dblPositive("minorRadius") },
+         false,
+         "Torus in the XY plane. majorRadius > minorRadius is required "
+         "for a non-self-intersecting torus but is enforced by OCCT, not "
+         "the schema."});
+
+    add({"MakeWedge",
+         { vec("dimensions", /*componentsPositive=*/true),
+           dbl("ltx", 0.0) },
+         false,
+         "Axis-aligned wedge. dimensions = (dx, dy, dz); ltx is the top-face "
+         "extent along X (0 gives a pyramid with the top edge collapsed)."});
+
     // ── Core operations ──────────────────────────────────────
     add({"Extrude",
          { vec("direction") },
@@ -234,6 +297,38 @@ FeatureSchemaRegistry::FeatureSchemaRegistry() {
          { elemRef("tool") },
          true,
          "Subtract the referenced tool shape from the base shape."});
+
+    add({"BooleanIntersect",
+         { elemRef("tool") },
+         true,
+         "Intersection of the base shape with the referenced tool shape."});
+
+    // ── Multi-input producers (no base-shape dependency) ────
+    //
+    // Loft and Sweep consume explicit profile/path references and ignore
+    // `currentShape`, so requiresBaseShape=false — the tree may place them
+    // as the first feature or downstream of any prior output without
+    // inheriting the prior's geometry. executeFeature still feeds their
+    // result into the running NamedShape so a Fillet placed after a Loft
+    // works exactly the way a user expects.
+    //
+    // Profiles use an empty refKind because the reference target may be
+    // either a Wire (sketch output, makeFaceFromWire input) or a Face
+    // (a prior feature's face sub-shape). Loft accepts both under OCCT's
+    // BRepOffsetAPI_ThruSections, so forcing "Wire" here would reject
+    // legitimate inputs. The execution path resolves via resolveRef and
+    // lets OCCT enforce geometric suitability.
+    add({"Loft",
+         { elemRefList("profiles", /*refKind=*/""),
+           boolOptional("makeSolid") },
+         /*requiresBaseShape=*/false,
+         "Loft through >=2 profile cross-sections. makeSolid=true returns a "
+         "closed solid, false returns a ruled surface. Defaults to true."});
+
+    add({"Sweep",
+         { elemRef("profile"), elemRef("path") },
+         false,
+         "Sweep a profile along a path. Both must be wires or wire-convertible."});
 
     add({"Shell",
          { elemRefList("faces", "Face"), dblNonZero("thickness") },
@@ -372,6 +467,20 @@ bool validateOne(KernelContext& ctx, Feature& feature,
                  const ParamSpec& spec, const ParamValue& v) {
     // Variant index must match spec.type (see ParamType enum).
     if (v.index() != static_cast<size_t>(spec.type)) {
+        // Special-case unresolved ConfigRef so callers debugging
+        // PartStudio::execute get a message that points at the actual
+        // cause ("the studio didn't resolve your config placeholder")
+        // instead of the generic "expected Double, got index 12".
+        if (v.index() == static_cast<size_t>(ParamType::ConfigRef)) {
+            const auto& cr = std::get<ConfigRef>(v);
+            std::string reason = std::string("unresolved ConfigRef '") + cr.name
+                               + "' (expected " + paramTypeName(spec.type)
+                               + "). resolveConfigRefs() must run before "
+                                 "validateFeature — this is a PartStudio "
+                                 "execute-path invariant violation.";
+            return fail(ctx, feature, ErrorCode::INVALID_INPUT,
+                        ctxPrefix(feature, spec.name, reason));
+        }
         std::string reason = std::string("expected ") + paramTypeName(spec.type)
                            + ", got variant index " + std::to_string(v.index());
         return fail(ctx, feature, ErrorCode::INVALID_INPUT,
@@ -479,6 +588,16 @@ bool validateOne(KernelContext& ctx, Feature& feature,
             }
             return true;
         }
+
+        case ParamType::ConfigRef:
+            // ConfigRef is a placeholder — spec.type is never declared as
+            // ConfigRef by a FeatureSchema (feature schemas describe
+            // concrete geometry params), so reaching this case means the
+            // caller registered a bogus schema. Fail loudly.
+            return fail(ctx, feature, ErrorCode::INTERNAL_ERROR,
+                        ctxPrefix(feature, spec.name,
+                                  "feature schema declared ConfigRef as a "
+                                  "parameter type — not supported"));
     }
     return true;
 }

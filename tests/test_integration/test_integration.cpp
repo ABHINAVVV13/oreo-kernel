@@ -13,6 +13,7 @@
 #include "core/kernel_context.h"
 #include "core/cancellation.h"
 #include "core/diagnostic.h"
+#include "core/shape_identity.h"
 #include "feature/feature.h"
 #include "feature/feature_tree.h"
 #include "geometry/oreo_geometry.h"
@@ -267,7 +268,7 @@ TEST(Integration, W3_SerializeRoundTripPreservesTopologyAndNames) {
 
     int origFaces = filleted.countSubShapes(TopAbs_FACE);
     int origEdges = filleted.countSubShapes(TopAbs_EDGE);
-    int64_t origTag = filleted.tag();
+    oreo::ShapeIdentity origId = filleted.shapeId();
 
     // Collect the original face names so we can compare after round-trip.
     std::vector<std::string> origFaceNames;
@@ -294,8 +295,8 @@ TEST(Integration, W3_SerializeRoundTripPreservesTopologyAndNames) {
     EXPECT_EQ(restored.countSubShapes(TopAbs_FACE), origFaces);
     EXPECT_EQ(restored.countSubShapes(TopAbs_EDGE), origEdges);
 
-    // Tag round-trips through the serializer payload.
-    EXPECT_EQ(restored.tag(), origTag);
+    // Shape identity round-trips through the serializer payload.
+    EXPECT_EQ(restored.shapeId(), origId);
 
     // Element names — check each face has a non-empty mapped name.
     // We also require that, where both sides have non-empty names, they
@@ -329,7 +330,7 @@ TEST(Integration, W4_FeatureTreeParameterEditRoundTrip) {
     fBox.id = "F1";
     fBox.type = "MakeBox";
     fBox.params["dimensions"] = gp_Vec(10.0, 10.0, 10.0);
-    tree.addFeature(fBox);
+    (void)tree.addFeature(fBox);
 
     // Feature F2: Fillet edge 0 at radius 1.0. We reference edge
     // "Edge1" — the IndexedName of the first box edge.
@@ -340,7 +341,7 @@ TEST(Integration, W4_FeatureTreeParameterEditRoundTrip) {
     fFil.params["edges"] = std::vector<oreo::ElementRef>{
         {"F1", "Edge1", "Edge"}
     };
-    tree.addFeature(fFil);
+    (void)tree.addFeature(fFil);
 
     auto volumeOf = [&](const oreo::NamedShape& s) -> double {
         auto mp = oreo::massProperties(*ctx, s);
@@ -514,7 +515,7 @@ TEST(Integration, W7_SketchFeatureTreeStepFullChain) {
     fBox.id = "F1";
     fBox.type = "MakeBox";
     fBox.params["dimensions"] = gp_Vec(30.0, 20.0, 15.0);
-    tree.addFeature(fBox);
+    (void)tree.addFeature(fBox);
 
     oreo::Feature fFil;
     fFil.id = "F2";
@@ -523,7 +524,7 @@ TEST(Integration, W7_SketchFeatureTreeStepFullChain) {
     fFil.params["edges"] = std::vector<oreo::ElementRef>{
         {"F1", "Edge1", "Edge"}
     };
-    tree.addFeature(fFil);
+    (void)tree.addFeature(fFil);
 
     auto shapeFromTree = tree.replay();
     ASSERT_FALSE(shapeFromTree.isNull());
@@ -543,7 +544,7 @@ TEST(Integration, W7_SketchFeatureTreeStepFullChain) {
     // Swap in the fresh context so replay runs in ctx2.
     oreo::FeatureTree replayTree(ctx2);
     for (const auto& f : restoredTree.features()) {
-        replayTree.addFeature(f);
+        (void)replayTree.addFeature(f);
     }
     auto shapeFromJson = replayTree.replay();
     ASSERT_FALSE(shapeFromJson.isNull());

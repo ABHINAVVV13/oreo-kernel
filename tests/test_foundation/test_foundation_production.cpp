@@ -13,6 +13,20 @@
 //   - Schema (3 tests): Unknown version, header round-trip, compatible load
 //   - Validation Direct (5 tests): NaN, Inf, -Inf, NaN vec, valid accepted
 //   - Geometry Quality (3 tests): Box/Sphere/Cylinder never degraded
+//
+// This suite intentionally exercises the deprecated v1 scalar tag API
+// (`TagAllocator::nextTag()`) to lock the v1 compatibility contract.
+// File-scope suppression keeps CI logs clean; each v1 call site is
+// load-bearing — migrating it to nextShapeIdentity() would drop
+// coverage of the scalar contract documents persisted before v2
+// landed still depend on.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include "core/kernel_context.h"
 #include "core/operation_result.h"
@@ -570,13 +584,19 @@ TEST(Schema, HeaderRoundTrip) {
 
 TEST(Schema, CompatibleVersionLoads) {
     oreo::SchemaRegistry reg;
-    // Current version for FEATURE_TREE is {1, 0, 0}
-    // A document with version {1, 0, 0} should be loadable
-    EXPECT_TRUE(reg.canLoad(oreo::schema::TYPE_FEATURE_TREE, {1, 0, 0}));
-    // Same major, lower minor should also be loadable
-    EXPECT_TRUE(reg.canLoad(oreo::schema::TYPE_FEATURE_TREE, {1, 0, 0}));
-    // Different major should NOT be loadable
-    EXPECT_FALSE(reg.canLoad(oreo::schema::TYPE_FEATURE_TREE, {2, 0, 0}));
+    // Assert against the live constant so this test auto-tracks schema
+    // bumps — e.g. FEATURE_TREE 1.0.0 → 2.0.0 for the P1 ConfigRef work.
+    EXPECT_TRUE(reg.canLoad(oreo::schema::TYPE_FEATURE_TREE,
+                             oreo::schema::FEATURE_TREE));
+    // Same major, minor 0 also loads (canLoad accepts older minors).
+    oreo::SchemaVersion sameMajorZeroMinor{
+        oreo::schema::FEATURE_TREE.major, 0, 0};
+    EXPECT_TRUE(reg.canLoad(oreo::schema::TYPE_FEATURE_TREE,
+                             sameMajorZeroMinor));
+    // A strictly future major is rejected.
+    oreo::SchemaVersion futureMajor{
+        oreo::schema::FEATURE_TREE.major + 1, 0, 0};
+    EXPECT_FALSE(reg.canLoad(oreo::schema::TYPE_FEATURE_TREE, futureMajor));
 }
 
 // ===================================================================

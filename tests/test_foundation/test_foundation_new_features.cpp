@@ -34,7 +34,7 @@
 #include "core/occt_try.h"
 #include "core/schema.h"
 #include "core/validation.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 
 #include <gp_Pnt.hxx>
 #include <gp_Dir.hxx>
@@ -153,8 +153,8 @@ TEST(KernelContextSafeReset, ClearsDiagnosticsPreservesPolicy) {
     auto ctx = oreo::KernelContext::create(cfg);
 
     ctx->diag().error(oreo::ErrorCode::OCCT_FAILURE, "pre-reset");
-    ctx->tags().nextTag();
-    ctx->tags().nextTag();
+    (void)ctx->tags().nextShapeIdentity();
+    (void)ctx->tags().nextShapeIdentity();
 
     const double tolBefore = ctx->tolerance().linearPrecision;
     const auto lengthUnitBefore = ctx->units().documentLength;
@@ -711,35 +711,50 @@ TEST(SchemaRegistryIntrospection, VersionsForListsRegisteredMigrations) {
     oreo::SchemaRegistry reg;
     const std::string type = oreo::schema::TYPE_FEATURE_TREE;
 
-    // No migrations registered yet — empty list.
-    EXPECT_TRUE(reg.versionsFor(type).empty());
+    // Baseline: as of 2026-04-18 the ctor pre-registers a v1→v2 no-op
+    // migration for oreo.feature_tree so old documents round-trip
+    // through the fail-closed fromJSON schema gate. The test captures
+    // that baseline instead of assuming an empty starting point.
+    auto baseline = reg.versionsFor(type);
+    const size_t baselineCount = baseline.size();
 
+    // Use 0.x → 0.y fractional versions so we don't collide with the
+    // 1.0.0 → 2.0.0 kernel-registered migration.
     reg.registerMigration(type, oreo::SchemaVersion{0, 1, 0},
                           oreo::SchemaVersion{0, 2, 0},
                           [](const nlohmann::json& d) { return d; });
     reg.registerMigration(type, oreo::SchemaVersion{0, 2, 0},
-                          oreo::SchemaVersion{1, 0, 0},
+                          oreo::SchemaVersion{0, 3, 0},
                           [](const nlohmann::json& d) { return d; });
 
     auto vs = reg.versionsFor(type);
-    ASSERT_EQ(vs.size(), 2u);
-    EXPECT_EQ(vs[0], (oreo::SchemaVersion{0, 1, 0}));
-    EXPECT_EQ(vs[1], (oreo::SchemaVersion{0, 2, 0}));
+    ASSERT_EQ(vs.size(), baselineCount + 2u);
+    // Newly registered entries append after the baseline in registration
+    // order — this is the documented semantics of versionsFor.
+    EXPECT_EQ(vs[baselineCount],     (oreo::SchemaVersion{0, 1, 0}));
+    EXPECT_EQ(vs[baselineCount + 1], (oreo::SchemaVersion{0, 2, 0}));
 }
 
 TEST(SchemaRegistryIntrospection, UnregisterMigrationRemovesAndReports) {
     oreo::SchemaRegistry reg;
     const std::string type = oreo::schema::TYPE_FEATURE_TREE;
+    // Use a version that is NOT pre-registered by the ctor (baseline
+    // registers 1.0.0 → 2.0.0). We pick 0.1.0 → 0.2.0 so unregister
+    // can round-trip without touching the kernel baseline.
     reg.registerMigration(type, oreo::SchemaVersion{0, 1, 0},
-                          oreo::SchemaVersion{1, 0, 0},
+                          oreo::SchemaVersion{0, 2, 0},
                           [](const nlohmann::json& d) { return d; });
 
     EXPECT_TRUE(reg.unregisterMigration(type, oreo::SchemaVersion{0, 1, 0}));
     // Second call: already gone, returns false.
     EXPECT_FALSE(reg.unregisterMigration(type, oreo::SchemaVersion{0, 1, 0}));
 
-    // versionsFor now empty again.
-    EXPECT_TRUE(reg.versionsFor(type).empty());
+    // Unregistering one entry leaves the baseline (1.0.0 → 2.0.0) intact.
+    auto vs = reg.versionsFor(type);
+    for (const auto& v : vs) {
+        EXPECT_NE(v, (oreo::SchemaVersion{0, 1, 0}))
+            << "the just-unregistered migration must be gone";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -747,15 +762,17 @@ TEST(SchemaRegistryIntrospection, UnregisterMigrationRemovesAndReports) {
 // ═══════════════════════════════════════════════════════════════
 
 TEST(SchemaRegistryTestMigration, HappyPathReturnsTrue) {
-    // Note: SchemaRegistry::migrate() fails closed on unknown types —
-    // currentVersion(type) throws for anything outside the built-in set.
-    // We therefore attach the migration to a built-in type whose current
-    // version is 1.0.0. A 0.1.0 -> 1.0.0 migrator routes fine through
-    // migrate(), which is the machinery testMigration() drives.
+    // SchemaRegistry::migrate() fails closed on unknown types, so we
+    // drive testMigration() against a built-in whose current version
+    // we derive from the live constant. This tracks schema bumps
+    // (e.g. FEATURE_TREE 1.0.0 → 2.0.0 for P1) without pinning a
+    // magic value.
     oreo::SchemaRegistry reg;
-    const std::string type = oreo::schema::TYPE_FEATURE_TREE;  // current = 1.0.0
-    reg.registerMigration(type, oreo::SchemaVersion{0, 1, 0},
-                          oreo::SchemaVersion{1, 0, 0},
+    const std::string type = oreo::schema::TYPE_FEATURE_TREE;
+    const oreo::SchemaVersion current = oreo::schema::FEATURE_TREE;
+    const oreo::SchemaVersion prior{0, 1, 0};
+
+    reg.registerMigration(type, prior, current,
                           [](const nlohmann::json& in) {
                               nlohmann::json out = in;
                               out["migrated"] = true;
@@ -764,30 +781,26 @@ TEST(SchemaRegistryTestMigration, HappyPathReturnsTrue) {
 
     nlohmann::json sample = {{"payload", 123}};
     std::string reason;
-    EXPECT_TRUE(reg.testMigration(type,
-                                  oreo::SchemaVersion{0, 1, 0},
-                                  oreo::SchemaVersion{1, 0, 0},
-                                  sample,
-                                  &reason));
+    EXPECT_TRUE(reg.testMigration(type, prior, current, sample, &reason));
     EXPECT_EQ(reason, "ok");
 }
 
 TEST(SchemaRegistryTestMigration, MismatchingTargetReturnsFalseWithReason) {
     oreo::SchemaRegistry reg;
-    const std::string type = oreo::schema::TYPE_FEATURE_TREE;  // current = 1.0.0
-    reg.registerMigration(type, oreo::SchemaVersion{0, 1, 0},
-                          oreo::SchemaVersion{1, 0, 0},
+    const std::string type = oreo::schema::TYPE_FEATURE_TREE;
+    const oreo::SchemaVersion current = oreo::schema::FEATURE_TREE;
+    const oreo::SchemaVersion prior{0, 1, 0};
+
+    reg.registerMigration(type, prior, current,
                           [](const nlohmann::json& d) { return d; });
 
     nlohmann::json sample = {{"payload", 1}};
     std::string reason;
-    // Claim the target is 9.9.9 — migrate() will take the data to 1.0.0
-    // (the real current version), so the shape-check fails.
-    EXPECT_FALSE(reg.testMigration(type,
-                                   oreo::SchemaVersion{0, 1, 0},
+    // Claim the target is 9.9.9 — migrate() will take the data to the
+    // real current version, so the shape-check fails.
+    EXPECT_FALSE(reg.testMigration(type, prior,
                                    oreo::SchemaVersion{9, 9, 9},
-                                   sample,
-                                   &reason));
+                                   sample, &reason));
     EXPECT_FALSE(reason.empty());
     EXPECT_NE(reason, "ok");
 }

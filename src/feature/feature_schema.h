@@ -26,6 +26,13 @@ namespace oreo {
 // One discriminator per std::variant alternative in ParamValue. Kept in
 // sync with the variant order in feature.h — checkParamType() relies on
 // the integer values matching variant::index().
+//
+// ConfigRef (12) is a placeholder that never reaches validateFeature /
+// executeFeature. resolveConfigRefs() substitutes it with a concrete
+// value before dispatch. A raw ConfigRef in a feature param therefore
+// never validates against a schema's declared type — validateConfigRef
+// in feature_schema.cpp emits a diagnostic explaining that the studio's
+// resolver must run first.
 enum class ParamType {
     Double      = 0,
     Int         = 1,
@@ -39,6 +46,7 @@ enum class ParamType {
     Pln         = 9,
     ElemRef     = 10,
     ElemRefList = 11,
+    ConfigRef   = 12,
 };
 
 const char* paramTypeName(ParamType t);

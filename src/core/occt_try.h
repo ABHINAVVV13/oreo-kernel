@@ -51,7 +51,7 @@
 #include "diagnostic_scope.h"
 #include "kernel_context.h"
 #include "operation_result.h"
-#include "oreo_error.h"
+#include "diagnostic.h"
 
 #include <Standard_Failure.hxx>
 

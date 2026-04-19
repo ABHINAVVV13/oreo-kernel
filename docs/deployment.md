@@ -319,6 +319,11 @@ Domain-level documents for deeper dives:
 - [feature-schema.md](feature-schema.md) — feature-tree JSON schema
 - [part-studio-model.md](part-studio-model.md) — document + transaction model
 - [server-safe-api.md](server-safe-api.md) — the OREO_ENABLE_LEGACY_API=OFF surface
+- [process-model.md](process-model.md) — **required reading for anyone
+  running oreo-kernel as a hosted / multi-tenant service.** Explains
+  the two supported deployment models (per-worker-process isolation
+  vs. per-process serialisation) and why no third option is
+  supported.
 - [error-codes.md](error-codes.md) — C API error codes
 - [migration-v1-to-v2.md](migration-v1-to-v2.md) — identity v1 → v2 migration
 

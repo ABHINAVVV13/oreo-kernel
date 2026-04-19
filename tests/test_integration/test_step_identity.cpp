@@ -33,7 +33,7 @@ namespace {
 std::vector<uint8_t> exportBoxAsStep(oreo::KernelContext& ctx,
                                       double dx, double dy, double dz) {
     TopoDS_Shape s = BRepPrimAPI_MakeBox(dx, dy, dz).Shape();
-    oreo::NamedShape ns(s, ctx.tags().nextTag());
+    oreo::NamedShape ns(s, ctx.tags().nextShapeIdentity());
     auto r = oreo::exportStep(ctx, {ns}, {});
     if (!r.ok()) return {};
     return r.value();
@@ -42,7 +42,7 @@ std::vector<uint8_t> exportBoxAsStep(oreo::KernelContext& ctx,
 std::vector<uint8_t> exportCylinderAsStep(oreo::KernelContext& ctx,
                                            double radius, double height) {
     TopoDS_Shape s = BRepPrimAPI_MakeCylinder(radius, height).Shape();
-    oreo::NamedShape ns(s, ctx.tags().nextTag());
+    oreo::NamedShape ns(s, ctx.tags().nextShapeIdentity());
     auto r = oreo::exportStep(ctx, {ns}, {});
     if (!r.ok()) return {};
     return r.value();

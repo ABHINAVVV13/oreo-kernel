@@ -14,8 +14,9 @@
 
 #include "oreo_step.h"
 #include "shape_fix.h"
+#include "temp_file.h"
 #include "core/occt_scope_guard.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "core/operation_result.h"
 #include "core/diagnostic_scope.h"
 #include "naming/named_shape.h"
@@ -60,15 +61,10 @@ namespace oreo {
 
 namespace {
 
-// Generate a unique temp file path that won't collide with other processes.
-std::string uniqueTempPath(const std::string& prefix, const std::string& ext) {
-    static std::atomic<int> counter{0};
-    std::string name = prefix + "_" + std::to_string(counter++) + "_"
-                     + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id()))
-                     + ext;
-    auto tempDir = std::filesystem::temp_directory_path();
-    return (tempDir / name).string();
-}
+// Temp-file naming + RAII are centralised in io/temp_file.h. Cross-process
+// safe (PID + random nonce + exclusive-create), so a parallel server can
+// round-trip STEP without staging collisions on shared /tmp.
+using TempFile = oreo::io_detail::TempFile;
 
 // Initialize element map for an imported shape (no history — fresh names).
 ElementMapPtr initImportedElementMap(KernelContext& ctx, const TopoDS_Shape& shape) {
@@ -92,21 +88,6 @@ ElementMapPtr initImportedElementMap(KernelContext& ctx, const TopoDS_Shape& sha
 
     return map;
 }
-
-// RAII temp file cleanup
-struct TempFile {
-    std::string path;
-    TempFile(const std::string& prefix, const std::string& ext)
-        : path(uniqueTempPath(prefix, ext)) {}
-    ~TempFile() {
-        if (!path.empty()) {
-            std::error_code ec;
-            std::filesystem::remove(path, ec);
-        }
-    }
-    TempFile(const TempFile&) = delete;
-    TempFile& operator=(const TempFile&) = delete;
-};
 
 // Create a fresh XCAF document for import/export.
 Handle(TDocStd_Document) createXcafDocument() {
@@ -319,7 +300,7 @@ OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* 
     // Write to a temp file, import, then clean up.
     TempFile tmp("oreo_import", ".step");
     {
-        std::ofstream ofs(tmp.path, std::ios::binary);
+        std::ofstream ofs(tmp.path(), std::ios::binary);
         if (!ofs) {
             ctx.diag().error(ErrorCode::STEP_IMPORT_FAILED,
                          "Failed to create temp file for STEP import");
@@ -328,7 +309,7 @@ OperationResult<StepImportResult> importStep(KernelContext& ctx, const uint8_t* 
         ofs.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(len));
     }
 
-    return importStepFile(ctx, tmp.path);
+    return importStepFile(ctx, tmp.path());
 }
 
 // ── Import from file path ────────────────────────────────────────────────────
@@ -437,13 +418,13 @@ OperationResult<std::vector<uint8_t>> exportStep(KernelContext& ctx, const std::
     }
 
     TempFile tmp("oreo_export", ".step");
-    auto fileResult = exportStepFile(ctx, shapes, tmp.path, metadata);
+    auto fileResult = exportStepFile(ctx, shapes, tmp.path(), metadata);
     if (!fileResult.ok()) {
         return scope.makeFailure<std::vector<uint8_t>>();  // Error already set
     }
 
     // Read the file back into memory
-    std::ifstream ifs(tmp.path, std::ios::binary | std::ios::ate);
+    std::ifstream ifs(tmp.path(), std::ios::binary | std::ios::ate);
     if (!ifs) {
         ctx.diag().error(ErrorCode::STEP_EXPORT_FAILED, "Failed to read back exported STEP file");
         return scope.makeFailure<std::vector<uint8_t>>();

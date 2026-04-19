@@ -6,7 +6,8 @@
 #include <gtest/gtest.h>
 
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
+#include "core/shape_identity.h"
 #include "geometry/oreo_geometry.h"
 #include "io/oreo_serialize.h"
 #include "io/oreo_step.h"
@@ -37,7 +38,7 @@ TEST(Robustness, RevolveNull) {
 TEST(Robustness, BooleanWithNull) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
 
     auto r1 = oreo::booleanUnion(*ctx, null, box);
     EXPECT_FALSE(r1.ok());
@@ -53,7 +54,7 @@ TEST(Robustness, BooleanWithNull) {
 
 TEST(Robustness, FilletEmptyEdges) {
     auto ctx = oreo::KernelContext::create();
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
     std::vector<oreo::NamedEdge> empty;
     auto result = oreo::fillet(*ctx, box, empty, 2.0);
     EXPECT_FALSE(result.ok());
@@ -62,7 +63,7 @@ TEST(Robustness, FilletEmptyEdges) {
 
 TEST(Robustness, FilletZeroRadius) {
     auto ctx = oreo::KernelContext::create();
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
     auto edgesR = oreo::getEdges(*ctx, box);
     ASSERT_TRUE(edgesR.ok());
     auto edges = edgesR.value();
@@ -76,7 +77,7 @@ TEST(Robustness, FilletZeroRadius) {
 
 TEST(Robustness, ChamferNegativeDistance) {
     auto ctx = oreo::KernelContext::create();
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
     auto edgesR = oreo::getEdges(*ctx, box);
     ASSERT_TRUE(edgesR.ok());
     auto edges = edgesR.value();
@@ -90,7 +91,7 @@ TEST(Robustness, ChamferNegativeDistance) {
 
 TEST(Robustness, PatternCountOne) {
     auto ctx = oreo::KernelContext::create();
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
     auto result = oreo::patternLinear(*ctx, box, gp_Vec(1,0,0), 1, 10.0);
     EXPECT_FALSE(result.ok());
     EXPECT_TRUE(ctx->diag().hasErrors());
@@ -98,7 +99,7 @@ TEST(Robustness, PatternCountOne) {
 
 TEST(Robustness, PatternZeroSpacing) {
     auto ctx = oreo::KernelContext::create();
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
     auto result = oreo::patternLinear(*ctx, box, gp_Vec(1,0,0), 3, 0.0);
     EXPECT_FALSE(result.ok());
     EXPECT_TRUE(ctx->diag().hasErrors());
@@ -125,7 +126,7 @@ TEST(Robustness, MassPropertiesNull) {
 TEST(Robustness, MeasureDistanceNull) {
     auto ctx = oreo::KernelContext::create();
     oreo::NamedShape null;
-    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), 1);
+    oreo::NamedShape box(BRepPrimAPI_MakeBox(10,10,10).Shape(), oreo::ShapeIdentity{0, 1});
     auto distR = oreo::measureDistance(*ctx, null, box);
     EXPECT_FALSE(distR.ok());
     EXPECT_TRUE(ctx->diag().hasErrors());

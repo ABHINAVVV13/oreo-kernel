@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "io/oreo_serialize.h"
 #include "naming/named_shape.h"
 #include "query/oreo_query.h"
@@ -16,7 +16,7 @@ namespace {
 
 oreo::NamedShape makeBoxLocal(oreo::KernelContext& ctx, double x, double y, double z) {
     TopoDS_Shape box = BRepPrimAPI_MakeBox(x, y, z).Shape();
-    return oreo::NamedShape(box, ctx.tags().nextTag());
+    return oreo::NamedShape(box, ctx.tags().nextShapeIdentity());
 }
 
 } // anonymous namespace
@@ -45,8 +45,9 @@ TEST(Serialize, BoxRoundTrip) {
     auto restoredProps = oreo::massProperties(*ctx, restored).value();
     EXPECT_NEAR(restoredProps.volume, origProps.volume, 0.01);
 
-    // Tag should be preserved
-    EXPECT_EQ(restored.tag(), box.tag());
+    // Shape identity should be preserved (v2; the old tag() accessor is
+    // deprecated and throws when counters overflow int64).
+    EXPECT_EQ(restored.shapeId(), box.shapeId());
 }
 
 TEST(Serialize, NullShapeFails) {
@@ -81,7 +82,7 @@ TEST(Serialize, ElementMapPreserved) {
 
     // Construct NamedShape with element map in constructor (setElementMap is deleted)
     TopoDS_Shape boxShape = BRepPrimAPI_MakeBox(10, 10, 10).Shape();
-    oreo::NamedShape box(boxShape, map, ctx->tags().nextTag());
+    oreo::NamedShape box(boxShape, map, ctx->tags().nextShapeIdentity());
 
     auto buf = oreo::serialize(*ctx, box).value();
     ASSERT_FALSE(buf.empty());

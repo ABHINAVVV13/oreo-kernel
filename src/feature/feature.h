@@ -48,22 +48,45 @@ struct ElementRef {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// ConfigRef — a placeholder for a value supplied by a Part Studio
+// configuration at execute time. See docs/part-studio-as-function.md.
+//
+// Resolution happens in resolveConfigRefs() before executeFeature /
+// validateFeature sees the feature. By the time dispatch runs, every
+// param has been replaced by its concrete value — ConfigRef never
+// reaches the geometry layer.
+// ═══════════════════════════════════════════════════════════════
+
+struct ConfigRef {
+    std::string name;  // must match a ConfigInputSpec.name in the studio
+
+    bool isNull() const { return name.empty(); }
+};
+
+// ═══════════════════════════════════════════════════════════════
 // Parameter Value — type-safe variant for feature parameters
+//
+// IMPORTANT: the variant alternative order MUST stay in lock-step with
+// the ParamType enum in feature_schema.h. validateOne() compares
+// v.index() to the numeric ParamType value to reject mismatched params.
+// Appending a new alternative is safe; reordering existing ones is a
+// break.
 // ═══════════════════════════════════════════════════════════════
 
 using ParamValue = std::variant<
-    double,
-    int,
-    bool,
-    std::string,
-    gp_Vec,
-    gp_Pnt,
-    gp_Dir,
-    gp_Ax1,
-    gp_Ax2,
-    gp_Pln,
-    ElementRef,
-    std::vector<ElementRef>
+    double,                     // 0  — ParamType::Double
+    int,                        // 1  — ParamType::Int
+    bool,                       // 2  — ParamType::Bool
+    std::string,                // 3  — ParamType::String
+    gp_Vec,                     // 4  — ParamType::Vec
+    gp_Pnt,                     // 5  — ParamType::Pnt
+    gp_Dir,                     // 6  — ParamType::Dir
+    gp_Ax1,                     // 7  — ParamType::Ax1
+    gp_Ax2,                     // 8  — ParamType::Ax2
+    gp_Pln,                     // 9  — ParamType::Pln
+    ElementRef,                 // 10 — ParamType::ElemRef
+    std::vector<ElementRef>,    // 11 — ParamType::ElemRefList
+    ConfigRef                   // 12 — ParamType::ConfigRef
 >;
 
 // ═══════════════════════════════════════════════════════════════
@@ -112,9 +135,20 @@ struct Feature {
 // Resolve an ElementRef to an actual OCCT sub-shape.
 // Uses the cached NamedShape from the referenced feature.
 struct ResolvedRef {
-    TopoDS_Shape shape;       // The actual sub-shape
+    TopoDS_Shape shape;       // The actual sub-shape (or whole shape on ROOT ref)
     IndexedName indexedName;  // The IndexedName in the element map
     bool resolved = false;    // Whether resolution succeeded
+
+    // For whole-shape refs (elementName == "ROOT"), `namedShape` holds
+    // the full cached NamedShape of the referenced feature so Boolean/
+    // Combine-style dispatches can preserve the tool's element map +
+    // identity instead of fabricating a fresh one (which would lose
+    // naming history across the operation).
+    //
+    // `isWholeShape` is true iff this ref resolved through the ROOT
+    // path. For sub-shape refs it is false and `namedShape` is empty.
+    NamedShape namedShape;
+    bool isWholeShape = false;
 };
 
 // Callback type for resolving element references during replay

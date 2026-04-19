@@ -7,7 +7,7 @@
 
 #include "sketch/oreo_sketch.h"
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 
 #include <cmath>
 

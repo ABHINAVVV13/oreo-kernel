@@ -27,7 +27,7 @@ oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace fm(wm.Wire());
-    return oreo::NamedShape(fm.Face(), ctx.tags().nextTag());
+    return oreo::NamedShape(fm.Face(), ctx.tags().nextShapeIdentity());
 }
 
 } // anonymous namespace
@@ -53,7 +53,7 @@ TEST(FeatureTree, SingleExtrudeReplay) {
     ext.id = "F1";
     ext.type = "Extrude";
     ext.params["direction"] = gp_Vec(0, 0, 30);
-    tree.addFeature(ext);
+    (void)tree.addFeature(ext);
 
     // We need to seed the tree with the initial shape.
     // The tree's replay starts from nothing -- so the first feature needs
@@ -97,7 +97,7 @@ TEST(FeatureTree, ParameterChangeTriggersReplay) {
     ext.id = "F1";
     ext.type = "Extrude";
     ext.params["direction"] = gp_Vec(0, 0, 30);
-    tree.addFeature(ext);
+    (void)tree.addFeature(ext);
 
     // Check that updateParameter marks feature dirty
     tree.updateParameter("F1", "direction", oreo::ParamValue(gp_Vec(0, 0, 50)));
@@ -117,7 +117,7 @@ TEST(FeatureTree, SuppressFeature) {
     f1.id = "F1";
     f1.type = "Extrude";
     f1.params["direction"] = gp_Vec(0, 0, 30);
-    tree.addFeature(f1);
+    (void)tree.addFeature(f1);
 
     tree.suppressFeature("F1", true);
     const auto* feature = tree.getFeature("F1");
@@ -137,8 +137,8 @@ TEST(FeatureTree, RemoveFeature) {
     oreo::Feature f1, f2;
     f1.id = "F1"; f1.type = "Extrude"; f1.params["direction"] = gp_Vec(0,0,30);
     f2.id = "F2"; f2.type = "Fillet"; f2.params["radius"] = 2.0;
-    tree.addFeature(f1);
-    tree.addFeature(f2);
+    (void)tree.addFeature(f1);
+    (void)tree.addFeature(f2);
     EXPECT_EQ(tree.featureCount(), 2);
 
     EXPECT_TRUE(tree.removeFeature("F1"));
@@ -158,7 +158,7 @@ TEST(FeatureTree, SerializeRoundTrip) {
     f1.type = "Extrude";
     f1.params["direction"] = gp_Vec(0, 0, 30);
     f1.params["distance"] = 30.0;
-    tree.addFeature(f1);
+    (void)tree.addFeature(f1);
 
     oreo::Feature f2;
     f2.id = "F2";
@@ -167,7 +167,7 @@ TEST(FeatureTree, SerializeRoundTrip) {
     f2.params["edges"] = std::vector<oreo::ElementRef>{
         {"F1", "Edge3;:H1a;:M", "Edge"}
     };
-    tree.addFeature(f2);
+    (void)tree.addFeature(f2);
 
     std::string json = tree.toJSON();
     EXPECT_FALSE(json.empty());
@@ -193,7 +193,7 @@ TEST(FeatureTree, BrokenFeatureDetection) {
     f1.params["edges"] = std::vector<oreo::ElementRef>{
         {"nonexistent_feature", "Edge1", "Edge"}
     };
-    tree.addFeature(f1);
+    (void)tree.addFeature(f1);
 
     tree.replay();
 
@@ -310,7 +310,7 @@ TEST(FeatureTree, MakeFaceFromWire) {
     wm.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    oreo::NamedShape wire(wm.Wire(), ctx->tags().nextTag());
+    oreo::NamedShape wire(wm.Wire(), ctx->tags().nextShapeIdentity());
 
     auto faceR = oreo::makeFaceFromWire(*ctx, wire);
     ASSERT_TRUE(faceR.ok());
@@ -428,7 +428,7 @@ TEST(Operations, Pocket) {
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace fm(wm.Wire());
-    oreo::NamedShape profile(fm.Face(), ctx->tags().nextTag());
+    oreo::NamedShape profile(fm.Face(), ctx->tags().nextShapeIdentity());
 
     auto pocketedR = oreo::pocket(*ctx, box, profile, 20.0);
     if (pocketedR.ok()) {
@@ -487,7 +487,7 @@ TEST(Operations, WireOffset) {
     wm.Add(BRepBuilderAPI_MakeEdge(p2, p3).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wm.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
-    oreo::NamedShape wire(wm.Wire(), ctx->tags().nextTag());
+    oreo::NamedShape wire(wm.Wire(), ctx->tags().nextShapeIdentity());
 
     auto resultR = oreo::wireOffset(*ctx, wire, 2.0);
     // Wire offset may succeed or fail depending on OCCT version
@@ -525,7 +525,7 @@ TEST(ParametricReplay, BoxExtrudeFilletChangeHeight) {
     makeBoxF.id = "F1";
     makeBoxF.type = "MakeBox";
     makeBoxF.params["dimensions"] = gp_Vec(20, 20, 20);
-    tree.addFeature(makeBoxF);
+    (void)tree.addFeature(makeBoxF);
 
     // 2. Replay -> get box
     auto shape1 = tree.replay();
@@ -552,13 +552,13 @@ TEST(ParametricReplay, FeatureTreeSerializeRoundTrip) {
     f1.id = "F1";
     f1.type = "MakeBox";
     f1.params["dimensions"] = gp_Vec(10, 20, 30);
-    tree.addFeature(f1);
+    (void)tree.addFeature(f1);
 
     oreo::Feature f2;
     f2.id = "F2";
     f2.type = "Offset";
     f2.params["distance"] = 1.5;
-    tree.addFeature(f2);
+    (void)tree.addFeature(f2);
 
     // Serialize
     std::string json = tree.toJSON();
@@ -584,6 +584,100 @@ TEST(ParametricReplay, FeatureTreeSerializeRoundTrip) {
 // =====================================================================
 // Gap 9: Element map name determinism
 // =====================================================================
+
+// ─── Deserialization invariant: duplicate feature ids rejected ─────
+//
+// Regression: pre-fix FeatureTree::fromJSON called addFeature without
+// a uniqueness check. Downstream state keyed on feature id — cache_,
+// dirty_, allocatorSnapshotsBefore_, findIndex() — would alias two
+// features into one map slot and silently corrupt replay / updates.
+
+TEST(FeatureTreeDeserialize, DuplicateFeatureIdIsRejected) {
+    std::string dup = R"({
+        "_schema": "oreo.feature_tree",
+        "features": [
+            {"id": "F1", "type": "MakeBox",
+             "params": {"dimensions": {"type": "vec", "x":1,"y":2,"z":3}}},
+            {"id": "F1", "type": "MakeSphere",
+             "params": {"radius": 5.0}}
+        ],
+        "rollbackIndex": -1
+    })";
+    auto r = oreo::FeatureTree::fromJSON(dup);
+    EXPECT_FALSE(r.ok);
+    EXPECT_NE(r.error.find("Duplicate"), std::string::npos)
+        << "got: '" << r.error << "'";
+    EXPECT_EQ(r.tree.featureCount(), 0)
+        << "failure path must leave the tree empty";
+}
+
+TEST(FeatureTreeDeserialize, UniqueIdsStillLoad) {
+    std::string ok = R"({
+        "_schema": "oreo.feature_tree",
+        "features": [
+            {"id": "A", "type": "MakeBox",
+             "params": {"dimensions": {"type": "vec", "x":1,"y":1,"z":1}}},
+            {"id": "B", "type": "MakeSphere", "params": {"radius": 2.0}}
+        ],
+        "rollbackIndex": -1
+    })";
+    auto r = oreo::FeatureTree::fromJSON(ok);
+    EXPECT_TRUE(r.ok) << r.error;
+    EXPECT_EQ(r.tree.featureCount(), 2);
+}
+
+// ─── Suppressed feature references must fail closed ───────────────
+//
+// Regression: pre-fix replay stored `currentShape` (the pass-through
+// from the previous feature) under a suppressed feature's id in
+// cache_. Downstream ElementRefs against the suppressed feature could
+// resolve against the previous feature's element map if the MappedName
+// happened to match, silently binding to unrelated topology.
+
+TEST(FeatureTreeSuppressed, RefAgainstSuppressedFeatureFailsClosed) {
+    auto ctx = oreo::KernelContext::create();
+    oreo::FeatureTree tree(ctx);
+
+    // F1: box
+    oreo::Feature f1;
+    f1.id = "F1"; f1.type = "MakeBox";
+    f1.params["dimensions"] = gp_Vec(20, 20, 20);
+    (void)tree.addFeature(f1);
+
+    // F2: fillet with a ref to a face on F1 (the feature that we'll
+    // suppress to simulate the ref-poisoning scenario).
+    oreo::Feature f2;
+    f2.id = "F2"; f2.type = "Fillet";
+    f2.params["radius"] = 2.0;
+    f2.params["edges"] = std::vector<oreo::ElementRef>{
+        {"F1", "Edge1", "Edge"}
+    };
+    (void)tree.addFeature(f2);
+
+    // First, baseline replay with F1 active — confirms the ref chain works.
+    auto shape = tree.replay();
+    ASSERT_FALSE(shape.isNull());
+    EXPECT_FALSE(tree.hasBrokenFeatures())
+        << "baseline replay should succeed — if this ever fails, the "
+           "suppressed-ref test below is meaningless";
+
+    // Now suppress F1 and replay. F2's ref to F1 must NOT silently bind
+    // to whatever shape F0 (currentShape before F1) had — it must
+    // surface as BrokenReference because F1's own topology is gone.
+    tree.suppressFeature("F1", true);
+    tree.replay();
+    auto broken = tree.getBrokenFeatures();
+    bool sawF2Broken = false;
+    for (const auto* f : broken) {
+        if (f->id == "F2" &&
+            f->status == oreo::FeatureStatus::BrokenReference) {
+            sawF2Broken = true;
+        }
+    }
+    EXPECT_TRUE(sawF2Broken)
+        << "F2's ref to suppressed F1 must fail closed (BrokenReference), "
+           "not silently bind to the pass-through shape";
+}
 
 TEST(Determinism, ElementMapNamesIdentical) {
     // Run the same operations 10 times, verify element map names are identical

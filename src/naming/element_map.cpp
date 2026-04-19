@@ -540,9 +540,57 @@ std::vector<std::uint8_t> ElementMap::serialize() const {
     return buf;
 }
 
+namespace {
+
+// Depth / amplification guards for the recursive element-map reader.
+// These are defensive caps against adversarial inputs: a crafted buffer
+// that nests children millions deep would blow the stack, and one with
+// a 4-billion entry count would hang the loop for minutes on nothing.
+// The limits below are several orders of magnitude above anything
+// produced by real modelling history (a deeply feature-branched part
+// typically carries <10 levels of child-map nesting and <100k entries
+// at the root).
+//
+// Closes the test_fuzz::F3 bit-flip hardening TODO noted in
+// tests/test_fuzz/test_fuzz.cpp — amplification + stack exhaustion
+// were the remaining reader-side attack surfaces after the integrity
+// magic + checksum gate landed in oreo_serialize.cpp.
+constexpr int kMaxElementMapRecursionDepth = 16;
+constexpr std::uint64_t kMinEntryBytesV3 = 26;   // typeLen(2) + index(4) + nameLen(4) + identity(16) = 26
+constexpr std::uint64_t kMinEntryBytesV2 = 18;   // typeLen(2) + index(4) + nameLen(4) + scalar(8) = 18
+constexpr std::uint64_t kMinChildBytesV3 = 24;   // identity(16) + postfixLen(4) + childMapLen(4) = 24
+constexpr std::uint64_t kMinChildBytesV2 = 16;   // scalar(8) + postfixLen(4) + childMapLen(4) = 16
+
+// Inner entry-point used by the recursive child-map deserialization.
+// The public ElementMap::deserialize wraps this with depth=0.
+ElementMapPtr deserializeWithDepth(const std::uint8_t* data, size_t len,
+                                    ShapeIdentity rootHint,
+                                    DiagnosticCollector* diag,
+                                    int depth);
+
+} // anonymous namespace
+
 ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
                                       ShapeIdentity rootHint,
                                       DiagnosticCollector* diag) {
+    return deserializeWithDepth(data, len, rootHint, diag, /*depth=*/0);
+}
+
+namespace {
+
+ElementMapPtr deserializeWithDepth(const std::uint8_t* data, size_t len,
+                                    ShapeIdentity rootHint,
+                                    DiagnosticCollector* diag,
+                                    int depth) {
+    if (depth > kMaxElementMapRecursionDepth) {
+        if (diag) {
+            diag->error(ErrorCode::DESERIALIZE_FAILED,
+                std::string("Element map recursion depth exceeded (")
+                + std::to_string(kMaxElementMapRecursionDepth) + "). "
+                "Refusing to parse adversarially-nested buffer.");
+        }
+        return nullptr;
+    }
     if (!data || len < 8) return nullptr;
 
     size_t pos = 0;
@@ -600,7 +648,7 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
     // Header
     std::uint32_t version = readU32();
     if (!ok) return nullptr;
-    if (version != FORMAT_VERSION && version != FORMAT_VERSION_V2_LEGACY) {
+    if (version != ElementMap::FORMAT_VERSION && version != ElementMap::FORMAT_VERSION_V2_LEGACY) {
         // v1 (== 1) and anything else: rejected. v2 stays as a read-only
         // compat path; the writer always produces v3.
         return nullptr;
@@ -611,13 +659,32 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
     // §5.4 dedup is implemented in the caller (oreo_serialize.cpp
     // manages the thread-local "already warned" flag); at the
     // ElementMap level we just always pass the sink down.
-    DiagnosticCollector* v2Diag = (version == FORMAT_VERSION_V2_LEGACY) ? diag : nullptr;
+    DiagnosticCollector* v2Diag = (version == ElementMap::FORMAT_VERSION_V2_LEGACY) ? diag : nullptr;
 
     auto map = std::make_shared<ElementMap>();
 
     // Entries
     std::uint32_t entryCount = readU32();
     if (!ok) return nullptr;
+    // Amplification guard: entry count must be plausible given remaining
+    // buffer. Each v3 entry is AT LEAST 26 bytes (see kMinEntryBytesV3);
+    // v2 entries are AT LEAST 18. A hostile buffer claiming 1e9 entries
+    // with only a few hundred bytes left would otherwise drive the loop
+    // for billions of iterations burning CPU with no forward progress.
+    {
+        const std::uint64_t minEntryBytes =
+            (version == ElementMap::FORMAT_VERSION) ? kMinEntryBytesV3 : kMinEntryBytesV2;
+        const std::uint64_t remaining = static_cast<std::uint64_t>(len - pos);
+        if (static_cast<std::uint64_t>(entryCount) > remaining / minEntryBytes) {
+            if (diag) {
+                diag->error(ErrorCode::DESERIALIZE_FAILED,
+                    std::string("Element map entry count ") + std::to_string(entryCount)
+                    + " exceeds buffer capacity (remaining=" + std::to_string(remaining)
+                    + " bytes, min per-entry=" + std::to_string(minEntryBytes) + ")");
+            }
+            return nullptr;
+        }
+    }
     for (std::uint32_t i = 0; i < entryCount; ++i) {
         std::uint16_t typeLen = readU16();
         if (!ok || !canRead(typeLen)) return nullptr;
@@ -628,7 +695,7 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
         std::string nameData = readStr();
         if (!ok) return nullptr;
 
-        if (version == FORMAT_VERSION) {
+        if (version == ElementMap::FORMAT_VERSION) {
             (void)readIdentity();  // consume 16 bytes; identity lives in the name
             if (!ok) return nullptr;
         } else {
@@ -650,9 +717,24 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
     // Children
     std::uint32_t childCount = readU32();
     if (!ok) return nullptr;
+    // Amplification guard parallel to the entry-count check above.
+    {
+        const std::uint64_t minChildBytes =
+            (version == ElementMap::FORMAT_VERSION) ? kMinChildBytesV3 : kMinChildBytesV2;
+        const std::uint64_t remaining = static_cast<std::uint64_t>(len - pos);
+        if (static_cast<std::uint64_t>(childCount) > remaining / minChildBytes) {
+            if (diag) {
+                diag->error(ErrorCode::DESERIALIZE_FAILED,
+                    std::string("Element map child count ") + std::to_string(childCount)
+                    + " exceeds buffer capacity (remaining=" + std::to_string(remaining)
+                    + " bytes, min per-child=" + std::to_string(minChildBytes) + ")");
+            }
+            return nullptr;
+        }
+    }
     for (std::uint32_t i = 0; i < childCount; ++i) {
         ChildElementMap child;
-        if (version == FORMAT_VERSION) {
+        if (version == ElementMap::FORMAT_VERSION) {
             child.id = readIdentity();
             if (!ok) return nullptr;
         } else {
@@ -669,8 +751,8 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
         std::uint32_t childDataLen = readU32();
         if (!ok || !canRead(childDataLen)) return nullptr;
         if (childDataLen > 0) {
-            child.map = ElementMap::deserialize(data + pos, childDataLen,
-                                                rootHint, v2Diag);
+            child.map = deserializeWithDepth(data + pos, childDataLen,
+                                              rootHint, v2Diag, depth + 1);
             if (!child.map) return nullptr;
             pos += childDataLen;
         }
@@ -681,5 +763,7 @@ ElementMapPtr ElementMap::deserialize(const std::uint8_t* data, size_t len,
 
     return map;
 }
+
+} // anonymous namespace
 
 } // namespace oreo

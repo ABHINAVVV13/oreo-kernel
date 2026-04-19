@@ -76,10 +76,52 @@ SchemaRegistry::SchemaRegistry() {
     currentVersions_[schema::TYPE_FEATURE] = schema::FEATURE;
     currentVersions_[schema::TYPE_ELEMENT_MAP] = schema::ELEMENT_MAP;
     currentVersions_[schema::TYPE_NAMED_SHAPE] = schema::NAMED_SHAPE;
+    // v2 types (landed 2026-04-18). Registering them here is required
+    // for canLoad() to succeed against PartStudio / Workspace / MergeResult
+    // documents; without these entries the fromJSON loaders had no way
+    // to call SchemaRegistry::canLoad at all — every header read would
+    // be treated as an unknown type. See the audit 2026-04-18 finding #3.
+    currentVersions_[schema::TYPE_PART_STUDIO] = schema::PART_STUDIO;
+    currentVersions_[schema::TYPE_WORKSPACE] = schema::WORKSPACE;
+    currentVersions_[schema::TYPE_MERGE_RESULT] = schema::MERGE_RESULT;
     // Also register types that were previously missing
     currentVersions_["oreo.tolerance"] = schema::TOLERANCE;
     currentVersions_["oreo.unit_system"] = schema::UNIT_SYSTEM;
     currentVersions_["oreo.kernel_context"] = schema::KERNEL_CONTEXT;
+
+    // Register v1→v2 migrations as structural no-ops so existing v1
+    // documents round-trip through the fail-closed schema gate.
+    //
+    // oreo.feature_tree v1→v2 is a compatibility bump: the FEATURE_TREE
+    // schema bumped major when ConfigRef was added as a ParamValue
+    // alternative (see schema.h comment on FEATURE_TREE = 2.0.0). A v1
+    // document that does NOT contain any ConfigRef values is
+    // structurally identical to v2 — the migration just re-stamps the
+    // version header. ConfigRef values were impossible to persist in
+    // v1 so this is safe.
+    //
+    // oreo.part_studio v1→v2 added `configSchema` at the top level;
+    // missing field loads as an empty schema (PartStudio::fromJSON
+    // handles the absence). Migration retags only.
+    {
+        auto versionBump = [](SchemaVersion to) {
+            return [to](const nlohmann::json& in) {
+                nlohmann::json out = in;
+                out["_version"] = to.toJSON();
+                return out;
+            };
+        };
+        // Use raw vector/map insertion to avoid the registerMigration
+        // guard rail complaining about duplicates on re-construction
+        // (SchemaRegistry ctor runs once per registry instance; this
+        // block runs exactly once per instance).
+        registerMigration(schema::TYPE_FEATURE_TREE,
+                          {1, 0, 0}, schema::FEATURE_TREE,
+                          versionBump(schema::FEATURE_TREE));
+        registerMigration(schema::TYPE_PART_STUDIO,
+                          {1, 0, 0}, schema::PART_STUDIO,
+                          versionBump(schema::PART_STUDIO));
+    }
 }
 
 namespace {

@@ -13,6 +13,20 @@
 //   - Threading, scope invalidation, overflow
 //   - Multi-step pipelines, corruption recovery
 //   - Schema malformation, migration cycles
+//
+// This suite intentionally exercises the deprecated v1 scalar tag API
+// (`TagAllocator::nextTag()`) to lock the v1 compatibility contract.
+// File-scope suppression keeps CI logs clean; each v1 call site is
+// load-bearing — migrating it to nextShapeIdentity() would drop
+// coverage of the scalar contract documents persisted before v2
+// landed still depend on.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include <gtest/gtest.h>
 
@@ -355,11 +369,14 @@ TEST(KernelContext, ToleranceAccessor) {
 TEST(KernelContext, SchemasAccessor) {
     auto ctx = oreo::KernelContext::create();
 
-    // Const accessor — should be able to query current versions
+    // Const accessor — should be able to query current versions.
+    // Assert against the live constant so this test auto-tracks
+    // schema bumps (e.g. the v2 PartStudio-as-function bump) instead
+    // of pinning a magic number that rots.
     const auto& constSchemas = ctx->schemas();
     auto ver = constSchemas.currentVersion(oreo::schema::TYPE_FEATURE_TREE);
-    EXPECT_EQ(ver.major, 1);
-    EXPECT_EQ(ver.minor, 0);
+    EXPECT_EQ(ver.major, oreo::schema::FEATURE_TREE.major);
+    EXPECT_EQ(ver.minor, oreo::schema::FEATURE_TREE.minor);
 
     // Mutable accessor — should be able to register a migration
     ctx->schemas().registerMigration(
@@ -372,12 +389,10 @@ TEST(KernelContext, SchemasAccessor) {
             return result;
         });
 
-    // Verify schemas() returns a valid reference by checking a built-in type.
-    // NOTE: canLoad checks against currentVersions_ which only contains built-in types.
-    // A custom type like "test.battle.schemas_accessor" won't be in currentVersions_,
-    // so canLoad would return false even though a migration was registered.
+    // canLoad for FEATURE_TREE's own current version always accepts
+    // (same-major, same-minor is trivially loadable).
     EXPECT_TRUE(ctx->schemas().canLoad(oreo::schema::TYPE_FEATURE_TREE,
-                                        oreo::SchemaVersion{1, 0, 0}));
+                                        oreo::schema::FEATURE_TREE));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -729,20 +744,25 @@ TEST(SchemaBattle, CyclicMigrationThrows) {
 // built-in types. Instead, verify the built-in migration infrastructure works.
 TEST(SchemaBattle, MigrationChainExecutes) {
     auto ctx = oreo::KernelContext::create();
-    // Verify built-in types have versions registered
+    // Verify built-in types have versions registered — check against
+    // the live constant so schema bumps don't break this regression.
     auto ftVersion = ctx->schemas().currentVersion(oreo::schema::TYPE_FEATURE_TREE);
-    EXPECT_EQ(ftVersion.major, 1);
-    EXPECT_EQ(ftVersion.minor, 0);
+    EXPECT_EQ(ftVersion.major, oreo::schema::FEATURE_TREE.major);
+    EXPECT_EQ(ftVersion.minor, oreo::schema::FEATURE_TREE.minor);
 
-    // Verify canLoad for same version
-    EXPECT_TRUE(ctx->schemas().canLoad(oreo::schema::TYPE_FEATURE_TREE, oreo::SchemaVersion{1, 0, 0}));
+    // Verify canLoad for same version.
+    EXPECT_TRUE(ctx->schemas().canLoad(oreo::schema::TYPE_FEATURE_TREE,
+                                        oreo::schema::FEATURE_TREE));
 
-    // Verify canLoad rejects future major
-    EXPECT_FALSE(ctx->schemas().canLoad(oreo::schema::TYPE_FEATURE_TREE, oreo::SchemaVersion{2, 0, 0}));
+    // Verify canLoad rejects a strictly future major (current + 1).
+    oreo::SchemaVersion futureMajor{
+        oreo::schema::FEATURE_TREE.major + 1, 0, 0};
+    EXPECT_FALSE(ctx->schemas().canLoad(oreo::schema::TYPE_FEATURE_TREE,
+                                         futureMajor));
 
     // Verify header round-trip
     auto json = oreo::SchemaRegistry::addHeader(oreo::schema::TYPE_FEATURE_TREE,
-                                                  oreo::SchemaVersion{1, 0, 0},
+                                                  oreo::schema::FEATURE_TREE,
                                                   {{"data", "test"}});
     auto header = oreo::SchemaRegistry::readHeader(json);
     EXPECT_TRUE(header.valid);
@@ -792,7 +812,12 @@ TEST(ThreadingBattle, FourContextsIndependent) {
     constexpr int OPS_PER_THREAD = 50;
 
     std::vector<std::thread> threads;
-    std::vector<bool> results(NUM_THREADS, false);
+    // std::vector<bool> is bit-packed: two adjacent entries share the
+    // same underlying byte, so concurrent writes from different threads
+    // race on that byte even when they target different indices. Use
+    // std::vector<char> (or int) for per-thread result slots — one
+    // thread per byte, no false sharing of storage.
+    std::vector<char> results(NUM_THREADS, 0);
 
     for (int t = 0; t < NUM_THREADS; ++t) {
         threads.emplace_back([t, &results]() {
@@ -810,14 +835,14 @@ TEST(ThreadingBattle, FourContextsIndependent) {
             // Each thread's tag allocator should be at OPS_PER_THREAD
             if (ctx->tags().currentValue() != OPS_PER_THREAD) allOk = false;
 
-            results[t] = allOk;
+            results[t] = allOk ? 1 : 0;
         });
     }
 
     for (auto& th : threads) th.join();
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        EXPECT_TRUE(results[t]) << "Thread " << t << " had incorrect tags";
+        EXPECT_TRUE(results[t] != 0) << "Thread " << t << " had incorrect tags";
     }
 }
 

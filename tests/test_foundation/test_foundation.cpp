@@ -1,6 +1,21 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // test_foundation.cpp — Comprehensive tests for all 7 foundation items.
+//
+// Part of the suite intentionally exercises the deprecated v1 scalar
+// tag API (`TagAllocator::nextTag()`, `NamedShape(TopoDS_Shape&, int64_t)`)
+// to lock down the v1 compatibility contract for documents persisted
+// before identity v2 landed. Migrating those tests to
+// `nextShapeIdentity()` would erase the coverage. File-scope
+// deprecation suppression is load-bearing; callers that don't want the
+// v1 path should use `nextShapeIdentity()` directly.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include <gtest/gtest.h>
 
@@ -10,7 +25,7 @@
 #include "core/units.h"
 #include "core/schema.h"
 #include "core/validation.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "naming/named_shape.h"
 
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -119,6 +134,10 @@ TEST(Diagnostic, Clear) {
     EXPECT_FALSE(diag.hasWarnings());
 }
 
+// Covers the deprecated pointer-returning lastError() overload so a
+// downstream caller that still uses it has a regression net. The
+// supported safe accessor is lastErrorOpt() (see LastErrorOpt below).
+// Deprecation warning for the overload is silenced at file scope above.
 TEST(Diagnostic, LastError) {
     oreo::DiagnosticCollector diag;
     EXPECT_EQ(diag.lastError(), nullptr);

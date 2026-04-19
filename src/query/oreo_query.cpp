@@ -3,7 +3,7 @@
 // oreo_query.cpp — Shape queries implementation.
 
 #include "oreo_query.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "core/operation_result.h"
 #include "core/diagnostic_scope.h"
 

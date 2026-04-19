@@ -30,11 +30,13 @@ TEST(FeatureSchema, RegistryListsAllExpectedTypes) {
     // Snapshot of the full feature taxonomy. If a feature type is added
     // or removed, update this list AND the dispatch in feature.cpp.
     const std::vector<std::string> expected = {
-        "BooleanSubtract", "BooleanUnion", "Chamfer", "CircularPattern",
-        "Combine", "Draft", "Extrude", "Fillet", "Hole", "LinearPattern",
-        "MakeBox", "MakeCylinder", "MakeFace", "MakeSphere", "Mirror",
+        "BooleanIntersect", "BooleanSubtract", "BooleanUnion",
+        "Chamfer", "CircularPattern", "Combine",
+        "Draft", "Extrude", "Fillet", "Hole", "LinearPattern", "Loft",
+        "MakeBox", "MakeCone", "MakeCylinder", "MakeFace", "MakeSphere",
+        "MakeTorus", "MakeWedge", "Mirror",
         "Offset", "Pocket", "Revolve", "Rib", "Shell", "SplitBody",
-        "Thicken", "VariableFillet"
+        "Sweep", "Thicken", "VariableFillet"
     };
     EXPECT_EQ(types, expected);
 }

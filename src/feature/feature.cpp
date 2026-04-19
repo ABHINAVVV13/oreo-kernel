@@ -130,22 +130,59 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             return extractResult(feature, chamfer(ctx, currentShape, edges, distance));
         }
 
-        // ── Boolean Union ────────────────────────────────
+        // ── Boolean Union / Subtract / Intersect ─────────
+        //
+        // Tool refs use the whole-shape pattern (elementName == "ROOT"),
+        // which the resolver returns as ResolvedRef::isWholeShape=true
+        // with the tool's full NamedShape attached. Preserving the tool's
+        // NamedShape carries its element map through the op so
+        // downstream features can still target faces/edges that came
+        // from the tool, not just the base. Passing a sub-shape as
+        // `tool` would be geometrically nonsense (e.g. unioning a solid
+        // with an edge), so we reject that at this layer.
+        //
+        // The dispatch returns { ok, NamedShape } — ok=false means
+        // BrokenReference was already set on `feature` by the resolver
+        // check and the caller should return scope.makeFailure<NamedShape>().
+        auto resolveBooleanTool = [&](const std::string& paramName,
+                                      NamedShape& toolOut) -> bool {
+            auto toolRef = feature.get<ElementRef>(paramName);
+            auto resolved = resolver(toolRef);
+            if (!resolved.resolved) {
+                feature.status = FeatureStatus::BrokenReference;
+                feature.errorMessage = "Cannot resolve '" + paramName
+                                     + "' reference: "
+                                     + toolRef.elementName
+                                     + " from feature " + toolRef.featureId
+                                     + " (boolean tool must be a whole-shape ref "
+                                     + "— use elementName=\"ROOT\")";
+                return false;
+            }
+            if (!resolved.isWholeShape) {
+                feature.status = FeatureStatus::BrokenReference;
+                feature.errorMessage = "Boolean '" + paramName
+                    + "' expects a whole-shape ref (elementName=\"ROOT\"); got sub-shape '"
+                    + toolRef.elementName + "'";
+                return false;
+            }
+            toolOut = resolved.namedShape;
+            return true;
+        };
+
         if (type == "BooleanUnion") {
-            auto toolRef = feature.get<ElementRef>("tool");
-            auto toolShape = resolveRef(feature, toolRef, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-            NamedShape tool(toolShape, ctx.tags().nextShapeIdentity());
+            NamedShape tool;
+            if (!resolveBooleanTool("tool", tool)) return scope.makeFailure<NamedShape>();
             return extractResult(feature, booleanUnion(ctx, currentShape, tool));
         }
-
-        // ── Boolean Subtract ─────────────────────────────
         if (type == "BooleanSubtract") {
-            auto toolRef = feature.get<ElementRef>("tool");
-            auto toolShape = resolveRef(feature, toolRef, resolver);
-            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-            NamedShape tool(toolShape, ctx.tags().nextShapeIdentity());
+            NamedShape tool;
+            if (!resolveBooleanTool("tool", tool)) return scope.makeFailure<NamedShape>();
             return extractResult(feature, booleanSubtract(ctx, currentShape, tool));
+        }
+        if (type == "BooleanIntersect") {
+            NamedShape tool;
+            if (!resolveBooleanTool("tool", tool)) return scope.makeFailure<NamedShape>();
+            return extractResult(feature, booleanIntersect(ctx, currentShape, tool));
         }
 
         // ── Shell ────────────────────────────────────────
@@ -270,11 +307,63 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
             }
             std::vector<NamedShape> shapes = {currentShape};
             for (auto& ref : shapeRefs) {
-                auto resolved = resolveRef(feature, ref, resolver);
-                if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
-                shapes.emplace_back(resolved, ctx.tags().nextShapeIdentity());
+                auto resolved = resolver(ref);
+                if (!resolved.resolved) {
+                    feature.status = FeatureStatus::BrokenReference;
+                    feature.errorMessage =
+                        "Combine: cannot resolve reference " + ref.elementName
+                        + " from feature " + ref.featureId;
+                    return scope.makeFailure<NamedShape>();
+                }
+                if (resolved.isWholeShape) {
+                    // Preserve the contributor's NamedShape so its
+                    // element map survives the compound build.
+                    shapes.push_back(resolved.namedShape);
+                } else {
+                    // Sub-shape reference — wrap with a fresh identity.
+                    shapes.emplace_back(resolved.shape, ctx.tags().nextShapeIdentity());
+                }
             }
             return extractResult(feature, combine(ctx, shapes));
+        }
+
+        // ── Loft ─────────────────────────────────────────
+        //
+        // Loft is a multi-input producer: profiles list is authoritative
+        // and currentShape is NOT prepended (unlike Combine). Requires
+        // at least 2 resolved profiles; OCCT's BRepOffsetAPI_ThruSections
+        // rejects fewer at execution time but we surface the precondition
+        // early for a clearer diagnostic.
+        if (type == "Loft") {
+            auto profileRefs = feature.get<std::vector<ElementRef>>("profiles");
+            if (profileRefs.size() < 2) {
+                feature.status = FeatureStatus::ExecutionFailed;
+                feature.errorMessage = "Loft requires at least 2 profiles (got "
+                                     + std::to_string(profileRefs.size()) + ")";
+                return scope.makeFailure<NamedShape>();
+            }
+            std::vector<NamedShape> profiles;
+            profiles.reserve(profileRefs.size());
+            for (auto& ref : profileRefs) {
+                auto resolved = resolveRef(feature, ref, resolver);
+                if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
+                profiles.emplace_back(resolved, ctx.tags().nextShapeIdentity());
+            }
+            bool makeSolid = feature.getOr<bool>("makeSolid", true);
+            return extractResult(feature, loft(ctx, profiles, makeSolid));
+        }
+
+        // ── Sweep ────────────────────────────────────────
+        if (type == "Sweep") {
+            auto profileRef = feature.get<ElementRef>("profile");
+            auto pathRef    = feature.get<ElementRef>("path");
+            auto profileShape = resolveRef(feature, profileRef, resolver);
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
+            auto pathShape = resolveRef(feature, pathRef, resolver);
+            if (feature.status == FeatureStatus::BrokenReference) return scope.makeFailure<NamedShape>();
+            NamedShape profile(profileShape, ctx.tags().nextShapeIdentity());
+            NamedShape path   (pathShape,    ctx.tags().nextShapeIdentity());
+            return extractResult(feature, sweep(ctx, profile, path));
         }
 
         // ── Rib ──────────────────────────────────────────
@@ -306,6 +395,22 @@ OperationResult<NamedShape> executeFeature(KernelContext& ctx,
         if (type == "MakeSphere") {
             double r = feature.get<double>("radius");
             return extractResult(feature, makeSphere(ctx, r));
+        }
+        if (type == "MakeCone") {
+            double r1 = feature.get<double>("radius1");
+            double r2 = feature.get<double>("radius2");
+            double h  = feature.get<double>("height");
+            return extractResult(feature, makeCone(ctx, r1, r2, h));
+        }
+        if (type == "MakeTorus") {
+            double R = feature.get<double>("majorRadius");
+            double r = feature.get<double>("minorRadius");
+            return extractResult(feature, makeTorus(ctx, R, r));
+        }
+        if (type == "MakeWedge") {
+            auto d    = feature.get<gp_Vec>("dimensions");
+            double lx = feature.get<double>("ltx");
+            return extractResult(feature, makeWedge(ctx, d.X(), d.Y(), d.Z(), lx));
         }
 
         // ── Unknown feature type ─────────────────────────

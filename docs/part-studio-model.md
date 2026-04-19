@@ -136,10 +136,11 @@ or geometry cross-talk.
 
 ## Anti-patterns
 
-* **Branching the tree.** v1 is strictly linear. If you need
-  branching, fork the document (new `documentId`, new ctx, new
-  studio) — the kernel's identity model has docId precisely so two
-  studios can carry the same logical part without colliding.
+* ~~**Branching the tree.**~~ **SUPERSEDED in v2** —
+  see [`branching-merging.md`](branching-merging.md). Workspaces now
+  branch natively; `Workspace::fork` and `threeWayMerge` are the
+  supported path. The v1 "fork the document" workaround remains
+  available but is no longer necessary.
 * **Mutating `Feature` objects directly via `features()`.** The
   accessor returns `const&` for a reason: the cache + dirty bookkeeping
   assumes you go through `updateParameter` / `suppressFeature` /

@@ -9,6 +9,19 @@
 //
 // Use EXPECT_LT on elapsed ms so that a single slow machine does not abort the
 // entire suite — only the slow test fails.
+//
+// The TagAllocation1M perf budget times the deprecated v1 nextTag()
+// path on purpose — regressions on that path still matter because the
+// v2 nextShapeIdentity() is built on top of it. File-scope deprecation
+// suppression keeps the perf suite green-on-clean-build; callers that
+// want v2-only should use nextShapeIdentity().
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include <gtest/gtest.h>
 
@@ -17,7 +30,7 @@
 #include "core/kernel_context.h"
 #include "core/diagnostic.h"
 #include "core/tag_allocator.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 
 #include <algorithm>
 #include <chrono>

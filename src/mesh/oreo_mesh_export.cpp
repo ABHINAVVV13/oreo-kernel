@@ -14,7 +14,7 @@
 
 #include "oreo_mesh_export.h"
 #include "core/diagnostic_scope.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 
 #include <nlohmann/json.hpp>
 

@@ -34,7 +34,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "core/diagnostic.h"
 #include "core/schema.h"
 #include "io/oreo_serialize.h"
@@ -66,7 +66,7 @@ constexpr int kF8_BucketPct  = 10;     // STEP truncation step (10% of len)
 std::vector<uint8_t> makeValidSerializedBox(oreo::KernelContext& ctx,
                                              double dx, double dy, double dz) {
     TopoDS_Shape shape = BRepPrimAPI_MakeBox(dx, dy, dz).Shape();
-    oreo::NamedShape ns(shape, ctx.tags().nextTag());
+    oreo::NamedShape ns(shape, ctx.tags().nextShapeIdentity());
     auto r = oreo::serialize(ctx, ns);
     if (!r.ok()) return {};
     return r.value();
@@ -538,7 +538,7 @@ TEST(Fuzz, F8_StepImportTruncated) {
     // Build a real STEP payload to truncate.
     auto buildCtx = oreo::KernelContext::create();
     TopoDS_Shape shape = BRepPrimAPI_MakeBox(10, 20, 30).Shape();
-    oreo::NamedShape box(shape, buildCtx->tags().nextTag());
+    oreo::NamedShape box(shape, buildCtx->tags().nextShapeIdentity());
 
     auto stepR = oreo::exportStep(*buildCtx, {box});
     ASSERT_TRUE(stepR.ok()) << "Could not produce baseline STEP buffer";

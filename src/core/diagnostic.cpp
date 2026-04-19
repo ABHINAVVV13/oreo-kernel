@@ -4,7 +4,7 @@
 
 #include "diagnostic.h"
 #include "logging_sink.h"
-#include "oreo_error.h"  // Legacy redirect — kept for source compatibility.
+#include "diagnostic.h"  // Legacy redirect — kept for source compatibility.
 
 #include <chrono>
 #include <cstddef>

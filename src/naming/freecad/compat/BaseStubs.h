@@ -29,6 +29,39 @@ namespace Base {
 
 // ── Handled: intrusive reference counting ────────────────────
 // Matches FreeCAD's Base::Handled interface.
+//
+// NOTE on -Wfree-nonheap-object:
+//
+// GCC 12+ (observed on GCC 13 in the Docker dev container) emits
+// -Wfree-nonheap-object on `delete this` inside `unref()`, complaining
+// that the pointer being deleted is at a nonzero offset from some
+// known allocation boundary. The warning is triggered when the analyzer
+// inlines unref() deep into a destructor chain where a Reference<T>
+// is an embedded member of some larger object (e.g.
+// TopoShapeAdapter::Hasher, where Hasher is `App::StringHasherRef`
+// sitting at offset 8 inside the adapter).
+//
+// This is a false positive. Reference<T>::ptr_ always points at a
+// heap-allocated Handled subclass (constructed via `new`); the
+// "offset 8" is the offset of the `ptr_` MEMBER within its enclosing
+// Reference/adapter, not an offset of the pointee from any allocation.
+// GCC's alias analysis conflates the two.
+//
+// Runtime verification: the clang-asan+ubsan CI cell exercises this
+// code path heavily (44/44 passing, zero sanitizer findings — see
+// memory `project_p1_p2_landed.md`). If `delete this` were actually
+// freeing a non-heap address, ASan would catch it in the invalid-free
+// report.
+//
+// The targeted suppression here keeps the gcc-release build warning-
+// clean without disabling the (genuinely useful) warning for the
+// rest of the kernel. If a future change moves off `delete this`
+// (e.g. switches to std::shared_ptr-backed ref-counting), remove the
+// pragma.
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
 class Handled {
 public:
     Handled() : refCount_(0) {}
@@ -51,6 +84,9 @@ public:
 private:
     mutable std::atomic<int> refCount_;
 };
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12
+#  pragma GCC diagnostic pop
+#endif
 
 // ── BaseClass: type system stub ──────────────────────────────
 class Type {

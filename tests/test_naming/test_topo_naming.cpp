@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "core/kernel_context.h"
-#include "core/oreo_error.h"
+#include "core/diagnostic.h"
 #include "geometry/oreo_geometry.h"
 #include "naming/named_shape.h"
 #include "naming/element_map.h"
@@ -28,7 +28,7 @@ oreo::NamedShape makeRectFace(oreo::KernelContext& ctx, double w, double h) {
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p3, p4).Edge());
     wireBuilder.Add(BRepBuilderAPI_MakeEdge(p4, p1).Edge());
     BRepBuilderAPI_MakeFace faceBuilder(wireBuilder.Wire());
-    return oreo::NamedShape(faceBuilder.Face(), ctx.tags().nextTag());
+    return oreo::NamedShape(faceBuilder.Face(), ctx.tags().nextShapeIdentity());
 }
 
 } // anonymous namespace

@@ -105,7 +105,21 @@ namespace schema {
     constexpr const char* KERNEL_VERSION_FULL = OREO_KERNEL_VERSION_FULL_STRING;
 
     // Serializable types
-    constexpr SchemaVersion FEATURE_TREE   = {1, 0, 0};
+    //
+    // FEATURE_TREE 2.0.0 — ConfigRef is a new variant alternative in
+    //   ParamValue. A v1 reader would silently turn a ConfigRef into
+    //   an empty string and fail validation downstream; a major bump
+    //   makes the format-version guard the load path. See
+    //   docs/part-studio-as-function.md §4.1.
+    // PART_STUDIO 2.0.0 — ConfigSchema is a new top-level field in
+    //   the envelope. Introduced at the same version as FEATURE_TREE
+    //   so the two evolve in lock-step.
+    // WORKSPACE 1.0.0   — New type, see docs/branching-merging.md §4.1.
+    // MERGE_RESULT 1.0.0— New type, see docs/branching-merging.md §4.2.
+    constexpr SchemaVersion FEATURE_TREE   = {2, 0, 0};
+    constexpr SchemaVersion PART_STUDIO    = {2, 0, 0};
+    constexpr SchemaVersion WORKSPACE      = {1, 0, 0};
+    constexpr SchemaVersion MERGE_RESULT   = {1, 0, 0};
     constexpr SchemaVersion FEATURE        = {1, 0, 0};
     constexpr SchemaVersion ELEMENT_MAP    = {1, 0, 0};
     constexpr SchemaVersion NAMED_SHAPE    = {1, 0, 0};
@@ -115,9 +129,12 @@ namespace schema {
 
     // Type name constants for registry
     constexpr const char* TYPE_FEATURE_TREE = "oreo.feature_tree";
-    constexpr const char* TYPE_FEATURE = "oreo.feature";
-    constexpr const char* TYPE_ELEMENT_MAP = "oreo.element_map";
-    constexpr const char* TYPE_NAMED_SHAPE = "oreo.named_shape";
+    constexpr const char* TYPE_PART_STUDIO  = "oreo.part_studio";
+    constexpr const char* TYPE_WORKSPACE    = "oreo.workspace";
+    constexpr const char* TYPE_MERGE_RESULT = "oreo.merge_result";
+    constexpr const char* TYPE_FEATURE      = "oreo.feature";
+    constexpr const char* TYPE_ELEMENT_MAP  = "oreo.element_map";
+    constexpr const char* TYPE_NAMED_SHAPE  = "oreo.named_shape";
 }
 
 // ─── Migration function type ─────────────────────────────────

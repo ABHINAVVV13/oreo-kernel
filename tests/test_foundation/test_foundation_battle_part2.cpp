@@ -6,6 +6,19 @@
 // Section C: Layer 1 — Element Map & Naming (~30 tests)
 // Section D: Layer 3 — C API Boundary (~25 tests)
 // Section E: Cross-Cutting (~6 tests)
+//
+// This file intentionally exercises the deprecated v1 scalar-tag
+// accessors (`NamedShape::tag()`, `NamedShape(TopoDS_Shape&, int64_t)`,
+// `MappedName::appendTag(int64_t)`) to lock the v1 compatibility
+// contract that documents persisted pre-v2 still depend on. File-
+// scope deprecation suppression keeps CI logs clean.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__clang__)
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
 
 #include <gtest/gtest.h>
 
